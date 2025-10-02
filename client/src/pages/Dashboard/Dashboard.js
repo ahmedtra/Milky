@@ -1,0 +1,550 @@
+import React from 'react';
+import styled from 'styled-components';
+import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Calendar, 
+  ShoppingCart, 
+  MessageCircle, 
+  TrendingUp,
+  Clock,
+  Target,
+  Bell
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import axios from 'axios';
+
+const DashboardContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+`;
+
+const WelcomeSection = styled.div`
+  background: linear-gradient(135deg, ${props => props.theme.colors.primary[600]} 0%, ${props => props.theme.colors.primary[800]} 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: ${props => props.theme.borderRadius.xl};
+  box-shadow: ${props => props.theme.shadows.lg};
+`;
+
+const WelcomeTitle = styled.h1`
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+`;
+
+const WelcomeSubtitle = styled.p`
+  font-size: 1.1rem;
+  opacity: 0.9;
+  margin-bottom: 1.5rem;
+`;
+
+const QuickActions = styled.div`
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+`;
+
+const ActionButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+  }
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+`;
+
+const StatCard = styled(motion.div)`
+  background: white;
+  padding: 1.5rem;
+  border-radius: ${props => props.theme.borderRadius.lg};
+  box-shadow: ${props => props.theme.shadows.md};
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+`;
+
+const StatHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+`;
+
+const StatIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: ${props => props.theme.borderRadius.lg};
+  background: ${props => props.$bgColor || props.theme.colors.primary[100]};
+  color: ${props => props.$iconColor || props.theme.colors.primary[600]};
+`;
+
+const StatValue = styled.div`
+  font-size: 2rem;
+  font-weight: 700;
+  color: ${props => props.theme.colors.gray[800]};
+`;
+
+const StatLabel = styled.div`
+  font-size: 0.9rem;
+  color: ${props => props.theme.colors.gray[600]};
+  margin-top: 0.25rem;
+`;
+
+const StatChange = styled.div`
+  font-size: 0.8rem;
+  color: ${props => props.$positive ? props.theme.colors.success[600] : props.theme.colors.error[600]};
+  margin-top: 0.25rem;
+`;
+
+const ContentGrid = styled.div`
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const ContentCard = styled(motion.div)`
+  background: white;
+  border-radius: ${props => props.theme.borderRadius.lg};
+  box-shadow: ${props => props.theme.shadows.md};
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+  overflow: hidden;
+`;
+
+const CardHeader = styled.div`
+  padding: 1.5rem;
+  border-bottom: 1px solid ${props => props.theme.colors.gray[200]};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const CardTitle = styled.h3`
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[800]};
+  margin: 0;
+`;
+
+const CardContent = styled.div`
+  padding: 1.5rem;
+`;
+
+const MealsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const MealRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  background: ${props => props.theme.colors.gray[50]};
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  flex-wrap: wrap;
+`;
+
+const MealTime = styled.span`
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[800]};
+  min-width: 80px;
+`;
+
+const MealInfo = styled.div`
+  flex: 1 1 200px;
+  min-width: 0;
+`;
+
+const MealTitle = styled.div`
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[800]};
+  margin-bottom: 0.25rem;
+`;
+
+const MealDescription = styled.div`
+  font-size: 0.9rem;
+  color: ${props => props.theme.colors.gray[600]};
+`;
+
+const EmptyListState = styled.div`
+  text-align: center;
+  padding: 2rem 1rem;
+  color: ${props => props.theme.colors.gray[500]};
+`;
+
+const TelegramStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: ${props => props.$connected ? props.theme.colors.success[50] : props.theme.colors.warning[50]};
+  border: 1px solid ${props => props.$connected ? props.theme.colors.success[200] : props.theme.colors.warning[200]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  margin-bottom: 1rem;
+`;
+
+const StatusIndicator = styled.div`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${props => props.$connected ? props.theme.colors.success[500] : props.theme.colors.warning[500]};
+`;
+
+const StatusText = styled.div`
+  font-size: 0.9rem;
+  color: ${props => props.$connected ? props.theme.colors.success[700] : props.theme.colors.warning[700]};
+`;
+
+const LinkButton = styled.button`
+  background: ${props => props.theme.colors.primary[600]};
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${props => props.theme.colors.primary[700]};
+  }
+`;
+
+const Dashboard = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [shoppingLists, setShoppingLists] = React.useState([]);
+  const [loadingLists, setLoadingLists] = React.useState(true);
+  const [activeMealPlan, setActiveMealPlan] = React.useState(null);
+  const [loadingMealPlan, setLoadingMealPlan] = React.useState(true);
+
+  const loadActiveMealPlan = React.useCallback(() => {
+    if (typeof window === 'undefined') {
+      setActiveMealPlan(null);
+      setLoadingMealPlan(false);
+      return;
+    }
+
+    setLoadingMealPlan(true);
+
+    try {
+      const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
+      const activeMealPlanId = localStorage.getItem('activeMealPlanId');
+
+      let activePlan = null;
+
+      if (activeMealPlanId) {
+        activePlan = savedMealPlans.find(plan => plan.id?.toString() === activeMealPlanId);
+      }
+
+      if (!activePlan && savedMealPlans.length) {
+        activePlan = savedMealPlans[0];
+      }
+
+      setActiveMealPlan(activePlan || null);
+    } catch (error) {
+      console.error('Error loading active meal plan:', error);
+      setActiveMealPlan(null);
+    } finally {
+      setLoadingMealPlan(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const fetchShoppingLists = async () => {
+      try {
+        const response = await axios.get('/api/shopping-lists');
+        setShoppingLists(response.data.shoppingLists || []);
+      } catch (error) {
+        console.error('Error loading shopping lists:', error);
+      } finally {
+        setLoadingLists(false);
+      }
+    };
+
+    fetchShoppingLists();
+  }, []);
+
+  React.useEffect(() => {
+    loadActiveMealPlan();
+  }, [loadActiveMealPlan]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleStorage = (event) => {
+      if (!event || event.key === null) {
+        loadActiveMealPlan();
+        return;
+      }
+
+      if (event.key === 'mealPlans' || event.key === 'activeMealPlanId') {
+        loadActiveMealPlan();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [loadActiveMealPlan]);
+
+  const completedCount = React.useMemo(
+    () => shoppingLists.filter(list => list.status === 'completed').length,
+    [shoppingLists]
+  );
+  const activeCount = React.useMemo(
+    () => shoppingLists.filter(list => list.status === 'active').length,
+    [shoppingLists]
+  );
+
+  const todaysMeals = React.useMemo(() => {
+    if (!activeMealPlan || !Array.isArray(activeMealPlan.days)) {
+      return [];
+    }
+
+    const todayIso = new Date().toISOString().split('T')[0];
+    let todayPlan = activeMealPlan.days.find(day => day.date === todayIso);
+
+    if (!todayPlan) {
+      todayPlan = activeMealPlan.days[0];
+    }
+
+    if (!todayPlan || !Array.isArray(todayPlan.meals)) {
+      return [];
+    }
+
+    return todayPlan.meals.map((meal, index) => {
+      const primaryRecipe = meal.recipes?.[0] || {};
+
+      return {
+        id: meal._id || `${meal.type || 'meal'}-${index}`,
+        type: meal.type,
+        time: meal.scheduledTime || '--:--',
+        title: primaryRecipe.name || (meal.type ? `${meal.type.charAt(0).toUpperCase()}${meal.type.slice(1)}` : 'Meal'),
+        description: primaryRecipe.description || '',
+      };
+    });
+  }, [activeMealPlan]);
+
+  const todaysDateLabel = React.useMemo(() => {
+    if (!activeMealPlan || !Array.isArray(activeMealPlan.days) || !activeMealPlan.days.length) {
+      return null;
+    }
+
+    const todayIso = new Date().toISOString().split('T')[0];
+    const day = activeMealPlan.days.find(d => d.date === todayIso) || activeMealPlan.days[0];
+
+    if (!day || !day.date) return null;
+
+    const formatted = new Date(day.date).toLocaleDateString();
+    return formatted;
+  }, [activeMealPlan]);
+
+  const stats = [
+    {
+      icon: ShoppingCart,
+      label: 'Shopping Lists',
+      value: shoppingLists.length.toString(),
+      change: activeCount ? `${activeCount} active` : 'No active lists',
+      positive: Boolean(activeCount),
+      bgColor: '#dcfce7',
+      iconColor: '#16a34a'
+    },
+    {
+      icon: Calendar,
+      label: 'Active Meal Plan',
+      value: activeMealPlan ? (todaysMeals.length ? `${todaysMeals.length} meals` : 'Active') : 'None',
+      change: activeMealPlan ? (todaysDateLabel ? `Today: ${todaysDateLabel}` : 'Meals scheduled') : 'Set a plan active',
+      positive: Boolean(activeMealPlan),
+      bgColor: '#dbeafe',
+      iconColor: '#2563eb'
+    },
+    {
+      icon: MessageCircle,
+      label: 'AI Conversations',
+      value: '—',
+      change: 'Start a chat',
+      positive: true,
+      bgColor: '#fef3c7',
+      iconColor: '#d97706'
+    },
+    {
+      icon: TrendingUp,
+      label: 'Completed Lists',
+      value: completedCount.toString(),
+      change: completedCount ? 'Great progress!' : 'Finish a list to track progress',
+      positive: Boolean(completedCount),
+      bgColor: '#f3e8ff',
+      iconColor: '#9333ea'
+    }
+  ];
+
+  const isTelegramConnected = !!user?.telegramChatId;
+  const handleTelegramButton = () => {
+    navigate('/settings');
+  };
+
+  return (
+    <DashboardContainer>
+      <WelcomeSection>
+        <WelcomeTitle>Welcome back, {user?.username}! 👋</WelcomeTitle>
+        <WelcomeSubtitle>
+          Ready to continue your healthy eating journey? Let's check what's planned for today.
+        </WelcomeSubtitle>
+        <QuickActions>
+          <ActionButton onClick={() => navigate('/meal-plans')}>
+            <Calendar size={16} />
+            View Meal Plans
+          </ActionButton>
+          <ActionButton onClick={() => navigate('/chat')}>
+            <MessageCircle size={16} />
+            Chat with AI
+          </ActionButton>
+          <ActionButton onClick={() => navigate('/shopping-lists')}>
+            <ShoppingCart size={16} />
+            Shopping Lists
+          </ActionButton>
+        </QuickActions>
+      </WelcomeSection>
+
+      <StatsGrid>
+        {stats.map((stat, index) => (
+          <StatCard
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+          >
+            <StatHeader>
+              <StatIcon $bgColor={stat.bgColor} $iconColor={stat.iconColor}>
+                <stat.icon size={24} />
+              </StatIcon>
+            </StatHeader>
+            <StatValue>{stat.value}</StatValue>
+            <StatLabel>{stat.label}</StatLabel>
+            <StatChange $positive={stat.positive}>{stat.change}</StatChange>
+          </StatCard>
+        ))}
+      </StatsGrid>
+
+      <ContentGrid>
+        <ContentCard
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <CardHeader>
+            <CardTitle>Today's Meals</CardTitle>
+            <Clock size={20} color="#64748b" />
+          </CardHeader>
+          <CardContent>
+            {loadingMealPlan ? (
+              <EmptyListState>Loading meal plan...</EmptyListState>
+            ) : !activeMealPlan ? (
+              <EmptyListState>
+                No active meal plan found. Set a meal plan as active to view today's meals.
+              </EmptyListState>
+            ) : todaysMeals.length === 0 ? (
+              <EmptyListState>
+                No meals scheduled for today in the active plan.
+              </EmptyListState>
+            ) : (
+              <MealsContainer>
+                {todaysDateLabel && (
+                  <span style={{ color: '#64748b', fontWeight: 500 }}>
+                    Meals for {todaysDateLabel}
+                  </span>
+                )}
+                {todaysMeals.map(meal => (
+                  <MealRow key={meal.id}>
+                    <MealTime>{meal.time}</MealTime>
+                    <MealInfo>
+                      <MealTitle>{meal.title}</MealTitle>
+                      {meal.description && (
+                        <MealDescription>{meal.description}</MealDescription>
+                      )}
+                      {meal.type && (
+                        <MealDescription style={{ fontStyle: 'italic', marginTop: '0.25rem' }}>
+                          {meal.type.charAt(0).toUpperCase() + meal.type.slice(1)}
+                        </MealDescription>
+                      )}
+                    </MealInfo>
+                  </MealRow>
+                ))}
+                <button
+                  onClick={() => navigate(`/meal-plans/${activeMealPlan.id}`)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563eb',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  View full meal plan
+                </button>
+              </MealsContainer>
+            )}
+          </CardContent>
+        </ContentCard>
+
+        <ContentCard
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <Target size={20} color="#64748b" />
+          </CardHeader>
+          <CardContent>
+            <TelegramStatus $connected={isTelegramConnected}>
+              <Bell size={16} />
+              <StatusIndicator $connected={isTelegramConnected} />
+              <StatusText $connected={isTelegramConnected}>
+                {isTelegramConnected 
+                  ? 'Telegram notifications enabled' 
+                  : 'Connect Telegram for meal reminders'
+                }
+              </StatusText>
+            </TelegramStatus>
+            
+            <LinkButton onClick={handleTelegramButton}>
+              {isTelegramConnected ? 'Manage Telegram Notifications' : 'Connect Telegram'}
+            </LinkButton>
+          </CardContent>
+        </ContentCard>
+      </ContentGrid>
+    </DashboardContainer>
+  );
+};
+
+export default Dashboard;

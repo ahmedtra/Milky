@@ -11,6 +11,12 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import {
+  ensureMealPlanMetadata,
+  ensureMealPlansMetadata,
+  loadMealPlans,
+  saveMealPlans
+} from '../../utils/mealPlanStorage';
 
 const Container = styled.div`
   display: flex;
@@ -335,17 +341,20 @@ const MealPlans = () => {
 
   // Load meal plans from localStorage on component mount
   React.useEffect(() => {
-    const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
+    const savedMealPlans = loadMealPlans();
     const activeMealPlanId = localStorage.getItem('activeMealPlanId');
 
     const normalizedPlans = savedMealPlans.map(plan => ({
       ...plan,
       isActive: activeMealPlanId
-        ? plan.id.toString() === activeMealPlanId
+        ? plan.id?.toString() === activeMealPlanId
         : Boolean(plan.isActive)
     }));
 
     setMealPlans(normalizedPlans);
+
+    // Persist normalized data so other parts of the app get the updated structure
+    saveMealPlans(savedMealPlans);
   }, []);
 
   const handleInputChange = (field, value) => {
@@ -381,23 +390,23 @@ const MealPlans = () => {
         duration: preferences.duration
       });
 
-      const newMealPlan = {
+      const newMealPlan = ensureMealPlanMetadata({
         id: Date.now(),
         ...response.data.mealPlan,
         createdAt: new Date().toISOString(),
         preferences: { ...preferences },
         isActive: false
-      };
+      });
 
       setMealPlans(prev => [newMealPlan, ...prev]);
       
       // Save to localStorage for persistence
-      const existingPlans = mealPlans.map(plan => ({
+      const existingPlans = ensureMealPlansMetadata(mealPlans).map(plan => ({
         ...plan,
         isActive: plan.isActive || false
       }));
       const updatedMealPlans = [newMealPlan, ...existingPlans];
-      localStorage.setItem('mealPlans', JSON.stringify(updatedMealPlans));
+      saveMealPlans(updatedMealPlans);
       
       // Debug: Log the meal plan data
       console.log('Generated meal plan:', newMealPlan);

@@ -185,6 +185,13 @@ I'll start sending you meal reminders and notifications.
   });
 
   bot.on('polling_error', (error) => {
+    if (error?.code === 'ETELEGRAM' && error?.response?.statusCode === 401) {
+      console.error('Telegram bot token rejected with 401. Stopping polling to avoid crashes.');
+      bot.stopPolling().catch(() => {});
+      bot = null;
+      return;
+    }
+
     console.error('Telegram polling error:', error);
   });
 

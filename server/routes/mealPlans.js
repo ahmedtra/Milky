@@ -293,3 +293,6 @@ router.post('/:id/shopping-list', auth, async (req, res) => {
 
 module.exports = router;
 
+
+
+

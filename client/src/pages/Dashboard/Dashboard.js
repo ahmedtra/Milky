@@ -2,17 +2,26 @@ import React from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Calendar, 
-  ShoppingCart, 
-  MessageCircle, 
-  TrendingUp,
+import {
+  Bell,
+  Calendar,
+  CheckCircle,
+  Circle,
   Clock,
+  MessageCircle,
+  ShoppingCart,
   Target,
-  Bell
+  Trash2,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
+import toast from 'react-hot-toast';
+import {
+  ensureMealPlanMetadata,
+  loadMealPlans,
+  persistUpdatedMealPlan
+} from '../../utils/mealPlanStorage';
 
 const DashboardContainer = styled.div`
   display: flex;
@@ -167,10 +176,13 @@ const MealRow = styled.div`
   align-items: flex-start;
   gap: 1rem;
   padding: 1rem;
-  background: ${props => props.theme.colors.gray[50]};
-  border: 1px solid ${props => props.theme.colors.gray[200]};
+  background: ${props => props.$completed ? props.theme.colors.success[50] : props.theme.colors.gray[50]};
+  border: 1px solid
+    ${props => props.$completed ? props.theme.colors.success[200] : props.theme.colors.gray[200]};
   border-radius: ${props => props.theme.borderRadius.md};
   flex-wrap: wrap;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+  opacity: ${props => props.$completed ? 0.9 : 1};
 `;
 
 const MealTime = styled.span`
@@ -186,13 +198,68 @@ const MealInfo = styled.div`
 
 const MealTitle = styled.div`
   font-weight: 600;
-  color: ${props => props.theme.colors.gray[800]};
+  color: ${props => props.$completed ? props.theme.colors.success[800] : props.theme.colors.gray[800]};
+  text-decoration: ${props => props.$completed ? 'line-through' : 'none'};
   margin-bottom: 0.25rem;
 `;
 
 const MealDescription = styled.div`
   font-size: 0.9rem;
-  color: ${props => props.theme.colors.gray[600]};
+  color: ${props => props.$completed ? props.theme.colors.success[700] : props.theme.colors.gray[600]};
+`;
+
+const MealStatusBadge = styled.span`
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: ${props => props.theme.colors.success[700]};
+  background: ${props => props.theme.colors.success[100]};
+  border: 1px solid ${props => props.theme.colors.success[200]};
+  border-radius: ${props => props.theme.borderRadius.sm};
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.5rem;
+  display: inline-flex;
+`;
+
+const MealActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+`;
+
+const MealActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[200];
+      if (props.$completed) return props.theme.colors.success[200];
+      return props.theme.colors.gray[200];
+    }};
+  background:
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[50];
+      if (props.$completed) return props.theme.colors.success[100];
+      return 'white';
+    }};
+  color:
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[600];
+      if (props.$completed) return props.theme.colors.success[600];
+      return props.theme.colors.gray[600];
+    }};
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: ${props => props.theme.shadows.sm};
+  }
 `;
 
 const EmptyListState = styled.div`
@@ -242,7 +309,6 @@ const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [shoppingLists, setShoppingLists] = React.useState([]);
-  const [loadingLists, setLoadingLists] = React.useState(true);
   const [activeMealPlan, setActiveMealPlan] = React.useState(null);
   const [loadingMealPlan, setLoadingMealPlan] = React.useState(true);
 
@@ -256,8 +322,8 @@ const Dashboard = () => {
     setLoadingMealPlan(true);
 
     try {
-      const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
-      const activeMealPlanId = localStorage.getItem('activeMealPlanId');
+      const savedMealPlans = loadMealPlans();
+      const activeMealPlanId = window.localStorage.getItem('activeMealPlanId');
 
       let activePlan = null;
 
@@ -269,13 +335,30 @@ const Dashboard = () => {
         activePlan = savedMealPlans[0];
       }
 
-      setActiveMealPlan(activePlan || null);
+      setActiveMealPlan(activePlan ? ensureMealPlanMetadata(activePlan) : null);
     } catch (error) {
       console.error('Error loading active meal plan:', error);
       setActiveMealPlan(null);
     } finally {
       setLoadingMealPlan(false);
     }
+  }, []);
+
+  const applyActiveMealPlanUpdate = React.useCallback((updateFn) => {
+    setActiveMealPlan(prevPlan => {
+      if (!prevPlan) {
+        return prevPlan;
+      }
+
+      const updated = updateFn(prevPlan);
+      if (!updated || updated === prevPlan) {
+        return prevPlan;
+      }
+
+      const normalized = ensureMealPlanMetadata(updated);
+      persistUpdatedMealPlan(normalized);
+      return normalized;
+    });
   }, []);
 
   React.useEffect(() => {
@@ -285,13 +368,83 @@ const Dashboard = () => {
         setShoppingLists(response.data.shoppingLists || []);
       } catch (error) {
         console.error('Error loading shopping lists:', error);
-      } finally {
-        setLoadingLists(false);
       }
     };
 
     fetchShoppingLists();
   }, []);
+
+  const handleToggleMealCompletion = React.useCallback((dayIndex, mealId) => {
+    applyActiveMealPlanUpdate(prev => {
+      const targetDay = prev.days?.[dayIndex];
+      if (!targetDay) {
+        return prev;
+      }
+
+      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
+      if (!hasMeal) {
+        return prev;
+      }
+
+      const updatedPlan = {
+        ...prev,
+        days: prev.days.map((day, idx) => {
+          if (idx !== dayIndex) return day;
+          return {
+            ...day,
+            meals: day.meals.map(meal =>
+              meal.mealId === mealId
+                ? { ...meal, isCompleted: !meal.isCompleted }
+                : meal
+            )
+          };
+        })
+      };
+
+      const toggledMeal = updatedPlan.days[dayIndex].meals.find(meal => meal.mealId === mealId);
+      if (toggledMeal) {
+        toast.success(toggledMeal.isCompleted ? 'Meal marked as completed' : 'Meal marked as pending');
+      }
+
+      return updatedPlan;
+    });
+  }, [applyActiveMealPlanUpdate]);
+
+  const handleDeleteMeal = React.useCallback((dayIndex, mealId) => {
+    if (typeof window !== 'undefined') {
+      const shouldRemove = window.confirm('Remove this meal from your plan?');
+      if (!shouldRemove) {
+        return;
+      }
+    }
+
+    applyActiveMealPlanUpdate(prev => {
+      const targetDay = prev.days?.[dayIndex];
+      if (!targetDay) {
+        return prev;
+      }
+
+      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
+      if (!hasMeal) {
+        return prev;
+      }
+
+      const updatedDays = prev.days.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return {
+          ...day,
+          meals: day.meals.filter(meal => meal.mealId !== mealId)
+        };
+      });
+
+      toast.success('Meal removed from plan');
+
+      return {
+        ...prev,
+        days: updatedDays
+      };
+    });
+  }, [applyActiveMealPlanUpdate]);
 
   React.useEffect(() => {
     loadActiveMealPlan();
@@ -324,48 +477,56 @@ const Dashboard = () => {
     [shoppingLists]
   );
 
-  const todaysMeals = React.useMemo(() => {
-    if (!activeMealPlan || !Array.isArray(activeMealPlan.days)) {
-      return [];
-    }
-
-    const todayIso = new Date().toISOString().split('T')[0];
-    let todayPlan = activeMealPlan.days.find(day => day.date === todayIso);
-
-    if (!todayPlan) {
-      todayPlan = activeMealPlan.days[0];
-    }
-
-    if (!todayPlan || !Array.isArray(todayPlan.meals)) {
-      return [];
-    }
-
-    return todayPlan.meals.map((meal, index) => {
-      const primaryRecipe = meal.recipes?.[0] || {};
-
-      return {
-        id: meal._id || `${meal.type || 'meal'}-${index}`,
-        type: meal.type,
-        time: meal.scheduledTime || '--:--',
-        title: primaryRecipe.name || (meal.type ? `${meal.type.charAt(0).toUpperCase()}${meal.type.slice(1)}` : 'Meal'),
-        description: primaryRecipe.description || '',
-      };
-    });
-  }, [activeMealPlan]);
-
-  const todaysDateLabel = React.useMemo(() => {
+  const todayContext = React.useMemo(() => {
     if (!activeMealPlan || !Array.isArray(activeMealPlan.days) || !activeMealPlan.days.length) {
       return null;
     }
 
     const todayIso = new Date().toISOString().split('T')[0];
-    const day = activeMealPlan.days.find(d => d.date === todayIso) || activeMealPlan.days[0];
+    let dayIndex = activeMealPlan.days.findIndex(day => day.date === todayIso);
 
-    if (!day || !day.date) return null;
+    if (dayIndex === -1) {
+      dayIndex = 0;
+    }
 
-    const formatted = new Date(day.date).toLocaleDateString();
-    return formatted;
+    const day = activeMealPlan.days[dayIndex];
+    if (!day || !Array.isArray(day.meals)) {
+      return null;
+    }
+
+    return { day, index: dayIndex };
   }, [activeMealPlan]);
+
+  const todaysMeals = React.useMemo(() => {
+    if (!todayContext) {
+      return [];
+    }
+
+    const { day, index: dayIndex } = todayContext;
+
+    return day.meals.map((meal, index) => {
+      const primaryRecipe = meal.recipes?.[0] || {};
+
+      return {
+        id: meal.mealId || meal._id || `${meal.type || 'meal'}-${index}`,
+        mealId: meal.mealId,
+        dayIndex,
+        type: meal.type,
+        isCompleted: Boolean(meal.isCompleted),
+        time: meal.scheduledTime || '--:--',
+        title: primaryRecipe.name || (meal.type ? `${meal.type.charAt(0).toUpperCase()}${meal.type.slice(1)}` : 'Meal'),
+        description: primaryRecipe.description || '',
+      };
+    });
+  }, [todayContext]);
+
+  const todaysDateLabel = React.useMemo(() => {
+    if (!todayContext || !todayContext.day?.date) {
+      return null;
+    }
+
+    return new Date(todayContext.day.date).toLocaleDateString();
+  }, [todayContext]);
 
   const stats = [
     {
@@ -483,19 +644,50 @@ const Dashboard = () => {
                   </span>
                 )}
                 {todaysMeals.map(meal => (
-                  <MealRow key={meal.id}>
+                  <MealRow key={meal.id} $completed={meal.isCompleted}>
                     <MealTime>{meal.time}</MealTime>
                     <MealInfo>
-                      <MealTitle>{meal.title}</MealTitle>
+                      <MealTitle $completed={meal.isCompleted}>{meal.title}</MealTitle>
                       {meal.description && (
-                        <MealDescription>{meal.description}</MealDescription>
+                        <MealDescription $completed={meal.isCompleted}>
+                          {meal.description}
+                        </MealDescription>
                       )}
                       {meal.type && (
-                        <MealDescription style={{ fontStyle: 'italic', marginTop: '0.25rem' }}>
+                        <MealDescription
+                          $completed={meal.isCompleted}
+                          style={{ fontStyle: 'italic', marginTop: '0.25rem' }}
+                        >
                           {meal.type.charAt(0).toUpperCase() + meal.type.slice(1)}
                         </MealDescription>
                       )}
+                      {meal.isCompleted && (
+                        <MealStatusBadge>
+                          <CheckCircle size={12} />
+                          Completed
+                        </MealStatusBadge>
+                      )}
                     </MealInfo>
+                    <MealActions>
+                      <MealActionButton
+                        type="button"
+                        onClick={() => handleToggleMealCompletion(meal.dayIndex, meal.mealId)}
+                        aria-label={meal.isCompleted ? 'Mark meal as pending' : 'Mark meal as completed'}
+                        title={meal.isCompleted ? 'Mark meal as pending' : 'Mark meal as completed'}
+                        $completed={meal.isCompleted}
+                      >
+                        {meal.isCompleted ? <CheckCircle size={16} /> : <Circle size={16} />}
+                      </MealActionButton>
+                      <MealActionButton
+                        type="button"
+                        onClick={() => handleDeleteMeal(meal.dayIndex, meal.mealId)}
+                        aria-label="Remove meal"
+                        title="Remove meal"
+                        $danger
+                      >
+                        <Trash2 size={16} />
+                      </MealActionButton>
+                    </MealActions>
                   </MealRow>
                 ))}
                 <button

@@ -9,21 +9,28 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password, preferences = {} } = req.body;
 
+    const normalizedEmail = email?.trim().toLowerCase();
+    const normalizedUsername = username?.trim();
+
+    if (!normalizedEmail || !normalizedUsername || !password) {
+      return res.status(400).json({ message: 'Username, email, and password are required' });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      $or: [{ email: normalizedEmail }, { username: normalizedUsername }]
     });
 
     if (existingUser) {
       return res.status(400).json({ 
-        message: existingUser.email === email ? 'Email already registered' : 'Username already taken'
+        message: existingUser.email === normalizedEmail ? 'Email already registered' : 'Username already taken'
       });
     }
 
     // Create new user
     const user = new User({
-      username,
-      email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       password,
       preferences: {
         dietType: preferences.dietType || 'balanced',
@@ -63,6 +70,16 @@ router.post('/register', async (req, res) => {
       }
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      const duplicateField = Object.keys(error.keyPattern || {})[0] || 'field';
+      const message = duplicateField === 'email'
+        ? 'Email already registered'
+        : duplicateField === 'username'
+          ? 'Username already taken'
+          : 'Duplicate value provided';
+      return res.status(400).json({ message });
+    }
+
     console.error('Registration error:', error);
     res.status(500).json({ message: 'Server error during registration' });
   }
@@ -73,8 +90,14 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     // Find user by email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -235,5 +258,6 @@ router.delete('/unlink-telegram', auth, async (req, res) => {
 });
 
 module.exports = router;
+
 
 

@@ -2,20 +2,31 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Clock, 
-  Users, 
-  Utensils,
-  ShoppingCart,
+import {
+  ArrowLeft,
+  Calendar,
+  CheckCircle,
+  Circle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
   Download,
   Share2,
+  ShoppingCart,
   ChefHat,
   Target,
+  Trash2,
+  Users,
+  Utensils,
   Zap
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import {
+  ensureMealPlanMetadata,
+  loadMealPlans,
+  persistUpdatedMealPlan,
+  saveMealPlans
+} from '../../utils/mealPlanStorage';
 
 const Container = styled.div`
   display: flex;
@@ -208,9 +219,22 @@ const MealsList = styled.div`
 `;
 
 const MealItem = styled.div`
-  border: 1px solid ${props => props.theme.colors.gray[200]};
+  border: 1px solid
+    ${props => {
+      if (props.$completed) return props.theme.colors.success[200];
+      if (props.$expanded) return props.theme.colors.primary[200];
+      return props.theme.colors.gray[200];
+    }};
   border-radius: ${props => props.theme.borderRadius.md};
   padding: 1.25rem;
+  background:
+    ${props => {
+      if (props.$completed) return props.theme.colors.success[50];
+      if (props.$expanded) return props.theme.colors.primary[50];
+      return 'white';
+    }};
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: ${props => (props.$expanded ? props.theme.shadows.sm : 'none')};
 `;
 
 const MealHeader = styled.div`
@@ -218,6 +242,7 @@ const MealHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
+  gap: 1rem;
 `;
 
 const MealType = styled.div`
@@ -225,7 +250,8 @@ const MealType = styled.div`
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: ${props => props.theme.colors.gray[800]};
+  color: ${props => props.$completed ? props.theme.colors.success[700] : props.theme.colors.gray[800]};
+  text-decoration: ${props => props.$completed ? 'line-through' : 'none'};
 `;
 
 const MealTime = styled.div`
@@ -234,6 +260,100 @@ const MealTime = styled.div`
   gap: 0.25rem;
   color: ${props => props.theme.colors.gray[500]};
   font-size: 0.9rem;
+`;
+
+const MealHeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1;
+`;
+
+const MealStatusBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: ${props => props.theme.colors.success[700]};
+  background: ${props => props.theme.colors.success[100]};
+  border: 1px solid ${props => props.theme.colors.success[200]};
+  border-radius: ${props => props.theme.borderRadius.sm};
+  padding: 0.25rem 0.5rem;
+`;
+
+const MealActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const MealToggleButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: 1;
+  justify-content: flex-start;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+
+  &:focus-visible {
+    outline: 2px solid ${props => props.theme.colors.primary[300]};
+    outline-offset: 2px;
+  }
+`;
+
+const MealExpandIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: ${props => (props.$expanded ? props.theme.colors.primary[200] : props.theme.colors.gray[200])};
+  color: ${props => (props.$expanded ? props.theme.colors.primary[700] : props.theme.colors.gray[600])};
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+`;
+
+const MealActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[200];
+      if (props.$completed) return props.theme.colors.success[200];
+      return props.theme.colors.gray[200];
+    }};
+  background:
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[50];
+      if (props.$completed) return props.theme.colors.success[100];
+      return 'white';
+    }};
+  color:
+    ${props => {
+      if (props.$danger) return props.theme.colors.error[600];
+      if (props.$completed) return props.theme.colors.success[600];
+      return props.theme.colors.gray[600];
+    }};
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: ${props => props.theme.shadows.sm};
+  }
 `;
 
 const RecipesList = styled.div`
@@ -247,6 +367,48 @@ const RecipeItem = styled.div`
   border-radius: ${props => props.theme.borderRadius.md};
   padding: 1rem;
   background: ${props => props.theme.colors.gray[50]};
+`;
+
+const RecipeSection = styled.div`
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid ${props => props.theme.colors.gray[200]};
+`;
+
+const SectionTitle = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[700]};
+  margin-bottom: 0.75rem;
+`;
+
+const InstructionList = styled.ol`
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`;
+
+const InstructionItem = styled.li`
+  color: ${props => props.theme.colors.gray[700]};
+  line-height: 1.6;
+  white-space: pre-wrap;
+`;
+
+const ShoppingList = styled.ul`
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`;
+
+const ShoppingListItem = styled.li`
+  color: ${props => props.theme.colors.gray[700]};
+  line-height: 1.6;
 `;
 
 const RecipeName = styled.h4`
@@ -337,25 +499,25 @@ const MealPlanDetail = () => {
   const [mealPlan, setMealPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isActive, setIsActive] = useState(false);
+  const [expandedMeals, setExpandedMeals] = useState(() => new Set());
 
   // Fetch the actual meal plan data from localStorage or state
   React.useEffect(() => {
-    // Try to get the meal plan from localStorage first (from the MealPlans page)
-    const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
-    const foundMealPlan = savedMealPlans.find(plan => plan.id.toString() === id);
-    
+    const savedMealPlans = loadMealPlans();
+    const foundMealPlan = savedMealPlans.find(plan => plan.id?.toString() === id);
+
     if (foundMealPlan) {
+      const normalizedPlan = ensureMealPlanMetadata(foundMealPlan);
       const activeMealPlanId = localStorage.getItem('activeMealPlanId');
       const planWithActive = {
-        ...foundMealPlan,
+        ...normalizedPlan,
         isActive: activeMealPlanId
-          ? foundMealPlan.id.toString() === activeMealPlanId
-          : Boolean(foundMealPlan.isActive)
+          ? normalizedPlan.id?.toString() === activeMealPlanId
+          : Boolean(normalizedPlan.isActive)
       };
       setMealPlan(planWithActive);
       setIsActive(planWithActive.isActive);
     } else {
-      // If not found in localStorage, try to get from session storage or show not found
       console.log('Meal plan not found with ID:', id);
       console.log('Available meal plans:', savedMealPlans);
       setIsActive(false);
@@ -363,16 +525,50 @@ const MealPlanDetail = () => {
     setLoading(false);
   }, [id]);
 
+  React.useEffect(() => {
+    setExpandedMeals(new Set());
+  }, [id]);
+
+  const toggleMealExpansion = React.useCallback((dayIndex, mealId) => {
+    const key = `${dayIndex}-${mealId}`;
+    setExpandedMeals(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const applyMealPlanUpdate = React.useCallback((updateFn) => {
+    setMealPlan(prevPlan => {
+      if (!prevPlan) {
+        return prevPlan;
+      }
+
+      const updated = updateFn(prevPlan);
+      if (!updated || updated === prevPlan) {
+        return prevPlan;
+      }
+
+      const normalized = ensureMealPlanMetadata(updated);
+      persistUpdatedMealPlan(normalized);
+      return normalized;
+    });
+  }, []);
+
   const handleToggleActive = () => {
-    const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
+    const savedMealPlans = loadMealPlans();
 
     if (isActive) {
       const updatedPlans = savedMealPlans.map(plan => ({
         ...plan,
-        isActive: plan.id.toString() === id ? false : plan.isActive
+        isActive: plan.id?.toString() === id ? false : plan.isActive
       }));
 
-      localStorage.setItem('mealPlans', JSON.stringify(updatedPlans));
+      saveMealPlans(updatedPlans);
       localStorage.removeItem('activeMealPlanId');
 
       setMealPlan(prev => (prev ? { ...prev, isActive: false } : prev));
@@ -381,10 +577,10 @@ const MealPlanDetail = () => {
     } else {
       const updatedPlans = savedMealPlans.map(plan => ({
         ...plan,
-        isActive: plan.id.toString() === id
+        isActive: plan.id?.toString() === id
       }));
 
-      localStorage.setItem('mealPlans', JSON.stringify(updatedPlans));
+      saveMealPlans(updatedPlans);
       localStorage.setItem('activeMealPlanId', id);
 
       setMealPlan(prev => (prev ? { ...prev, isActive: true } : prev));
@@ -392,6 +588,84 @@ const MealPlanDetail = () => {
       toast.success('Meal plan set as active');
     }
   };
+
+  const handleToggleMealCompletion = React.useCallback((dayIndex, mealId) => {
+    applyMealPlanUpdate(prev => {
+      const targetDay = prev.days?.[dayIndex];
+      if (!targetDay) {
+        return prev;
+      }
+
+      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
+      if (!hasMeal) {
+        return prev;
+      }
+
+      const updatedPlan = {
+        ...prev,
+        days: prev.days.map((day, idx) => {
+          if (idx !== dayIndex) return day;
+          return {
+            ...day,
+            meals: day.meals.map(meal =>
+              meal.mealId === mealId
+                ? { ...meal, isCompleted: !meal.isCompleted }
+                : meal
+            )
+          };
+        })
+      };
+
+      const toggledMeal = updatedPlan.days[dayIndex].meals.find(meal => meal.mealId === mealId);
+      if (toggledMeal) {
+        toast.success(toggledMeal.isCompleted ? 'Meal marked as completed' : 'Meal marked as pending');
+      }
+
+      return updatedPlan;
+    });
+  }, [applyMealPlanUpdate]);
+
+  const handleDeleteMeal = React.useCallback((dayIndex, mealId) => {
+    if (typeof window !== 'undefined') {
+      const shouldRemove = window.confirm('Remove this meal from your plan?');
+      if (!shouldRemove) {
+        return;
+      }
+    }
+
+    applyMealPlanUpdate(prev => {
+      const targetDay = prev.days?.[dayIndex];
+      if (!targetDay) {
+        return prev;
+      }
+
+      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
+      if (!hasMeal) {
+        return prev;
+      }
+
+      const updatedDays = prev.days.map((day, idx) => {
+        if (idx !== dayIndex) return day;
+        return {
+          ...day,
+          meals: day.meals.filter(meal => meal.mealId !== mealId)
+        };
+      });
+
+      toast.success('Meal removed from plan');
+
+      return {
+        ...prev,
+        days: updatedDays
+      };
+    });
+
+    setExpandedMeals(prev => {
+      const next = new Set(prev);
+      next.delete(`${dayIndex}-${mealId}`);
+      return next;
+    });
+  }, [applyMealPlanUpdate]);
 
   if (loading) {
     return (
@@ -431,6 +705,28 @@ const MealPlanDetail = () => {
       case 'snack': return <Zap size={16} />;
       default: return <Utensils size={16} />;
     }
+  };
+
+  const formatIngredient = (ingredient) => {
+    if (!ingredient || typeof ingredient !== 'object') {
+      return '';
+    }
+
+    const amountParts = [];
+
+    if (ingredient.amount) {
+      amountParts.push(ingredient.amount);
+    }
+
+    if (ingredient.unit && !amountParts.includes(ingredient.unit)) {
+      amountParts.push(ingredient.unit);
+    }
+
+    const amountText = amountParts.join(' ');
+    const nameText = ingredient.name || '';
+    const notesText = ingredient.notes ? ` (${ingredient.notes})` : '';
+
+    return `${amountText ? `${amountText} ` : ''}${nameText}${notesText}`.trim();
   };
 
   return (
@@ -514,68 +810,161 @@ const MealPlanDetail = () => {
               })}</DayDate>
             </DayHeader>
             <MealsList>
-              {day.meals.map((meal, mealIndex) => (
-                <MealItem key={mealIndex}>
-                  <MealHeader>
-                    <MealType>
-                      {getMealIcon(meal.type)}
-                      {meal.type.charAt(0).toUpperCase() + meal.type.slice(1)}
-                    </MealType>
-                    <MealTime>
-                      <Clock size={14} />
-                      {meal.scheduledTime}
-                    </MealTime>
-                  </MealHeader>
-                  <RecipesList>
-                    {meal.recipes.map((recipe, recipeIndex) => (
-                      <RecipeItem key={recipeIndex}>
-                        <RecipeName>{recipe.name}</RecipeName>
-                        <RecipeDescription>{recipe.description}</RecipeDescription>
-                        <RecipeMeta>
-                          <MetaItem>
-                            <Clock size={12} />
-                            {recipe.prepTime + recipe.cookTime} min
-                          </MetaItem>
-                          <MetaItem>
-                            <Users size={12} />
-                            {recipe.servings} serving{recipe.servings > 1 ? 's' : ''}
-                          </MetaItem>
-                          <MetaItem>
-                            <Target size={12} />
-                            {recipe.nutrition.calories} cal
-                          </MetaItem>
-                        </RecipeMeta>
-                        {recipe.nutrition && (
-                          <NutritionInfo>
-                            <NutritionTitle>
-                              <Target size={14} />
-                              Nutrition (per serving)
-                            </NutritionTitle>
-                            <NutritionGrid>
-                              <NutritionItem>
-                                <NutritionValue>{recipe.nutrition.calories}</NutritionValue>
-                                <NutritionLabel>Calories</NutritionLabel>
-                              </NutritionItem>
-                              <NutritionItem>
-                                <NutritionValue>{recipe.nutrition.protein}g</NutritionValue>
-                                <NutritionLabel>Protein</NutritionLabel>
-                              </NutritionItem>
-                              <NutritionItem>
-                                <NutritionValue>{recipe.nutrition.carbs}g</NutritionValue>
-                                <NutritionLabel>Carbs</NutritionLabel>
-                              </NutritionItem>
-                              <NutritionItem>
-                                <NutritionValue>{recipe.nutrition.fat}g</NutritionValue>
-                                <NutritionLabel>Fat</NutritionLabel>
-                              </NutritionItem>
-                            </NutritionGrid>
-                          </NutritionInfo>
-                        )}
-                      </RecipeItem>
-                    ))}
-                  </RecipesList>
-                </MealItem>
-              ))}
+              {day.meals.map((meal, mealIndex) => {
+                const mealId = meal.mealId || `meal-${mealIndex}`;
+                const mealKey = `${index}-${mealId}`;
+                const isExpanded = expandedMeals.has(mealKey);
+
+                return (
+                  <MealItem
+                    key={mealId}
+                    $completed={meal.isCompleted}
+                    $expanded={isExpanded}
+                  >
+                    <MealHeader>
+                      <MealHeaderLeft>
+                        <MealToggleButton
+                          type="button"
+                          onClick={() => toggleMealExpansion(index, mealId)}
+                          aria-expanded={isExpanded}
+                        >
+                          <MealExpandIcon $expanded={isExpanded}>
+                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </MealExpandIcon>
+                          <MealType $completed={meal.isCompleted}>
+                            {getMealIcon(meal.type)}
+                            {meal.type.charAt(0).toUpperCase() + meal.type.slice(1)}
+                          </MealType>
+                          <MealTime>
+                            <Clock size={14} />
+                            {meal.scheduledTime || '--:--'}
+                          </MealTime>
+                          {meal.isCompleted && (
+                            <MealStatusBadge>
+                              <CheckCircle size={12} />
+                              Completed
+                            </MealStatusBadge>
+                          )}
+                        </MealToggleButton>
+                      </MealHeaderLeft>
+                      <MealActions>
+                        <MealActionButton
+                          type="button"
+                          onClick={() => handleToggleMealCompletion(index, mealId)}
+                          aria-label={meal.isCompleted ? 'Mark meal as pending' : 'Mark meal as completed'}
+                          title={meal.isCompleted ? 'Mark meal as pending' : 'Mark meal as completed'}
+                          $completed={meal.isCompleted}
+                        >
+                          {meal.isCompleted ? <CheckCircle size={16} /> : <Circle size={16} />}
+                        </MealActionButton>
+                        <MealActionButton
+                          type="button"
+                          onClick={() => handleDeleteMeal(index, mealId)}
+                          aria-label="Remove meal"
+                          title="Remove meal"
+                          $danger
+                        >
+                          <Trash2 size={16} />
+                        </MealActionButton>
+                      </MealActions>
+                    </MealHeader>
+                    <RecipesList>
+                      {meal.recipes.map((recipe, recipeIndex) => {
+                        const totalTime = (Number(recipe.prepTime) || 0) + (Number(recipe.cookTime) || 0);
+
+                        return (
+                          <RecipeItem key={recipeIndex}>
+                            <RecipeName>{recipe.name}</RecipeName>
+                            <RecipeDescription>{recipe.description}</RecipeDescription>
+                            <RecipeMeta>
+                              <MetaItem>
+                                <Clock size={12} />
+                                {totalTime} min
+                              </MetaItem>
+                              <MetaItem>
+                                <Users size={12} />
+                                {recipe.servings} serving{recipe.servings > 1 ? 's' : ''}
+                              </MetaItem>
+                              <MetaItem>
+                                <Target size={12} />
+                                {recipe.nutrition.calories} cal
+                              </MetaItem>
+                            </RecipeMeta>
+                            {recipe.nutrition && (
+                              <NutritionInfo>
+                                <NutritionTitle>
+                                  <Target size={14} />
+                                  Nutrition (per serving)
+                                </NutritionTitle>
+                                <NutritionGrid>
+                                  <NutritionItem>
+                                    <NutritionValue>{recipe.nutrition.calories}</NutritionValue>
+                                    <NutritionLabel>Calories</NutritionLabel>
+                                  </NutritionItem>
+                                  <NutritionItem>
+                                    <NutritionValue>{recipe.nutrition.protein}g</NutritionValue>
+                                    <NutritionLabel>Protein</NutritionLabel>
+                                  </NutritionItem>
+                                  <NutritionItem>
+                                    <NutritionValue>{recipe.nutrition.carbs}g</NutritionValue>
+                                    <NutritionLabel>Carbs</NutritionLabel>
+                                  </NutritionItem>
+                                  <NutritionItem>
+                                    <NutritionValue>{recipe.nutrition.fat}g</NutritionValue>
+                                    <NutritionLabel>Fat</NutritionLabel>
+                                  </NutritionItem>
+                                </NutritionGrid>
+                              </NutritionInfo>
+                            )}
+                            {isExpanded && recipe.ingredients?.length > 0 && (
+                              <RecipeSection>
+                                <SectionTitle>
+                                  <ShoppingCart size={14} />
+                                  Shopping List
+                                </SectionTitle>
+                                <ShoppingList>
+                                  {recipe.ingredients.map((ingredient, ingredientIndex) => {
+                                    const ingredientLabel = formatIngredient(ingredient);
+                                    if (!ingredientLabel) {
+                                      return null;
+                                    }
+
+                                    return (
+                                      <ShoppingListItem key={`${ingredient?.name || 'ingredient'}-${ingredientIndex}`}>
+                                        {ingredientLabel}
+                                      </ShoppingListItem>
+                                    );
+                                  })}
+                                </ShoppingList>
+                              </RecipeSection>
+                            )}
+                            {isExpanded && recipe.instructions?.length > 0 && (
+                              <RecipeSection>
+                                <SectionTitle>
+                                  <ChefHat size={14} />
+                                  Instructions
+                                </SectionTitle>
+                                <InstructionList>
+                                  {recipe.instructions.map((step, stepIndex) => {
+                                    const stepText = typeof step === 'string' ? step.trim() : '';
+                                    if (!stepText) {
+                                      return null;
+                                    }
+
+                                    return (
+                                      <InstructionItem key={stepIndex}>{stepText}</InstructionItem>
+                                    );
+                                  })}
+                                </InstructionList>
+                              </RecipeSection>
+                            )}
+                          </RecipeItem>
+                        );
+                      })}
+                    </RecipesList>
+                  </MealItem>
+                );
+              })}
             </MealsList>
           </DayCard>
         ))}

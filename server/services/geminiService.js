@@ -436,11 +436,11 @@ class GeminiService {
               "unit": "unit of measurement",
               "category": "produce|meat|dairy|pantry|frozen|bakery|beverages|other",
               "priority": "low|medium|high",
-              "estimatedPrice": number,
+              "estimatedPrice": number (in USD, realistic grocery store prices),
               "notes": "any special notes"
             }
           ],
-          "totalEstimatedCost": number,
+          "totalEstimatedCost": number (sum of all estimatedPrice values),
           "store": "suggested store type"
         }
         
@@ -448,8 +448,12 @@ class GeminiService {
         1. Group similar items together
         2. Calculate total quantities needed
         3. Suggest appropriate store categories
-        4. Estimate reasonable prices
-        5. Add helpful notes for shopping
+        4. Estimate REALISTIC prices in USD (e.g., produce: $2-5, meat: $6-12, dairy: $3-6, pantry: $2-5)
+        5. For each item, set estimatedPrice to a reasonable USD amount based on typical grocery prices
+        6. Calculate totalEstimatedCost as the sum of all item prices
+        7. Add helpful notes for shopping
+        
+        IMPORTANT: Every item must have a valid estimatedPrice number greater than 0.
       `;
 
         const result = await this.model.generateContent(prompt);
@@ -746,15 +750,122 @@ class GeminiService {
       return fallbackItem;
     });
 
-    const totalEstimatedCost = items.reduce((sum, item) => {
+    // Add estimated prices if missing based on intelligent analysis
+    const estimatedItems = items.map(item => {
+      if (!item.estimatedPrice || item.estimatedPrice === 0) {
+        const name = (item.name || '').toLowerCase();
+        const amount = parseFloat(item.amount) || 1;
+        const unit = (item.unit || '').toLowerCase();
+        
+        // Specific ingredient pricing (more accurate)
+        let basePrice = 3.0;
+        
+        // Proteins
+        if (name.includes('chicken') || name.includes('turkey')) {
+          basePrice = amount >= 2 ? 8.0 : 5.5;
+        } else if (name.includes('beef') || name.includes('steak') || name.includes('lamb')) {
+          basePrice = amount >= 2 ? 12.0 : 7.0;
+        } else if (name.includes('fish') || name.includes('salmon') || name.includes('tuna') || name.includes('shrimp')) {
+          basePrice = amount >= 2 ? 14.0 : 8.0;
+        } else if (name.includes('pork') || name.includes('bacon') || name.includes('sausage')) {
+          basePrice = amount >= 2 ? 9.0 : 5.5;
+        } else if (name.includes('egg')) {
+          basePrice = amount >= 12 ? 4.5 : 3.0;
+        
+        // Dairy
+        } else if (name.includes('milk') || name.includes('cream')) {
+          basePrice = amount >= 2 ? 5.5 : 3.5;
+        } else if (name.includes('cheese')) {
+          basePrice = amount >= 1 ? 6.0 : 4.0;
+        } else if (name.includes('yogurt')) {
+          basePrice = amount >= 4 ? 5.0 : 3.5;
+        } else if (name.includes('butter')) {
+          basePrice = 4.5;
+        
+        // Produce
+        } else if (name.includes('lettuce') || name.includes('spinach') || name.includes('kale')) {
+          basePrice = 2.5;
+        } else if (name.includes('tomato') || name.includes('pepper') || name.includes('onion')) {
+          basePrice = amount >= 5 ? 4.0 : 2.5;
+        } else if (name.includes('avocado')) {
+          basePrice = amount >= 3 ? 5.0 : 2.0;
+        } else if (name.includes('broccoli') || name.includes('cauliflower') || name.includes('carrot')) {
+          basePrice = amount >= 3 ? 4.5 : 3.0;
+        } else if (name.includes('potato')) {
+          basePrice = amount >= 5 ? 5.0 : 3.0;
+        } else if (name.includes('apple') || name.includes('banana') || name.includes('orange')) {
+          basePrice = amount >= 5 ? 4.0 : 2.5;
+        } else if (name.includes('berry') || name.includes('strawberry') || name.includes('blueberry')) {
+          basePrice = amount >= 2 ? 6.0 : 4.0;
+        
+        // Grains & Pantry
+        } else if (name.includes('rice') || name.includes('pasta') || name.includes('noodle')) {
+          basePrice = amount >= 3 ? 5.0 : 3.0;
+        } else if (name.includes('bread') || name.includes('baguette') || name.includes('roll')) {
+          basePrice = 3.5;
+        } else if (name.includes('flour') || name.includes('sugar')) {
+          basePrice = amount >= 5 ? 6.0 : 3.5;
+        } else if (name.includes('oat') || name.includes('cereal')) {
+          basePrice = 4.0;
+        
+        // Oils & Condiments (usually small amounts)
+        } else if (name.includes('oil') || name.includes('vinegar')) {
+          basePrice = unit.includes('tsp') || unit.includes('tbsp') || unit.includes('tablespoon') || unit.includes('teaspoon') ? 0.5 : 6.0;
+        } else if (name.includes('sauce') || name.includes('paste') || name.includes('stock') || name.includes('broth')) {
+          basePrice = 3.0;
+        
+        // Spices & Herbs (usually very small amounts)
+        } else if (name.includes('salt') || name.includes('pepper') || name.includes('spice') || name.includes('herb') || 
+                   name.includes('cumin') || name.includes('paprika') || name.includes('oregano') || name.includes('thyme') ||
+                   name.includes('basil') || name.includes('parsley') || name.includes('cilantro')) {
+          basePrice = unit.includes('tsp') || unit.includes('tbsp') || unit.includes('tablespoon') || unit.includes('teaspoon') ? 0.3 : 2.5;
+        
+        // Nuts & Seeds
+        } else if (name.includes('almond') || name.includes('walnut') || name.includes('cashew') || name.includes('pecan')) {
+          basePrice = amount >= 2 ? 9.0 : 5.5;
+        } else if (name.includes('seed') || name.includes('chia') || name.includes('flax')) {
+          basePrice = 4.0;
+        
+        // Canned/Packaged
+        } else if (name.includes('can') || name.includes('canned')) {
+          basePrice = 2.0;
+        
+        // Category-based fallback
+        } else {
+          const categoryPrices = {
+            'produce': 3.5,
+            'meat': 8.0,
+            'dairy': 4.5,
+            'pantry': 4.0,
+            'frozen': 5.0,
+            'bakery': 3.0,
+            'beverages': 3.5,
+            'other': 3.0
+          };
+          basePrice = categoryPrices[item.category] || 3.0;
+        }
+        
+        // Adjust for very small units (tsp, tbsp)
+        if (unit.includes('tsp') || unit.includes('teaspoon')) {
+          basePrice = Math.min(basePrice, 0.5);
+        } else if (unit.includes('tbsp') || unit.includes('tablespoon')) {
+          basePrice = Math.min(basePrice, 1.0);
+        }
+        
+        item.estimatedPrice = parseFloat(basePrice.toFixed(2));
+      }
+      return item;
+    });
+
+    const totalEstimatedCost = estimatedItems.reduce((sum, item) => {
       return sum + (item.estimatedPrice || 0);
     }, 0);
 
     return {
       title: mealPlan?.title ? `${mealPlan.title} Shopping List` : 'Shopping List',
       description: 'Generated from meal plan ingredients',
-      items,
-      totalEstimatedCost,
+      items: estimatedItems,
+      totalEstimatedCost: parseFloat(totalEstimatedCost.toFixed(2)),
       store: 'Grocery store'
     };
   }

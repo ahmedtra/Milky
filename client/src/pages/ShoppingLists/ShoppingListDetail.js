@@ -576,10 +576,10 @@ const ShoppingListDetail = () => {
                 {shoppingList.store}
               </MetaItem>
             )}
-            {shoppingList.totalEstimatedCost && (
+            {shoppingList.totalEstimatedCost !== undefined && shoppingList.totalEstimatedCost !== null && (
               <MetaItem>
                 <DollarSign size={16} />
-                ${shoppingList.totalEstimatedCost}
+                ${typeof shoppingList.totalEstimatedCost === 'number' ? shoppingList.totalEstimatedCost.toFixed(2) : shoppingList.totalEstimatedCost}
               </MetaItem>
             )}
           </MetaInfo>
@@ -745,10 +745,10 @@ const ShoppingListDetail = () => {
             <span>{shoppingList.items?.length || 0}</span>
           </SummaryItem>
           
-          {shoppingList.totalEstimatedCost && (
+          {shoppingList.totalEstimatedCost !== undefined && shoppingList.totalEstimatedCost !== null && (
             <SummaryItem>
               <span>Estimated Cost</span>
-              <span>${shoppingList.totalEstimatedCost.toFixed(2)}</span>
+              <span>${typeof shoppingList.totalEstimatedCost === 'number' ? shoppingList.totalEstimatedCost.toFixed(2) : shoppingList.totalEstimatedCost}</span>
             </SummaryItem>
           )}
 

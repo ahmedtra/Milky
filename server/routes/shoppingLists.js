@@ -57,7 +57,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new shopping list
 router.post('/', auth, async (req, res) => {
   try {
-    const { mealPlanId, title, description, items, store } = req.body;
+    const { mealPlanId, title, description, items, store, totalEstimatedCost } = req.body;
 
     if (!title || !items || !Array.isArray(items)) {
       return res.status(400).json({ 
@@ -90,13 +90,33 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
+    // Map ingredient categories to shopping list categories
+    const categoryMap = {
+      'protein': 'meat',
+      'vegetable': 'produce',
+      'fruit': 'produce',
+      'grain': 'pantry',
+      'dairy': 'dairy',
+      'fat': 'pantry',
+      'spice': 'pantry',
+      'nut': 'pantry',
+      'seed': 'pantry',
+      'other': 'other'
+    };
+
+    const sanitizedItems = items.map(item => ({
+      ...item,
+      category: categoryMap[item.category?.toLowerCase()] || item.category || 'other'
+    }));
+
     const shoppingList = new ShoppingList({
       userId: req.user._id,
       mealPlanId: validMealPlanId,
       title,
       description,
-      items,
+      items: sanitizedItems,
       store,
+      totalEstimatedCost,
       status: 'draft'
     });
 
@@ -115,7 +135,7 @@ router.post('/', auth, async (req, res) => {
 // Update shopping list
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { title, description, items, status, store, notes } = req.body;
+    const { title, description, items, status, store, notes, totalEstimatedCost } = req.body;
 
     const shoppingList = await ShoppingList.findOne({
       _id: req.params.id,
@@ -128,10 +148,30 @@ router.put('/:id', auth, async (req, res) => {
 
     if (title) shoppingList.title = title;
     if (description) shoppingList.description = description;
-    if (items) shoppingList.items = items;
+    if (items) {
+      // Map ingredient categories to shopping list categories
+      const categoryMap = {
+        'protein': 'meat',
+        'vegetable': 'produce',
+        'fruit': 'produce',
+        'grain': 'pantry',
+        'dairy': 'dairy',
+        'fat': 'pantry',
+        'spice': 'pantry',
+        'nut': 'pantry',
+        'seed': 'pantry',
+        'other': 'other'
+      };
+
+      shoppingList.items = items.map(item => ({
+        ...item,
+        category: categoryMap[item.category?.toLowerCase()] || item.category || 'other'
+      }));
+    }
     if (status) shoppingList.status = status;
     if (store) shoppingList.store = store;
     if (notes) shoppingList.notes = notes;
+    if (totalEstimatedCost !== undefined) shoppingList.totalEstimatedCost = totalEstimatedCost;
 
     await shoppingList.save();
 

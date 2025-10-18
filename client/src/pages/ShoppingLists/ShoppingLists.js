@@ -560,10 +560,10 @@ const ShoppingLists = () => {
                       {list.store}
                     </MetaItem>
                   )}
-                  {list.totalEstimatedCost && (
+                  {list.totalEstimatedCost !== undefined && list.totalEstimatedCost !== null && (
                     <MetaItem>
                       <DollarSign size={14} />
-                      ${list.totalEstimatedCost.toFixed(2)}
+                      ${typeof list.totalEstimatedCost === 'number' ? list.totalEstimatedCost.toFixed(2) : list.totalEstimatedCost}
                     </MetaItem>
                   )}
                 </ShoppingListMeta>

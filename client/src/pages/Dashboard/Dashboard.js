@@ -374,7 +374,15 @@ const Dashboard = () => {
     fetchShoppingLists();
   }, []);
 
-  const handleToggleMealCompletion = React.useCallback((dayIndex, mealId) => {
+  const handleToggleMealCompletion = React.useCallback(async (dayIndex, mealId) => {
+    // Get current status before updating
+    const currentMeal = activeMealPlan?.days?.[dayIndex]?.meals?.find(m => m.mealId === mealId);
+    const currentStatus = currentMeal?.isCompleted || false;
+    const newIsCompleted = !currentStatus;
+
+    console.log(`🔄 Toggling meal: Current status = ${currentStatus}, New status = ${newIsCompleted}`);
+
+    // Update locally for instant UI feedback
     applyActiveMealPlanUpdate(prev => {
       const targetDay = prev.days?.[dayIndex];
       if (!targetDay) {
@@ -394,21 +402,39 @@ const Dashboard = () => {
             ...day,
             meals: day.meals.map(meal =>
               meal.mealId === mealId
-                ? { ...meal, isCompleted: !meal.isCompleted }
+                ? { ...meal, isCompleted: newIsCompleted }
                 : meal
             )
           };
         })
       };
 
-      const toggledMeal = updatedPlan.days[dayIndex].meals.find(meal => meal.mealId === mealId);
-      if (toggledMeal) {
-        toast.success(toggledMeal.isCompleted ? 'Meal marked as completed' : 'Meal marked as pending');
-      }
+      toast.success(newIsCompleted ? 'Meal marked as completed' : 'Meal marked as pending');
 
       return updatedPlan;
     });
-  }, [applyActiveMealPlanUpdate]);
+
+    // Sync with backend if the meal plan is stored in MongoDB
+    if (activeMealPlan?._id) {
+      try {
+        const mealIndexInDay = activeMealPlan.days[dayIndex].meals.findIndex(m => m.mealId === mealId || m._id === mealId);
+        if (mealIndexInDay !== -1) {
+          console.log(`🔄 Syncing meal completion to backend: Plan ${activeMealPlan._id}, Day ${dayIndex}, Meal ${mealIndexInDay}, Completed: ${newIsCompleted}`);
+          await axios.post(`/api/meal-plans/${activeMealPlan._id}/days/${dayIndex}/meals/${mealIndexInDay}/toggle`, {
+            isCompleted: newIsCompleted
+          });
+          console.log('✅ Successfully synced to backend');
+        } else {
+          console.warn('⚠️ Meal not found in day for syncing');
+        }
+      } catch (error) {
+        console.error('❌ Error syncing meal completion with backend:', error);
+        // Don't show error to user - local update already happened
+      }
+    } else {
+      console.warn('⚠️ No MongoDB _id found for active meal plan, skipping backend sync. Generate a new meal plan to enable backend syncing.');
+    }
+  }, [applyActiveMealPlanUpdate, activeMealPlan]);
 
   const handleDeleteMeal = React.useCallback((dayIndex, mealId) => {
     if (typeof window !== 'undefined') {

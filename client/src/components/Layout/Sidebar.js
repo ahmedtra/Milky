@@ -8,7 +8,8 @@ import {
   ShoppingCart, 
   Settings, 
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BarChart3
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -204,6 +205,7 @@ const menuItems = [
   { path: '/chat', icon: MessageCircle, label: 'AI Chat' },
   { path: '/meal-plans', icon: Calendar, label: 'Meal Plans' },
   { path: '/shopping-lists', icon: ShoppingCart, label: 'Shopping Lists' },
+  { path: '/stats', icon: BarChart3, label: 'Statistics' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 

@@ -67,6 +67,13 @@ const mealSchema = new mongoose.Schema({
     carbs: Number,
     fat: Number
   },
+  isCompleted: {
+    type: Boolean,
+    default: false
+  },
+  completedAt: {
+    type: Date
+  },
   notes: String
 });
 

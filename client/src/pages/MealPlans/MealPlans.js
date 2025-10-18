@@ -390,10 +390,14 @@ const MealPlans = () => {
         duration: preferences.duration
       });
 
+      const backendMealPlan = response.data.mealPlan;
+      
+      // Preserve MongoDB _id and also set it as id for localStorage compatibility
       const newMealPlan = ensureMealPlanMetadata({
-        id: Date.now(),
-        ...response.data.mealPlan,
-        createdAt: new Date().toISOString(),
+        ...backendMealPlan,
+        id: backendMealPlan._id || Date.now(), // Use MongoDB _id as the primary ID
+        _id: backendMealPlan._id, // Preserve the MongoDB _id
+        createdAt: backendMealPlan.createdAt || new Date().toISOString(),
         preferences: { ...preferences },
         isActive: false
       });
@@ -410,6 +414,7 @@ const MealPlans = () => {
       
       // Debug: Log the meal plan data
       console.log('Generated meal plan:', newMealPlan);
+      console.log('MongoDB _id:', newMealPlan._id);
       console.log('Days count:', newMealPlan.days?.length);
       console.log('First day meals:', newMealPlan.days?.[0]?.meals?.length);
       

@@ -20,6 +20,7 @@ import ShoppingLists from './pages/ShoppingLists/ShoppingLists';
 import ShoppingListDetail from './pages/ShoppingLists/ShoppingListDetail';
 import Settings from './pages/Settings/Settings';
 import Profile from './pages/Profile/Profile';
+import Stats from './pages/Stats/Stats';
 
 // Hooks
 import { useAuth } from './contexts/AuthContext';
@@ -263,6 +264,20 @@ function App() {
                             transition={pageTransition}
                           >
                             <Profile />
+                          </PageContainer>
+                        } 
+                      />
+                      <Route 
+                        path="/stats" 
+                        element={
+                          <PageContainer
+                            initial="initial"
+                            animate="in"
+                            exit="out"
+                            variants={pageVariants}
+                            transition={pageTransition}
+                          >
+                            <Stats />
                           </PageContainer>
                         } 
                       />

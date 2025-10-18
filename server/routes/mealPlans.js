@@ -35,6 +35,112 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// Get nutrition statistics (must be before /:id route)
+router.get('/stats', auth, async (req, res) => {
+  try {
+    console.log('📊 Stats endpoint called for user:', req.user._id);
+    const mealPlans = await MealPlan.find({ userId: req.user._id });
+    console.log(`📋 Found ${mealPlans.length} meal plans in database`);
+
+    let totalStats = {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: 0,
+      sugar: 0
+    };
+
+    let consumedMealsCount = 0;
+    let totalMealsCount = 0;
+    let completedMealsDebug = [];
+    
+    // Track nutrition by date for charts
+    const nutritionByDate = {};
+
+    mealPlans.forEach((plan, planIdx) => {
+      console.log(`  Plan ${planIdx + 1}: "${plan.title}" - ${plan.days?.length || 0} days`);
+      plan.days.forEach((day, dayIdx) => {
+        const dateKey = day.date ? new Date(day.date).toISOString().split('T')[0] : null;
+        
+        day.meals.forEach((meal, mealIdx) => {
+          totalMealsCount++;
+          console.log(`    Day ${dayIdx}, Meal ${mealIdx} (${meal.type}): isCompleted = ${meal.isCompleted}`);
+          // Only count meals that are marked as completed
+          if (meal.isCompleted) {
+            consumedMealsCount++;
+            completedMealsDebug.push(`${meal.type} on Day ${dayIdx + 1}`);
+            
+            // Calculate nutrition from recipes
+            meal.recipes.forEach(recipe => {
+              if (recipe.nutrition) {
+                const nutrition = recipe.nutrition;
+                totalStats.calories += nutrition.calories || 0;
+                totalStats.protein += nutrition.protein || 0;
+                totalStats.carbs += nutrition.carbs || 0;
+                totalStats.fat += nutrition.fat || 0;
+                totalStats.fiber += nutrition.fiber || 0;
+                totalStats.sugar += nutrition.sugar || 0;
+                
+                // Track by date for charts
+                if (dateKey) {
+                  if (!nutritionByDate[dateKey]) {
+                    nutritionByDate[dateKey] = {
+                      date: dateKey,
+                      calories: 0,
+                      protein: 0,
+                      carbs: 0,
+                      fat: 0,
+                      fiber: 0,
+                      sugar: 0
+                    };
+                  }
+                  nutritionByDate[dateKey].calories += nutrition.calories || 0;
+                  nutritionByDate[dateKey].protein += nutrition.protein || 0;
+                  nutritionByDate[dateKey].carbs += nutrition.carbs || 0;
+                  nutritionByDate[dateKey].fat += nutrition.fat || 0;
+                  nutritionByDate[dateKey].fiber += nutrition.fiber || 0;
+                  nutritionByDate[dateKey].sugar += nutrition.sugar || 0;
+                }
+              }
+            });
+          }
+        });
+      });
+    });
+
+    // Convert nutritionByDate to sorted array
+    const dailyNutrition = Object.values(nutritionByDate)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map(day => ({
+        ...day,
+        calories: Math.round(day.calories),
+        protein: Math.round(day.protein),
+        carbs: Math.round(day.carbs),
+        fat: Math.round(day.fat),
+        fiber: Math.round(day.fiber),
+        sugar: Math.round(day.sugar)
+      }));
+
+    console.log(`✅ Stats calculated: ${consumedMealsCount} completed meals out of ${totalMealsCount} total`);
+    console.log(`   Completed meals:`, completedMealsDebug);
+    console.log(`   Total calories:`, totalStats.calories);
+    console.log(`   Days with data:`, dailyNutrition.length);
+
+    res.json({
+      totalStats,
+      consumedMealsCount,
+      totalMealsCount,
+      averageCaloriesPerMeal: consumedMealsCount > 0 ? Math.round(totalStats.calories / consumedMealsCount) : 0,
+      mealPlansCount: mealPlans.length,
+      dailyNutrition
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ message: 'Server error fetching statistics' });
+  }
+});
+
 // Get specific meal plan
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -213,6 +319,57 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (error) {
     console.error('Delete meal plan error:', error);
     res.status(500).json({ message: 'Server error deleting meal plan' });
+  }
+});
+
+// Toggle meal completion status
+router.post('/:id/days/:dayIndex/meals/:mealIndex/toggle', auth, async (req, res) => {
+  try {
+    const { id, dayIndex, mealIndex } = req.params;
+    const { isCompleted } = req.body;
+
+    console.log(`🔄 Toggle meal completion request: Plan ${id}, Day ${dayIndex}, Meal ${mealIndex}, isCompleted: ${isCompleted}`);
+
+    const mealPlan = await MealPlan.findOne({
+      _id: id,
+      userId: req.user._id
+    });
+
+    if (!mealPlan) {
+      console.log('❌ Meal plan not found');
+      return res.status(404).json({ message: 'Meal plan not found' });
+    }
+
+    if (!mealPlan.days[dayIndex] || !mealPlan.days[dayIndex].meals[mealIndex]) {
+      console.log('❌ Meal not found at specified indices');
+      return res.status(404).json({ message: 'Meal not found' });
+    }
+
+    // Toggle or set completion status
+    const newStatus = typeof isCompleted === 'boolean' 
+      ? isCompleted 
+      : !mealPlan.days[dayIndex].meals[mealIndex].isCompleted;
+
+    console.log(`  Previous status: ${mealPlan.days[dayIndex].meals[mealIndex].isCompleted}, New status: ${newStatus}`);
+
+    mealPlan.days[dayIndex].meals[mealIndex].isCompleted = newStatus;
+    if (newStatus) {
+      mealPlan.days[dayIndex].meals[mealIndex].completedAt = new Date();
+    } else {
+      mealPlan.days[dayIndex].meals[mealIndex].completedAt = undefined;
+    }
+
+    await mealPlan.save();
+
+    console.log(`✅ Meal completion toggled successfully in database`);
+
+    res.json({
+      message: `Meal marked as ${newStatus ? 'completed' : 'pending'}`,
+      meal: mealPlan.days[dayIndex].meals[mealIndex]
+    });
+  } catch (error) {
+    console.error('❌ Toggle meal completion error:', error);
+    res.status(500).json({ message: 'Server error toggling meal completion' });
   }
 });
 

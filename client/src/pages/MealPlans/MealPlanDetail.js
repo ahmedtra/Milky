@@ -22,12 +22,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import {
-  ensureMealPlanMetadata,
-  loadMealPlans,
-  persistUpdatedMealPlan,
-  saveMealPlans
-} from '../../utils/mealPlanStorage';
+// Removed localStorage utilities - now using database API
 
 const Container = styled.div`
   display: flex;
@@ -502,28 +497,36 @@ const MealPlanDetail = () => {
   const [isActive, setIsActive] = useState(false);
   const [expandedMeals, setExpandedMeals] = useState(() => new Set());
 
-  // Fetch the actual meal plan data from localStorage or state
+  // Fetch the actual meal plan data from database
   React.useEffect(() => {
-    const savedMealPlans = loadMealPlans();
-    const foundMealPlan = savedMealPlans.find(plan => plan.id?.toString() === id);
-
-    if (foundMealPlan) {
-      const normalizedPlan = ensureMealPlanMetadata(foundMealPlan);
-      const activeMealPlanId = localStorage.getItem('activeMealPlanId');
-      const planWithActive = {
-        ...normalizedPlan,
-        isActive: activeMealPlanId
-          ? normalizedPlan.id?.toString() === activeMealPlanId
-          : Boolean(normalizedPlan.isActive)
-      };
-      setMealPlan(planWithActive);
-      setIsActive(planWithActive.isActive);
-    } else {
-      console.log('Meal plan not found with ID:', id);
-      console.log('Available meal plans:', savedMealPlans);
-      setIsActive(false);
-    }
-    setLoading(false);
+    const fetchMealPlan = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/meal-plans/${id}`);
+        const plan = response.data;
+        
+        if (plan) {
+          const normalizedPlan = {
+            ...plan,
+            id: plan._id || plan.id,
+            isActive: plan.status === 'active'
+          };
+          setMealPlan(normalizedPlan);
+          setIsActive(normalizedPlan.isActive);
+        } else {
+          console.log('Meal plan not found with ID:', id);
+          setIsActive(false);
+        }
+      } catch (error) {
+        console.error('Error fetching meal plan:', error);
+        toast.error('Failed to load meal plan');
+        setIsActive(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchMealPlan();
   }, [id]);
 
   React.useEffect(() => {
@@ -554,39 +557,29 @@ const MealPlanDetail = () => {
         return prevPlan;
       }
 
-      const normalized = ensureMealPlanMetadata(updated);
-      persistUpdatedMealPlan(normalized);
-      return normalized;
+      // Updates are now persisted to the database via API calls
+      return updated;
     });
   }, []);
 
-  const handleToggleActive = () => {
-    const savedMealPlans = loadMealPlans();
-
-    if (isActive) {
-      const updatedPlans = savedMealPlans.map(plan => ({
-        ...plan,
-        isActive: plan.id?.toString() === id ? false : plan.isActive
-      }));
-
-      saveMealPlans(updatedPlans);
-      localStorage.removeItem('activeMealPlanId');
-
-      setMealPlan(prev => (prev ? { ...prev, isActive: false } : prev));
-      setIsActive(false);
-      toast.success('Meal plan deactivated');
-    } else {
-      const updatedPlans = savedMealPlans.map(plan => ({
-        ...plan,
-        isActive: plan.id?.toString() === id
-      }));
-
-      saveMealPlans(updatedPlans);
-      localStorage.setItem('activeMealPlanId', id);
-
-      setMealPlan(prev => (prev ? { ...prev, isActive: true } : prev));
-      setIsActive(true);
-      toast.success('Meal plan set as active');
+  const handleToggleActive = async () => {
+    try {
+      if (isActive) {
+        // Deactivate: update status to 'draft'
+        await axios.patch(`/api/meal-plans/${id}`, { status: 'draft' });
+        setMealPlan(prev => (prev ? { ...prev, isActive: false, status: 'draft' } : prev));
+        setIsActive(false);
+        toast.success('Meal plan deactivated');
+      } else {
+        // Activate: use the dedicated activation endpoint
+        await axios.post(`/api/meal-plans/${id}/activate`);
+        setMealPlan(prev => (prev ? { ...prev, isActive: true, status: 'active' } : prev));
+        setIsActive(true);
+        toast.success('Meal plan set as active');
+      }
+    } catch (error) {
+      console.error('Error toggling meal plan active status:', error);
+      toast.error('Failed to update meal plan status');
     }
   };
 

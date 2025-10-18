@@ -11,12 +11,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import {
-  ensureMealPlanMetadata,
-  ensureMealPlansMetadata,
-  loadMealPlans,
-  saveMealPlans
-} from '../../utils/mealPlanStorage';
+// Removed localStorage utilities - now using database API
 
 const Container = styled.div`
   display: flex;
@@ -338,24 +333,34 @@ const MealPlans = () => {
 
   const [mealPlans, setMealPlans] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load meal plans from localStorage on component mount
+  // Fetch meal plans from database on component mount
   React.useEffect(() => {
-    const savedMealPlans = loadMealPlans();
-    const activeMealPlanId = localStorage.getItem('activeMealPlanId');
-
-    const normalizedPlans = savedMealPlans.map(plan => ({
-      ...plan,
-      isActive: activeMealPlanId
-        ? plan.id?.toString() === activeMealPlanId
-        : Boolean(plan.isActive)
-    }));
-
-    setMealPlans(normalizedPlans);
-
-    // Persist normalized data so other parts of the app get the updated structure
-    saveMealPlans(savedMealPlans);
+    fetchMealPlans();
   }, []);
+
+  const fetchMealPlans = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get('/api/meal-plans');
+      const plans = response.data || [];
+      
+      // Normalize plans with proper ID and active status from database
+      const normalizedPlans = plans.map(plan => ({
+        ...plan,
+        id: plan._id || plan.id,
+        isActive: plan.status === 'active'
+      }));
+      
+      setMealPlans(normalizedPlans);
+    } catch (error) {
+      console.error('Error fetching meal plans:', error);
+      toast.error('Failed to load meal plans');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleInputChange = (field, value) => {
     setPreferences(prev => ({
@@ -390,33 +395,8 @@ const MealPlans = () => {
         duration: preferences.duration
       });
 
-      const backendMealPlan = response.data.mealPlan;
-      
-      // Preserve MongoDB _id and also set it as id for localStorage compatibility
-      const newMealPlan = ensureMealPlanMetadata({
-        ...backendMealPlan,
-        id: backendMealPlan._id || Date.now(), // Use MongoDB _id as the primary ID
-        _id: backendMealPlan._id, // Preserve the MongoDB _id
-        createdAt: backendMealPlan.createdAt || new Date().toISOString(),
-        preferences: { ...preferences },
-        isActive: false
-      });
-
-      setMealPlans(prev => [newMealPlan, ...prev]);
-      
-      // Save to localStorage for persistence
-      const existingPlans = ensureMealPlansMetadata(mealPlans).map(plan => ({
-        ...plan,
-        isActive: plan.isActive || false
-      }));
-      const updatedMealPlans = [newMealPlan, ...existingPlans];
-      saveMealPlans(updatedMealPlans);
-      
-      // Debug: Log the meal plan data
-      console.log('Generated meal plan:', newMealPlan);
-      console.log('MongoDB _id:', newMealPlan._id);
-      console.log('Days count:', newMealPlan.days?.length);
-      console.log('First day meals:', newMealPlan.days?.[0]?.meals?.length);
+      // Refresh meal plans from database after generation
+      await fetchMealPlans();
       
       toast.success('Meal plan generated successfully!');
     } catch (error) {
@@ -456,11 +436,18 @@ const MealPlans = () => {
             )}
           </GenerateButton>
           <GenerateButton
-            onClick={() => {
-              localStorage.removeItem('mealPlans');
-              localStorage.removeItem('activeMealPlanId');
-              setMealPlans([]);
-              toast.success('Meal plans cleared');
+            onClick={async () => {
+              try {
+                // Delete all meal plans from database
+                await Promise.all(mealPlans.map(plan => 
+                  axios.delete(`/api/meal-plans/${plan._id || plan.id}`)
+                ));
+                setMealPlans([]);
+                toast.success('All meal plans deleted');
+              } catch (error) {
+                console.error('Error clearing meal plans:', error);
+                toast.error('Failed to clear meal plans');
+              }
             }}
             style={{ background: '#ef4444' }}
           >
@@ -621,59 +608,66 @@ const MealPlans = () => {
             </LoadingOverlay>
           )}
 
-          <AnimatePresence>
-            {mealPlans.length === 0 ? (
-              <EmptyState>
-                <EmptyIcon>
-                  <Calendar size={32} />
-                </EmptyIcon>
-                <EmptyTitle>No Meal Plans Yet</EmptyTitle>
-                <EmptyDescription>
-                  Fill out your preferences and click "Generate Meal Plan" to create your first personalized meal plan.
-                </EmptyDescription>
-              </EmptyState>
-            ) : (
-              <MealPlanList>
-                {mealPlans.map((mealPlan) => (
-                  <MealPlanItem
-                    key={mealPlan.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    onClick={() => navigate(`/meal-plans/${mealPlan.id}`)}
-                  >
-                    <MealPlanHeader>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <MealPlanTitle>{mealPlan.title}</MealPlanTitle>
-                        {mealPlan.isActive && <ActiveBadge>Active</ActiveBadge>}
-                      </div>
-                      <MealPlanDate>
-                        {new Date(mealPlan.createdAt).toLocaleDateString()}
-                      </MealPlanDate>
-                    </MealPlanHeader>
-                    
-                    <MealPlanDescription>{mealPlan.description}</MealPlanDescription>
-                    
-                    <MealPlanStats>
-                      <Stat>
-                        <Calendar size={16} />
-                        {mealPlan.days?.length || 0} days
-                      </Stat>
-                      <Stat>
-                        <Clock size={16} />
-                        {preferences.mealTimes.breakfast} - {preferences.mealTimes.dinner}
-                      </Stat>
-                      <Stat>
-                        <Target size={16} />
-                        {preferences.dietType}
-                      </Stat>
-                    </MealPlanStats>
-                  </MealPlanItem>
-                ))}
-              </MealPlanList>
-            )}
-          </AnimatePresence>
+          {isLoading ? (
+            <EmptyState>
+              <Loader size={32} className="animate-spin" style={{ margin: '0 auto' }} />
+              <EmptyTitle>Loading meal plans...</EmptyTitle>
+            </EmptyState>
+          ) : (
+            <AnimatePresence>
+              {mealPlans.length === 0 ? (
+                <EmptyState>
+                  <EmptyIcon>
+                    <Calendar size={32} />
+                  </EmptyIcon>
+                  <EmptyTitle>No Meal Plans Yet</EmptyTitle>
+                  <EmptyDescription>
+                    Fill out your preferences and click "Generate Meal Plan" to create your first personalized meal plan.
+                  </EmptyDescription>
+                </EmptyState>
+              ) : (
+                <MealPlanList>
+                  {mealPlans.map((mealPlan) => (
+                    <MealPlanItem
+                      key={mealPlan._id || mealPlan.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                      onClick={() => navigate(`/meal-plans/${mealPlan._id || mealPlan.id}`)}
+                    >
+                      <MealPlanHeader>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <MealPlanTitle>{mealPlan.title}</MealPlanTitle>
+                          {mealPlan.isActive && <ActiveBadge>Active</ActiveBadge>}
+                        </div>
+                        <MealPlanDate>
+                          {new Date(mealPlan.createdAt).toLocaleDateString()}
+                        </MealPlanDate>
+                      </MealPlanHeader>
+                      
+                      <MealPlanDescription>{mealPlan.description}</MealPlanDescription>
+                      
+                      <MealPlanStats>
+                        <Stat>
+                          <Calendar size={16} />
+                          {mealPlan.days?.length || 0} days
+                        </Stat>
+                        <Stat>
+                          <Clock size={16} />
+                          {mealPlan.preferences?.mealTimes?.breakfast || '08:00'} - {mealPlan.preferences?.mealTimes?.dinner || '19:00'}
+                        </Stat>
+                        <Stat>
+                          <Target size={16} />
+                          {mealPlan.preferences?.dietType || 'Balanced'}
+                        </Stat>
+                      </MealPlanStats>
+                    </MealPlanItem>
+                  ))}
+                </MealPlanList>
+              )}
+            </AnimatePresence>
+          )}
         </MealPlansCard>
       </ContentGrid>
     </Container>

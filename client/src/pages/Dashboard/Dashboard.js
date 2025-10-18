@@ -17,11 +17,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import {
-  ensureMealPlanMetadata,
-  loadMealPlans,
-  persistUpdatedMealPlan
-} from '../../utils/mealPlanStorage';
+// Removed localStorage utilities - now using database API
 
 const DashboardContainer = styled.div`
   display: flex;
@@ -312,7 +308,7 @@ const Dashboard = () => {
   const [activeMealPlan, setActiveMealPlan] = React.useState(null);
   const [loadingMealPlan, setLoadingMealPlan] = React.useState(true);
 
-  const loadActiveMealPlan = React.useCallback(() => {
+  const loadActiveMealPlan = React.useCallback(async () => {
     if (typeof window === 'undefined') {
       setActiveMealPlan(null);
       setLoadingMealPlan(false);
@@ -322,20 +318,23 @@ const Dashboard = () => {
     setLoadingMealPlan(true);
 
     try {
-      const savedMealPlans = loadMealPlans();
-      const activeMealPlanId = window.localStorage.getItem('activeMealPlanId');
-
-      let activePlan = null;
-
-      if (activeMealPlanId) {
-        activePlan = savedMealPlans.find(plan => plan.id?.toString() === activeMealPlanId);
+      // Fetch active meal plan from database
+      const response = await axios.get('/api/meal-plans');
+      const plans = response.data || [];
+      
+      // Find the active plan (status: 'active') or use the most recent one
+      let activePlan = plans.find(plan => plan.status === 'active');
+      
+      if (!activePlan && plans.length > 0) {
+        // Sort by createdAt and get the most recent
+        activePlan = plans.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
       }
 
-      if (!activePlan && savedMealPlans.length) {
-        activePlan = savedMealPlans[0];
-      }
-
-      setActiveMealPlan(activePlan ? ensureMealPlanMetadata(activePlan) : null);
+      setActiveMealPlan(activePlan ? {
+        ...activePlan,
+        id: activePlan._id || activePlan.id,
+        isActive: activePlan.status === 'active'
+      } : null);
     } catch (error) {
       console.error('Error loading active meal plan:', error);
       setActiveMealPlan(null);
@@ -355,9 +354,8 @@ const Dashboard = () => {
         return prevPlan;
       }
 
-      const normalized = ensureMealPlanMetadata(updated);
-      persistUpdatedMealPlan(normalized);
-      return normalized;
+      // Updates are now persisted to the database via API calls
+      return updated;
     });
   }, []);
 
@@ -476,23 +474,8 @@ const Dashboard = () => {
     loadActiveMealPlan();
   }, [loadActiveMealPlan]);
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-
-    const handleStorage = (event) => {
-      if (!event || event.key === null) {
-        loadActiveMealPlan();
-        return;
-      }
-
-      if (event.key === 'mealPlans' || event.key === 'activeMealPlanId') {
-        loadActiveMealPlan();
-      }
-    };
-
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [loadActiveMealPlan]);
+  // Removed localStorage storage event listener - now using database API
+  // Meal plan updates are synced through API calls
 
   const completedCount = React.useMemo(
     () => shoppingLists.filter(list => list.status === 'completed').length,

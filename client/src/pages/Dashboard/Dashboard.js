@@ -377,33 +377,42 @@ const Dashboard = () => {
   }, []);
 
   const handleToggleMealCompletion = React.useCallback(async (dayIndex, mealId) => {
-    // Get current status before updating
-    const currentMeal = activeMealPlan?.days?.[dayIndex]?.meals?.find(m => m.mealId === mealId);
+    // Get current meal using flexible ID matching
+    const meals = activeMealPlan?.days?.[dayIndex]?.meals || [];
+    let mealIndex = -1;
+    
+    // Try different ID matching strategies
+    if (typeof mealId === 'number') {
+      mealIndex = mealId; // Direct index
+    } else {
+      mealIndex = meals.findIndex(m => 
+        m.mealId === mealId || 
+        m._id?.toString() === mealId?.toString() ||
+        m._id === mealId
+      );
+    }
+    
+    if (mealIndex === -1 || !meals[mealIndex]) {
+      console.error('Meal not found for toggle:', { dayIndex, mealId, mealsCount: meals.length });
+      return;
+    }
+
+    const currentMeal = meals[mealIndex];
     const currentStatus = currentMeal?.isCompleted || false;
     const newIsCompleted = !currentStatus;
 
-    console.log(`🔄 Toggling meal: Current status = ${currentStatus}, New status = ${newIsCompleted}`);
+    console.log(`🔄 Toggling meal ${mealIndex} in day ${dayIndex}: ${currentStatus} → ${newIsCompleted}`);
 
     // Update locally for instant UI feedback
     applyActiveMealPlanUpdate(prev => {
-      const targetDay = prev.days?.[dayIndex];
-      if (!targetDay) {
-        return prev;
-      }
-
-      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
-      if (!hasMeal) {
-        return prev;
-      }
-
       const updatedPlan = {
         ...prev,
         days: prev.days.map((day, idx) => {
           if (idx !== dayIndex) return day;
           return {
             ...day,
-            meals: day.meals.map(meal =>
-              meal.mealId === mealId
+            meals: day.meals.map((meal, idx) =>
+              idx === mealIndex
                 ? { ...meal, isCompleted: newIsCompleted }
                 : meal
             )
@@ -419,16 +428,11 @@ const Dashboard = () => {
     // Sync with backend if the meal plan is stored in MongoDB
     if (activeMealPlan?._id) {
       try {
-        const mealIndexInDay = activeMealPlan.days[dayIndex].meals.findIndex(m => m.mealId === mealId || m._id === mealId);
-        if (mealIndexInDay !== -1) {
-          console.log(`🔄 Syncing meal completion to backend: Plan ${activeMealPlan._id}, Day ${dayIndex}, Meal ${mealIndexInDay}, Completed: ${newIsCompleted}`);
-          await axios.post(`/api/meal-plans/${activeMealPlan._id}/days/${dayIndex}/meals/${mealIndexInDay}/toggle`, {
-            isCompleted: newIsCompleted
-          });
-          console.log('✅ Successfully synced to backend');
-        } else {
-          console.warn('⚠️ Meal not found in day for syncing');
-        }
+        console.log(`🔄 Syncing meal completion to backend: Plan ${activeMealPlan._id}, Day ${dayIndex}, Meal ${mealIndex}, Completed: ${newIsCompleted}`);
+        await axios.post(`/api/meal-plans/${activeMealPlan._id}/days/${dayIndex}/meals/${mealIndex}/toggle`, {
+          isCompleted: newIsCompleted
+        });
+        console.log('✅ Successfully synced to backend');
       } catch (error) {
         console.error('❌ Error syncing meal completion with backend:', error);
         // Don't show error to user - local update already happened
@@ -438,7 +442,7 @@ const Dashboard = () => {
     }
   }, [applyActiveMealPlanUpdate, activeMealPlan]);
 
-  const handleDeleteMeal = React.useCallback((dayIndex, mealId) => {
+  const handleDeleteMeal = React.useCallback(async (dayIndex, mealId) => {
     if (typeof window !== 'undefined') {
       const shouldRemove = window.confirm('Remove this meal from your plan?');
       if (!shouldRemove) {
@@ -446,33 +450,47 @@ const Dashboard = () => {
       }
     }
 
-    applyActiveMealPlanUpdate(prev => {
-      const targetDay = prev.days?.[dayIndex];
+    try {
+      const targetDay = activeMealPlan?.days?.[dayIndex];
       if (!targetDay) {
-        return prev;
+        return;
       }
 
-      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
-      if (!hasMeal) {
-        return prev;
+      const meals = targetDay.meals || [];
+      const mealIndex = typeof mealId === 'number' 
+        ? mealId 
+        : meals.findIndex(m => m.mealId === mealId || m._id?.toString() === mealId?.toString());
+      
+      if (mealIndex === -1) {
+        console.warn('Meal not found for deletion');
+        return;
       }
 
-      const updatedDays = prev.days.map((day, idx) => {
+      const updatedDays = activeMealPlan.days.map((day, idx) => {
         if (idx !== dayIndex) return day;
         return {
           ...day,
-          meals: day.meals.filter(meal => meal.mealId !== mealId)
+          meals: day.meals.filter((meal, idx) => idx !== mealIndex)
         };
       });
 
-      toast.success('Meal removed from plan');
+      // Update in database
+      await axios.put(`/api/meal-plans/${activeMealPlan._id}`, {
+        days: updatedDays
+      });
 
-      return {
+      // Update local state
+      applyActiveMealPlanUpdate(prev => ({
         ...prev,
         days: updatedDays
-      };
-    });
-  }, [applyActiveMealPlanUpdate]);
+      }));
+
+      toast.success('Meal removed from plan');
+    } catch (error) {
+      console.error('Error deleting meal:', error);
+      toast.error('Failed to remove meal');
+    }
+  }, [applyActiveMealPlanUpdate, activeMealPlan]);
 
   React.useEffect(() => {
     loadActiveMealPlan();
@@ -521,8 +539,9 @@ const Dashboard = () => {
       const primaryRecipe = meal.recipes?.[0] || {};
 
       return {
-        id: meal.mealId || meal._id || `${meal.type || 'meal'}-${index}`,
-        mealId: meal.mealId,
+        id: meal.mealId || meal._id?.toString() || `${meal.type || 'meal'}-${index}`,
+        mealId: meal.mealId || meal._id?.toString() || index,  // Use _id or index as fallback
+        mealIndex: index, // Store the actual index
         dayIndex,
         type: meal.type,
         isCompleted: Boolean(meal.isCompleted),

@@ -571,14 +571,14 @@ const MealPlanDetail = () => {
   const handleToggleActive = async () => {
     try {
       if (isActive) {
-        // Deactivate: update status to 'draft'
-        await axios.patch(`/api/meal-plans/${id}`, { status: 'draft' });
+        // Deactivate: update status to 'draft' using PUT
+        await axios.put(`/api/meal-plans/${id}`, { status: 'draft' });
         setMealPlan(prev => (prev ? { ...prev, isActive: false, status: 'draft' } : prev));
         setIsActive(false);
         toast.success('Meal plan deactivated');
       } else {
         // Activate: use the dedicated activation endpoint
-        await axios.post(`/api/meal-plans/${id}/activate`);
+        const response = await axios.post(`/api/meal-plans/${id}/activate`);
         setMealPlan(prev => (prev ? { ...prev, isActive: true, status: 'active' } : prev));
         setIsActive(true);
         toast.success('Meal plan set as active');
@@ -591,7 +591,9 @@ const MealPlanDetail = () => {
 
   const handleToggleMealCompletion = React.useCallback(async (dayIndex, mealId) => {
     // Get current status before updating
-    const currentMeal = mealPlan?.days?.[dayIndex]?.meals?.find(m => m.mealId === mealId);
+    const currentMeal = mealPlan?.days?.[dayIndex]?.meals?.find(m => 
+      m.mealId === mealId || m._id?.toString() === mealId || mealId === mealPlan?.days?.[dayIndex]?.meals?.indexOf(m)
+    );
     const currentStatus = currentMeal?.isCompleted || false;
     const newIsCompleted = !currentStatus;
 
@@ -604,8 +606,13 @@ const MealPlanDetail = () => {
         return prev;
       }
 
-      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
-      if (!hasMeal) {
+      const meals = targetDay.meals || [];
+      const mealIndex = typeof mealId === 'number' 
+        ? mealId 
+        : meals.findIndex(m => m.mealId === mealId || m._id?.toString() === mealId?.toString());
+      
+      if (mealIndex === -1 || !meals[mealIndex]) {
+        console.warn('Meal not found for toggle');
         return prev;
       }
 
@@ -615,8 +622,8 @@ const MealPlanDetail = () => {
           if (idx !== dayIndex) return day;
           return {
             ...day,
-            meals: day.meals.map(meal =>
-              meal.mealId === mealId
+            meals: day.meals.map((meal, idx) =>
+              idx === mealIndex
                 ? { ...meal, isCompleted: newIsCompleted }
                 : meal
             )
@@ -632,7 +639,15 @@ const MealPlanDetail = () => {
     // Sync with backend if the meal plan is stored in MongoDB
     if (mealPlan?._id) {
       try {
-        const mealIndexInDay = mealPlan.days[dayIndex].meals.findIndex(m => m.mealId === mealId || m._id === mealId);
+        const meals = mealPlan.days[dayIndex].meals;
+        const mealIndexInDay = typeof mealId === 'number' 
+          ? mealId 
+          : meals.findIndex(m => 
+              m.mealId === mealId || 
+              m._id?.toString() === mealId?.toString() ||
+              m._id === mealId
+            );
+            
         if (mealIndexInDay !== -1) {
           console.log(`🔄 Syncing meal completion to backend: Plan ${mealPlan._id}, Day ${dayIndex}, Meal ${mealIndexInDay}, Completed: ${newIsCompleted}`);
           await axios.post(`/api/meal-plans/${mealPlan._id}/days/${dayIndex}/meals/${mealIndexInDay}/toggle`, {
@@ -651,7 +666,7 @@ const MealPlanDetail = () => {
     }
   }, [applyMealPlanUpdate, mealPlan]);
 
-  const handleDeleteMeal = React.useCallback((dayIndex, mealId) => {
+  const handleDeleteMeal = React.useCallback(async (dayIndex, mealId) => {
     if (typeof window !== 'undefined') {
       const shouldRemove = window.confirm('Remove this meal from your plan?');
       if (!shouldRemove) {
@@ -659,39 +674,53 @@ const MealPlanDetail = () => {
       }
     }
 
-    applyMealPlanUpdate(prev => {
-      const targetDay = prev.days?.[dayIndex];
+    try {
+      const targetDay = mealPlan?.days?.[dayIndex];
       if (!targetDay) {
-        return prev;
+        return;
       }
 
-      const hasMeal = targetDay.meals?.some(meal => meal.mealId === mealId);
-      if (!hasMeal) {
-        return prev;
+      const meals = targetDay.meals || [];
+      const mealIndex = typeof mealId === 'number' 
+        ? mealId 
+        : meals.findIndex(m => m.mealId === mealId || m._id?.toString() === mealId?.toString());
+      
+      if (mealIndex === -1) {
+        console.warn('Meal not found for deletion');
+        return;
       }
 
-      const updatedDays = prev.days.map((day, idx) => {
+      const updatedDays = mealPlan.days.map((day, idx) => {
         if (idx !== dayIndex) return day;
         return {
           ...day,
-          meals: day.meals.filter(meal => meal.mealId !== mealId)
+          meals: day.meals.filter((meal, idx) => idx !== mealIndex)
         };
       });
 
-      toast.success('Meal removed from plan');
+      // Update in database
+      await axios.put(`/api/meal-plans/${id}`, {
+        days: updatedDays
+      });
 
-      return {
+      // Update local state
+      setMealPlan(prev => ({
         ...prev,
         days: updatedDays
-      };
-    });
+      }));
 
-    setExpandedMeals(prev => {
-      const next = new Set(prev);
-      next.delete(`${dayIndex}-${mealId}`);
-      return next;
-    });
-  }, [applyMealPlanUpdate]);
+      setExpandedMeals(prev => {
+        const next = new Set(prev);
+        next.delete(`${dayIndex}-${mealId}`);
+        return next;
+      });
+
+      toast.success('Meal removed from plan');
+    } catch (error) {
+      console.error('Error deleting meal:', error);
+      toast.error('Failed to remove meal');
+    }
+  }, [mealPlan, id]);
 
   if (loading) {
     return (
@@ -837,7 +866,7 @@ const MealPlanDetail = () => {
             </DayHeader>
             <MealsList>
               {day.meals.map((meal, mealIndex) => {
-                const mealId = meal.mealId || `meal-${mealIndex}`;
+                const mealId = meal.mealId || meal._id?.toString() || mealIndex;
                 const mealKey = `${index}-${mealId}`;
                 const isExpanded = expandedMeals.has(mealKey);
 

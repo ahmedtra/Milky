@@ -244,8 +244,9 @@ router.post('/generate', auth, async (req, res) => {
 });
 
 // Update meal plan
-router.put('/:id', auth, async (req, res) => {
+const updateMealPlan = async (req, res) => {
   try {
+    console.log('🔄 Updating meal plan:', req.params.id);
     const { title, description, days, status } = req.body;
 
     const mealPlan = await MealPlan.findOne({
@@ -254,6 +255,7 @@ router.put('/:id', auth, async (req, res) => {
     });
 
     if (!mealPlan) {
+      console.log('❌ Meal plan not found for update');
       return res.status(404).json({ message: 'Meal plan not found' });
     }
 
@@ -264,6 +266,8 @@ router.put('/:id', auth, async (req, res) => {
 
     await mealPlan.save();
 
+    console.log('✅ Meal plan updated:', mealPlan.title, 'status:', mealPlan.status);
+
     res.json({
       message: 'Meal plan updated successfully',
       mealPlan
@@ -272,29 +276,38 @@ router.put('/:id', auth, async (req, res) => {
     console.error('Update meal plan error:', error);
     res.status(500).json({ message: 'Server error updating meal plan' });
   }
-});
+};
+
+router.put('/:id', auth, updateMealPlan);
+router.patch('/:id', auth, updateMealPlan);
 
 // Activate meal plan
 router.post('/:id/activate', auth, async (req, res) => {
   try {
+    console.log('🎯 Activating meal plan:', req.params.id);
     const mealPlan = await MealPlan.findOne({
       _id: req.params.id,
       userId: req.user._id
     });
 
     if (!mealPlan) {
+      console.log('❌ Meal plan not found for activation');
       return res.status(404).json({ message: 'Meal plan not found' });
     }
 
     // Deactivate other active meal plans
-    await MealPlan.updateMany(
+    const deactivated = await MealPlan.updateMany(
       { userId: req.user._id, status: 'active' },
       { status: 'archived' }
     );
+    
+    console.log(`📋 Deactivated ${deactivated.modifiedCount} other meal plans`);
 
     // Activate this meal plan
     mealPlan.status = 'active';
     await mealPlan.save();
+
+    console.log('✅ Meal plan activated:', mealPlan.title);
 
     res.json({
       message: 'Meal plan activated successfully',

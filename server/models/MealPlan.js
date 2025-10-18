@@ -15,7 +15,7 @@ const ingredientSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'other'],
+    enum: ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'other'],
     default: 'other'
   }
 });

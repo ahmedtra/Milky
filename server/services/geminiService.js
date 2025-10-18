@@ -259,7 +259,7 @@ class GeminiService {
                           "name": "ingredient name",
                           "amount": "quantity",
                           "unit": "unit of measurement",
-                          "category": "protein|vegetable|fruit|grain|dairy|fat|spice|other"
+                          "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other"
                         }
                       ],
                       "instructions": ["step 1", "step 2", ...],
@@ -442,8 +442,61 @@ class GeminiService {
     }
   }
 
-  async chatWithDietitian(message, conversationHistory = []) {
+  async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null) {
     try {
+      console.log('💬 Chat request:', {
+        hasMealPlan: !!activeMealPlan,
+        hasUser: !!user,
+        mealPlanTitle: activeMealPlan?.title,
+        mealPlanDays: activeMealPlan?.days?.length
+      });
+
+      // Build meal plan context if available
+      let mealPlanContext = '';
+      if (activeMealPlan && activeMealPlan.days && activeMealPlan.days.length > 0) {
+        console.log('✅ Including meal plan context in chat');
+        mealPlanContext = `\n\n**USER'S ACTIVE MEAL PLAN CONTEXT:**
+        
+        Title: ${activeMealPlan.title}
+        Description: ${activeMealPlan.description || 'No description'}
+        Duration: ${activeMealPlan.days.length} days
+        Status: ${activeMealPlan.status}
+        Start Date: ${activeMealPlan.startDate ? new Date(activeMealPlan.startDate).toLocaleDateString() : 'N/A'}
+        End Date: ${activeMealPlan.endDate ? new Date(activeMealPlan.endDate).toLocaleDateString() : 'N/A'}
+        
+        **DAILY MEALS OVERVIEW:**
+        ${activeMealPlan.days.map((day, idx) => {
+          const dayDate = day.date ? new Date(day.date).toLocaleDateString() : `Day ${idx + 1}`;
+          const meals = day.meals.map(meal => {
+            const recipeNames = meal.recipes.map(r => r.name).join(', ');
+            return `  • ${meal.type.charAt(0).toUpperCase() + meal.type.slice(1)} (${meal.scheduledTime}): ${recipeNames}`;
+          }).join('\n');
+          return `Day ${idx + 1} (${dayDate}):\n${meals}`;
+        }).join('\n\n')}
+        
+        Use this meal plan context to provide personalized advice. Reference specific meals, recipes, or days when relevant to the user's question.`;
+      } else {
+        console.log('⚠️ No meal plan context available for chat');
+      }
+
+      // Build user profile context if available
+      let userContext = '';
+      if (user && user.preferences) {
+        userContext = `\n\n**USER PROFILE:**
+        
+        Diet Type: ${user.preferences.dietType || 'Not specified'}
+        Allergies: ${user.preferences.allergies && user.preferences.allergies.length > 0 ? user.preferences.allergies.join(', ') : 'None'}
+        Disliked Foods: ${user.preferences.dislikedFoods && user.preferences.dislikedFoods.length > 0 ? user.preferences.dislikedFoods.join(', ') : 'None'}
+        ${user.profile ? `
+        Activity Level: ${user.profile.activityLevel || 'Not specified'}
+        Goals: ${user.profile.goals || 'Not specified'}
+        Age: ${user.profile.age || 'Not specified'}
+        Weight: ${user.profile.weight ? `${user.profile.weight} kg` : 'Not specified'}
+        Height: ${user.profile.height ? `${user.profile.height} cm` : 'Not specified'}` : ''}
+        
+        Take into account this user profile when providing advice.`;
+      }
+
       const systemPrompt = `
         You are a professional nutritionist and dietitian with expertise in:
         - Personalized nutrition planning
@@ -455,6 +508,7 @@ class GeminiService {
         
         Provide helpful, accurate, and personalized advice. Always recommend consulting with a healthcare professional for medical conditions.
         Keep responses concise but informative.
+        ${mealPlanContext}${userContext}
         
         **IMPORTANT FORMATTING GUIDELINES:**
         - Use line breaks to separate different topics or sections

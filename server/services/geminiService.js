@@ -146,7 +146,7 @@ class GeminiService {
 
   async generateMealPlan(userPreferences, duration = 7) {
     // For longer meal plans, use a much simpler prompt to avoid JSON complexity issues
-    const isLongPlan = duration > 5;
+    const isLongPlan = duration > 3;
     const randomSeed = Math.floor(Math.random() * 1_000_000_000);
 
     console.log('🎲 Meal plan generation seed:', randomSeed);
@@ -179,6 +179,8 @@ class GeminiService {
         ${blueprintJson}
 
         For each day, provide 3 meals (breakfast, lunch, dinner) with basic info only.
+        
+        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use cuisine-inspired flavors and ingredients, but keep all text in English.
         
         Return ONLY valid JSON with this structure:
         {
@@ -228,10 +230,12 @@ class GeminiService {
         - Lunch: ${userPreferences.mealTimes.lunch}
         - Dinner: ${userPreferences.mealTimes.dinner}
 
-        Ingredient blueprint to respect for each meal (each day lists its cuisine inspiration; reflect that cuisine in flavours, sides, and naming):
+        Ingredient blueprint to respect for each meal (each day lists its cuisine inspiration; reflect that cuisine in flavours and ingredients, but write everything in English):
 
         ${blueprintJson}
 
+        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use cuisine-inspired flavors and ingredients, but keep all text in English.
+        
         Please provide a comprehensive meal plan in JSON format. Respond with ONLY the JSON object (no additional text, explanations, or formatting). Use the following structure:
         {
           "title": "Meal Plan Title",

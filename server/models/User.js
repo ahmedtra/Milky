@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema({
   preferences: {
     dietType: {
       type: String,
-      enum: ['vegetarian', 'vegan', 'keto', 'paleo', 'mediterranean', 'balanced', 'low-carb', 'high-protein'],
+      enum: ['vegetarian', 'vegan', 'keto', 'paleo', 'balanced', 'low-carb', 'high-protein'],
       default: 'balanced'
     },
     allergies: [String],

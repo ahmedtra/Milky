@@ -332,7 +332,7 @@ const MealPlans = () => {
       lunch: '13:00',
       dinner: '19:00'
     },
-    duration: 7,
+    duration: 5,
     additionalNotes: ''
   });
 
@@ -422,7 +422,7 @@ const MealPlans = () => {
     }
   };
 
-  const durationOptions = [1, 2, 3, 5, 7];
+  const durationOptions = [1, 2, 3, 5];
 
   return (
     <Container>
@@ -486,7 +486,6 @@ const MealPlans = () => {
               <option value="vegan">Vegan</option>
               <option value="keto">Keto</option>
               <option value="paleo">Paleo</option>
-              <option value="mediterranean">Mediterranean</option>
               <option value="low_carb">Low Carb</option>
               <option value="high_protein">High Protein</option>
             </Select>

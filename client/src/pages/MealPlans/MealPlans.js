@@ -344,7 +344,9 @@ const MealPlans = () => {
     try {
       setIsLoading(true);
       const response = await axios.get('/api/meal-plans');
-      const plans = response.data || [];
+      const plans = response.data.mealPlans || response.data || [];
+      
+      console.log('Fetched meal plans:', plans.length);
       
       // Normalize plans with proper ID and active status from database
       const normalizedPlans = plans.map(plan => ({

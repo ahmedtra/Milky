@@ -320,7 +320,9 @@ const Dashboard = () => {
     try {
       // Fetch active meal plan from database
       const response = await axios.get('/api/meal-plans');
-      const plans = response.data || [];
+      const plans = response.data.mealPlans || response.data || [];
+      
+      console.log('Dashboard: Fetched meal plans:', plans.length);
       
       // Find the active plan (status: 'active') or use the most recent one
       let activePlan = plans.find(plan => plan.status === 'active');
@@ -329,6 +331,8 @@ const Dashboard = () => {
         // Sort by createdAt and get the most recent
         activePlan = plans.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
       }
+
+      console.log('Dashboard: Active plan:', activePlan ? activePlan.title : 'None');
 
       setActiveMealPlan(activePlan ? {
         ...activePlan,

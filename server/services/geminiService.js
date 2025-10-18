@@ -145,19 +145,15 @@ class GeminiService {
   }
 
   async generateMealPlan(userPreferences, duration = 7) {
-    // For longer meal plans, use a much simpler prompt to avoid JSON complexity issues
-    const isLongPlan = duration > 3;
     const randomSeed = Math.floor(Math.random() * 1_000_000_000);
-
     console.log('🎲 Meal plan generation seed:', randomSeed);
+    console.log(`📅 Generating ${duration}-day meal plan (one day at a time)`);
 
     const ingredientBlueprint = this.buildIngredientBlueprint({
       preferences: userPreferences,
       duration,
       randomSeed
     });
-
-    const blueprintJson = JSON.stringify(ingredientBlueprint, null, 2);
 
     const fallbackPlan = this.buildFallbackMealPlan({
       blueprint: ingredientBlueprint,
@@ -167,274 +163,145 @@ class GeminiService {
     });
 
     try {
-      const prompt = isLongPlan ? `
-        Create a simple ${duration}-day meal plan.
+      // Generate one day at a time for better reliability
+      const days = [];
+      const startDate = new Date();
+      
+      console.log('🔍 Blueprint has', ingredientBlueprint.length, 'days');
+      console.log('🔍 Duration:', duration);
+      
+      for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
+        const dayBlueprint = ingredientBlueprint[dayIndex]; // Blueprint is an array, not object with .days
+        
+        if (!dayBlueprint) {
+          console.error(`❌ No blueprint found for day ${dayIndex}, using fallback`);
+          days.push(fallbackPlan.days[dayIndex]);
+          continue;
+        }
+        
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + dayIndex);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        
+        console.log(`📅 Generating Day ${dayIndex + 1}/${duration} (${dateStr}) with ${dayBlueprint.cuisine} cuisine...`);
+        
+        const dayPrompt = `
+        Create ONE DAY of meals for date ${dateStr}.
 
         Diet: ${userPreferences.dietType}
         Goals: ${userPreferences.goals}
-        Random Seed: ${randomSeed}
-
-        Base your meal ideas on this ingredient blueprint (each day includes a cuisine to lean into, and each meal already has a randomly curated set of ingredients you should transform into coherent recipes):
-
-        ${blueprintJson}
-
-        For each day, provide 3 meals (breakfast, lunch, dinner) with basic info only.
-        
-        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use cuisine-inspired flavors and ingredients, but keep all text in English.
-        
-        Return ONLY valid JSON with this structure:
-        {
-          "title": "Simple ${duration}-Day Meal Plan",
-          "description": "Basic meal plan",
-          "days": [
-            {
-              "date": "2024-01-01",
-              "meals": [
-                {
-                  "type": "breakfast",
-                  "scheduledTime": "08:00",
-                  "recipes": [
-                    {
-                      "name": "Simple Breakfast",
-                      "description": "Basic breakfast",
-                      "prepTime": 5,
-                      "cookTime": 10,
-                      "servings": 1,
-                      "ingredients": [
-                        {"name": "Ingredient 1", "amount": "1", "unit": "cup", "category": "grain"},
-                        {"name": "Ingredient 2", "amount": "1", "unit": "tbsp", "category": "dairy"}
-                      ],
-                      "instructions": ["Step 1", "Step 2"],
-                      "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8},
-                      "tags": ["simple"],
-                      "difficulty": "easy"
-                    }
-                  ],
-                  "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
-                }
-              ]
-            }
-          ]
-        }
-      ` : `
-        Create a detailed ${duration}-day meal plan for someone with the following preferences:
-        
-        Diet Type: ${userPreferences.dietType}
         Allergies: ${userPreferences.allergies?.join(', ') || 'None'}
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
-        Goals: ${userPreferences.goals}
-        Activity Level: ${userPreferences.activityLevel}
         
+        Cuisine for this day: ${dayBlueprint.cuisine}
+
         Meal Times:
-        - Breakfast: ${userPreferences.mealTimes.breakfast}
-        - Lunch: ${userPreferences.mealTimes.lunch}
-        - Dinner: ${userPreferences.mealTimes.dinner}
+        - Breakfast: ${userPreferences.mealTimes?.breakfast || '08:00'}
+        - Lunch: ${userPreferences.mealTimes?.lunch || '13:00'}
+        - Dinner: ${userPreferences.mealTimes?.dinner || '19:00'}
 
-        Ingredient blueprint to respect for each meal (each day lists its cuisine inspiration; reflect that cuisine in flavours and ingredients, but write everything in English):
+        Use these ingredients as inspiration:
+        ${JSON.stringify(dayBlueprint, null, 2)}
 
-        ${blueprintJson}
-
-        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use cuisine-inspired flavors and ingredients, but keep all text in English.
+        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use ${dayBlueprint.cuisine} cuisine-inspired flavors, but keep all text in English.
         
-        Please provide a comprehensive meal plan in JSON format. Respond with ONLY the JSON object (no additional text, explanations, or formatting). Use the following structure:
+        Return ONLY valid JSON (no markdown, no extra text) with this structure:
         {
-          "title": "Meal Plan Title",
-          "description": "Brief description of the meal plan",
-          "days": [
+          "date": "${dateStr}",
+          "meals": [
             {
-              "date": "YYYY-MM-DD",
-              "meals": [
+              "type": "breakfast",
+              "scheduledTime": "${userPreferences.mealTimes?.breakfast || '08:00'}",
+              "recipes": [
                 {
-                  "type": "breakfast|lunch|dinner|snack",
-                  "scheduledTime": "HH:MM",
-                  "recipes": [
-                    {
-                      "name": "Recipe Name",
-                      "description": "Brief description",
-                      "prepTime": number_in_minutes,
-                      "cookTime": number_in_minutes,
-                      "servings": number,
-                      "ingredients": [
-                        {
-                          "name": "ingredient name",
-                          "amount": "quantity",
-                          "unit": "unit of measurement",
-                          "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other"
-                        }
-                      ],
-                      "instructions": ["step 1", "step 2", ...],
-                      "nutrition": {
-                        "calories": number,
-                        "protein": number,
-                        "carbs": number,
-                        "fat": number,
-                        "fiber": number,
-                        "sugar": number
-                      },
-                      "tags": ["tag1", "tag2"],
-                      "difficulty": "easy|medium|hard"
-                    }
+                  "name": "Recipe Name",
+                  "description": "Brief description",
+                  "prepTime": 10,
+                  "cookTime": 15,
+                  "servings": 1,
+                  "ingredients": [
+                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
                   ],
-                  "totalNutrition": {
-                    "calories": number,
-                    "protein": number,
-                    "carbs": number,
-                    "fat": number
-                  },
-                  "notes": "Optional notes"
+                  "instructions": ["Step 1", "Step 2"],
+                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
+                  "tags": ["${dayBlueprint.cuisine}"],
+                  "difficulty": "easy"
                 }
-              ]
+              ],
+              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
+            },
+            {
+              "type": "lunch",
+              "scheduledTime": "${userPreferences.mealTimes?.lunch || '13:00'}",
+              "recipes": [...],
+              "totalNutrition": {...}
+            },
+            {
+              "type": "dinner",
+              "scheduledTime": "${userPreferences.mealTimes?.dinner || '19:00'}",
+              "recipes": [...],
+              "totalNutrition": {...}
+            },
+            {
+              "type": "snack",
+              "scheduledTime": "15:00",
+              "recipes": [...],
+              "totalNutrition": {...}
             }
           ]
         }
-        
-        Make sure the meal plan is:
-        1. Nutritionally balanced
-        2. Varied and interesting
-        3. Realistic cooking times
-        4. Includes proper portion sizes
-        5. Respects dietary restrictions and preferences
-        6. Includes seasonal and fresh ingredients when possible
+        `;
 
-        Use the random seed ${randomSeed} to introduce creative variety while keeping results reproducible when the same preferences are provided with this seed.
-        
-        IMPORTANT: 
-        1. Return ONLY the JSON object - no markdown formatting, no explanatory text
-        2. Ensure all arrays and objects are properly closed with } and ]
-        3. Use proper comma separation between array elements and object properties
-        4. Validate your JSON structure before responding
-        5. For longer meal plans, be extra careful with JSON syntax
-      `;
-
-      console.log('🤖 Calling Gemini API...');
-      const result = await this.model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }]}],
-        generationConfig: {
-          temperature: 1.1
-        }
-      });
-      const response = await result.response;
-      const text = response.text();
-      console.log('✅ Gemini API responded, text length:', text.length);
-      
-      // Try to parse JSON from the response with better error handling
-      console.log('Raw Gemini response length:', text.length);
-      console.log('Raw Gemini response preview:', text.substring(0, 500));
-      
-      // Try to parse the JSON directly first
-      try {
-        const parsed = JSON.parse(text);
-        console.log('✅ Successfully parsed meal plan directly:', parsed);
-        return parsed;
-      } catch (directParseError) {
-        console.log('❌ Direct parsing failed, trying extraction methods...');
-      }
-      
-      // Try multiple JSON extraction methods
-      let jsonString = null;
-      
-      // Method 1: Extract JSON from markdown code blocks (```json ... ```)
-      const markdownMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-      if (markdownMatch) {
-        jsonString = markdownMatch[1].trim();
-        console.log('📝 Found JSON in markdown code block, length:', jsonString.length);
-      }
-      
-      // Method 2: Look for JSON between curly braces
-      if (!jsonString) {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonString = jsonMatch[0];
-          console.log('🔍 Found JSON match, length:', jsonString.length);
-        }
-      }
-      
-      // Method 3: Look for JSON starting with { and ending with }
-      if (!jsonString) {
-        const startIndex = text.indexOf('{');
-        const lastIndex = text.lastIndexOf('}');
-        if (startIndex !== -1 && lastIndex !== -1 && lastIndex > startIndex) {
-          jsonString = text.substring(startIndex, lastIndex + 1);
-          console.log('📍 Found JSON by position, length:', jsonString.length);
-        }
-      }
-      
-      if (jsonString) {
-        // Apply comprehensive cleaning for large JSON responses
-        let cleanedJson = jsonString
-          .replace(/,\s*}/g, '}')  // Remove trailing commas before }
-          .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-          .replace(/"(\d{2}:\d{2})""/g, '"$1"')  // Fix "08:00"" -> "08:00"
-          // Fix common JSON issues in large responses
-          .replace(/,\s*,/g, ',')  // Remove double commas
-          .replace(/\n\s*\n/g, '\n')  // Remove empty lines
-          .replace(/\s+/g, ' ')  // Normalize whitespace
-          .replace(/,\s*}/g, '}')  // Remove trailing commas before } (again)
-          .replace(/,\s*]/g, ']');  // Remove trailing commas before ] (again)
-
-        // Try parsing the JSON as-is first
         try {
-          console.log('🔍 Trying to parse JSON as-is...');
-          const parsed = JSON.parse(jsonString);
-          console.log('✅ Successfully parsed meal plan directly!');
-          console.log('📊 Meal plan stats:', {
-            title: parsed.title,
-            days: parsed.days?.length,
-            firstDayMeals: parsed.days?.[0]?.meals?.length
+          const result = await this.model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: dayPrompt }]}],
+            generationConfig: {
+              temperature: 1.1
+            }
           });
-          return parsed;
-        } catch (directParseError) {
-          console.log('❌ Direct parsing failed, trying minimal cleaning...');
+          const response = await result.response;
+          const text = response.text();
           
+          // Parse the day's JSON
+          let dayData = null;
+          
+          // Try direct parse
           try {
-            console.log('🔧 Trying minimal cleaned JSON...');
-            const parsed = JSON.parse(cleanedJson);
-            console.log('✅ Successfully parsed with minimal cleaning!');
-            console.log('📊 Meal plan stats:', {
-              title: parsed.title,
-              days: parsed.days?.length,
-              firstDayMeals: parsed.days?.[0]?.meals?.length
-            });
-            return parsed;
-          } catch (minimalParseError) {
-            console.error('❌ Minimal cleaning also failed');
-            console.error('Direct parse error:', directParseError.message);
-            console.error('Minimal parse error:', minimalParseError.message);
-            
-            // Try aggressive cleaning as last resort
-            console.log('🔧 Trying aggressive cleaning...');
-            let aggressiveCleaned = cleanedJson
-              .replace(/[^\x20-\x7E\n\r\t]/g, '')  // Remove non-printable characters
-              .replace(/\s+/g, ' ')  // Normalize all whitespace
-              .replace(/,\s*,/g, ',')  // Fix double commas
-              .replace(/,\s*}/g, '}')  // Remove trailing commas
-              .replace(/,\s*]/g, ']')  // Remove trailing commas
-              .replace(/\{\s*,/g, '{')  // Remove leading commas in objects
-              .replace(/\[\s*,/g, '[');  // Remove leading commas in arrays
-            
-            try {
-              const aggressiveParsed = JSON.parse(aggressiveCleaned);
-              console.log('✅ Successfully parsed with aggressive cleaning!');
-              console.log('📊 Meal plan stats:', {
-                title: aggressiveParsed.title,
-                days: aggressiveParsed.days?.length,
-                firstDayMeals: aggressiveParsed.days?.[0]?.meals?.length
-              });
-              return aggressiveParsed;
-            } catch (aggressiveParseError) {
-              console.error('❌ Even aggressive cleaning failed');
-              console.error('Raw JSON preview:', jsonString.substring(0, 500));
-              console.error('Cleaned JSON preview:', cleanedJson.substring(0, 500));
-              console.error('Aggressive cleaned preview:', aggressiveCleaned.substring(0, 500));
-              throw aggressiveParseError;
+            dayData = JSON.parse(text);
+          } catch {
+            // Try extracting from markdown
+            const markdownMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+            if (markdownMatch) {
+              dayData = JSON.parse(markdownMatch[1].trim());
+            } else {
+              // Try finding JSON object
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                dayData = JSON.parse(jsonMatch[0]);
+              }
             }
           }
+          
+          if (dayData && dayData.meals) {
+            days.push(dayData);
+            console.log(`✅ Day ${dayIndex + 1} generated successfully (${dayData.meals.length} meals)`);
+          } else {
+            console.warn(`⚠️ Day ${dayIndex + 1} failed, using fallback`);
+            days.push(fallbackPlan.days[dayIndex]);
+          }
+        } catch (dayError) {
+          console.error(`❌ Error generating day ${dayIndex + 1}:`, dayError.message);
+          days.push(fallbackPlan.days[dayIndex]);
         }
       }
+
+      console.log(`✅ Meal plan generation complete: ${days.length} days generated`);
       
-      // If all parsing methods fail, throw to trigger fallback handling
-      console.log('All parsing methods failed, will return fallback meal plan');
-      throw new Error('Failed to parse meal plan from AI response');
+      return {
+        title: `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`,
+        description: `A ${duration}-day meal plan tailored to your preferences`,
+        days
+      };
     } catch (error) {
       console.error('Error generating meal plan:', error);
       console.warn('⚠️ Falling back to deterministic meal plan due to error:', error.message);

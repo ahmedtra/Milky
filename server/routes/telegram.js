@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { bot } = require('../services/telegramBot');
+const { getBot, sendMealReminder } = require('../services/telegramBot');
 const User = require('../models/User');
+const MealPlan = require('../models/MealPlan');
+const auth = require('../middleware/auth');
 
 // Webhook endpoint for Telegram updates (if using webhooks instead of polling)
 router.post('/webhook', async (req, res) => {
   try {
+    const bot = getBot();
     if (bot) {
       await bot.processUpdate(req.body);
     }
@@ -19,6 +22,7 @@ router.post('/webhook', async (req, res) => {
 // Get bot info
 router.get('/bot-info', async (req, res) => {
   try {
+    const bot = getBot();
     if (!bot) {
       return res.status(503).json({ message: 'Telegram bot not initialized' });
     }
@@ -48,6 +52,7 @@ router.post('/send-test', async (req, res) => {
       return res.status(404).json({ message: 'User not found or Telegram not linked' });
     }
 
+    const bot = getBot();
     if (!bot) {
       return res.status(503).json({ message: 'Telegram bot not initialized' });
     }
@@ -64,9 +69,53 @@ router.post('/send-test', async (req, res) => {
   }
 });
 
+// Send test meal reminder with recipe
+router.post('/send-test-meal', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || !user.telegramChatId) {
+      return res.status(404).json({ message: 'Telegram not linked. Please link your Telegram account first.' });
+    }
+
+    // Get user's active meal plan
+    const activeMealPlan = await MealPlan.findOne({
+      userId: req.user._id,
+      status: 'active'
+    });
+
+    if (!activeMealPlan || !activeMealPlan.days || activeMealPlan.days.length === 0) {
+      return res.status(404).json({ message: 'No active meal plan found. Please activate a meal plan first.' });
+    }
+
+    // Get the first meal from the first day
+    const firstDay = activeMealPlan.days[0];
+    const firstMeal = firstDay.meals?.[0];
+
+    if (!firstMeal) {
+      return res.status(404).json({ message: 'No meals found in active meal plan.' });
+    }
+
+    console.log('📤 Sending test meal reminder to Telegram...');
+    console.log('Meal:', firstMeal.recipes?.[0]?.name || firstMeal.type);
+
+    // Send the meal reminder
+    await sendMealReminder(req.user._id, firstMeal);
+
+    res.json({
+      message: 'Test meal reminder sent successfully!',
+      mealName: firstMeal.recipes?.[0]?.name || firstMeal.type,
+      sentTo: user.telegramChatId
+    });
+  } catch (error) {
+    console.error('Send test meal reminder error:', error);
+    res.status(500).json({ message: 'Failed to send test meal reminder: ' + error.message });
+  }
+});
+
 // Get webhook info
 router.get('/webhook-info', async (req, res) => {
   try {
+    const bot = getBot();
     if (!bot) {
       return res.status(503).json({ message: 'Telegram bot not initialized' });
     }
@@ -88,6 +137,7 @@ router.post('/set-webhook', async (req, res) => {
       return res.status(400).json({ message: 'Webhook URL is required' });
     }
 
+    const bot = getBot();
     if (!bot) {
       return res.status(503).json({ message: 'Telegram bot not initialized' });
     }
@@ -107,6 +157,7 @@ router.post('/set-webhook', async (req, res) => {
 // Delete webhook (disable webhooks)
 router.delete('/webhook', async (req, res) => {
   try {
+    const bot = getBot();
     if (!bot) {
       return res.status(503).json({ message: 'Telegram bot not initialized' });
     }

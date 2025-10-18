@@ -8,6 +8,7 @@ const auth = require('../middleware/auth');
 // Get all meal plans for user
 router.get('/', auth, async (req, res) => {
   try {
+    console.log('📋 GET /api/meal-plans called for user:', req.user._id);
     const { status, page = 1, limit = 10 } = req.query;
     
     const query = { userId: req.user._id };
@@ -22,6 +23,9 @@ router.get('/', auth, async (req, res) => {
       .populate('userId', 'username email');
 
     const total = await MealPlan.countDocuments(query);
+
+    console.log(`✅ Found ${mealPlans.length} meal plans (total: ${total})`);
+    console.log('First plan:', mealPlans[0] ? { title: mealPlans[0].title, days: mealPlans[0].days?.length } : 'None');
 
     res.json({
       mealPlans,
@@ -144,16 +148,20 @@ router.get('/stats', auth, async (req, res) => {
 // Get specific meal plan
 router.get('/:id', auth, async (req, res) => {
   try {
+    console.log('📋 GET /api/meal-plans/:id called for:', req.params.id);
     const mealPlan = await MealPlan.findOne({
       _id: req.params.id,
       userId: req.user._id
     }).populate('userId', 'username email');
 
     if (!mealPlan) {
+      console.log('❌ Meal plan not found');
       return res.status(404).json({ message: 'Meal plan not found' });
     }
 
-    res.json({ mealPlan });
+    console.log('✅ Returning meal plan:', mealPlan.title, 'with', mealPlan.days?.length, 'days');
+
+    res.json(mealPlan);
   } catch (error) {
     console.error('Get meal plan error:', error);
     res.status(500).json({ message: 'Server error fetching meal plan' });

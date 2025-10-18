@@ -502,8 +502,13 @@ const MealPlanDetail = () => {
     const fetchMealPlan = async () => {
       try {
         setLoading(true);
+        console.log('Fetching meal plan with ID:', id);
         const response = await axios.get(`/api/meal-plans/${id}`);
         const plan = response.data;
+        
+        console.log('Received meal plan:', plan);
+        console.log('Days:', plan?.days?.length || 0);
+        console.log('First day meals:', plan?.days?.[0]?.meals?.length || 0);
         
         if (plan) {
           const normalizedPlan = {
@@ -513,6 +518,7 @@ const MealPlanDetail = () => {
           };
           setMealPlan(normalizedPlan);
           setIsActive(normalizedPlan.isActive);
+          console.log('Meal plan loaded successfully:', normalizedPlan.title);
         } else {
           console.log('Meal plan not found with ID:', id);
           setIsActive(false);

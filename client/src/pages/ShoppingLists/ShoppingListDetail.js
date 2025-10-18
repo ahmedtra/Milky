@@ -740,10 +740,15 @@ const ShoppingListDetail = () => {
             <span>{getProgress()}%</span>
           </SummaryItem>
           
+          <SummaryItem>
+            <span>Total Items</span>
+            <span>{shoppingList.items?.length || 0}</span>
+          </SummaryItem>
+          
           {shoppingList.totalEstimatedCost && (
             <SummaryItem>
               <span>Estimated Cost</span>
-              <span>${shoppingList.totalEstimatedCost}</span>
+              <span>${shoppingList.totalEstimatedCost.toFixed(2)}</span>
             </SummaryItem>
           )}
 

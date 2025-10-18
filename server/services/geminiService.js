@@ -463,16 +463,40 @@ class GeminiService {
           const parsed = JSON.parse(text);
           console.log('✅ Successfully parsed shopping list directly');
 
-          // Validate and fix shopping list items
+          // Validate and fix shopping list items - map to correct shopping categories
+          const categoryMap = {
+            'protein': 'meat',
+            'meat': 'meat',
+            'vegetable': 'produce',
+            'fruit': 'produce',
+            'produce': 'produce',
+            'grain': 'pantry',
+            'dairy': 'dairy',
+            'fat': 'pantry',
+            'spice': 'pantry',
+            'nut': 'pantry',
+            'seed': 'pantry',
+            'pantry': 'pantry',
+            'frozen': 'frozen',
+            'bakery': 'bakery',
+            'beverages': 'beverages',
+            'other': 'other'
+          };
+
           if (parsed.items && Array.isArray(parsed.items)) {
-            parsed.items = parsed.items.map(item => ({
-              ...item,
-              amount: item.amount || '1',
-              unit: item.unit || 'piece',
-              category: item.category || 'other',
-              priority: item.priority || 'medium',
-              purchased: item.purchased || false
-            }));
+            parsed.items = parsed.items.map(item => {
+              const rawCategory = (item.category || 'other').toLowerCase();
+              const mappedCategory = categoryMap[rawCategory] || 'other';
+              
+              return {
+                ...item,
+                amount: item.amount || '1',
+                unit: item.unit || 'piece',
+                category: mappedCategory,
+                priority: item.priority || 'medium',
+                purchased: item.purchased || false
+              };
+            });
           }
 
           return parsed;
@@ -515,16 +539,41 @@ class GeminiService {
             const parsed = JSON.parse(jsonString);
             console.log('✅ Successfully parsed shopping list!');
 
+            // Category mapping function
+            const categoryMap = {
+              'protein': 'meat',
+              'meat': 'meat',
+              'vegetable': 'produce',
+              'fruit': 'produce',
+              'produce': 'produce',
+              'grain': 'pantry',
+              'dairy': 'dairy',
+              'fat': 'pantry',
+              'spice': 'pantry',
+              'nut': 'pantry',
+              'seed': 'pantry',
+              'pantry': 'pantry',
+              'frozen': 'frozen',
+              'bakery': 'bakery',
+              'beverages': 'beverages',
+              'other': 'other'
+            };
+
             // Validate and fix shopping list items
             if (parsed.items && Array.isArray(parsed.items)) {
-              parsed.items = parsed.items.map(item => ({
-                ...item,
-                amount: item.amount || '1',
-                unit: item.unit || 'piece',
-                category: item.category || 'other',
-                priority: item.priority || 'medium',
-                purchased: item.purchased || false
-              }));
+              parsed.items = parsed.items.map(item => {
+                const rawCategory = (item.category || 'other').toLowerCase();
+                const mappedCategory = categoryMap[rawCategory] || 'other';
+                
+                return {
+                  ...item,
+                  amount: item.amount || '1',
+                  unit: item.unit || 'piece',
+                  category: mappedCategory,
+                  priority: item.priority || 'medium',
+                  purchased: item.purchased || false
+                };
+              });
             }
 
             return parsed;
@@ -544,16 +593,41 @@ class GeminiService {
               const cleanedParsed = JSON.parse(cleanedJson);
               console.log('✅ Successfully parsed with cleaning!');
 
+              // Category mapping function
+              const categoryMap = {
+                'protein': 'meat',
+                'meat': 'meat',
+                'vegetable': 'produce',
+                'fruit': 'produce',
+                'produce': 'produce',
+                'grain': 'pantry',
+                'dairy': 'dairy',
+                'fat': 'pantry',
+                'spice': 'pantry',
+                'nut': 'pantry',
+                'seed': 'pantry',
+                'pantry': 'pantry',
+                'frozen': 'frozen',
+                'bakery': 'bakery',
+                'beverages': 'beverages',
+                'other': 'other'
+              };
+
               // Validate and fix shopping list items
               if (cleanedParsed.items && Array.isArray(cleanedParsed.items)) {
-                cleanedParsed.items = cleanedParsed.items.map(item => ({
-                  ...item,
-                  amount: item.amount || '1',
-                  unit: item.unit || 'piece',
-                  category: item.category || 'other',
-                  priority: item.priority || 'medium',
-                  purchased: item.purchased || false
-                }));
+                cleanedParsed.items = cleanedParsed.items.map(item => {
+                  const rawCategory = (item.category || 'other').toLowerCase();
+                  const mappedCategory = categoryMap[rawCategory] || 'other';
+                  
+                  return {
+                    ...item,
+                    amount: item.amount || '1',
+                    unit: item.unit || 'piece',
+                    category: mappedCategory,
+                    priority: item.priority || 'medium',
+                    purchased: item.purchased || false
+                  };
+                });
               }
 
               return cleanedParsed;

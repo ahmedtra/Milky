@@ -563,7 +563,7 @@ const ShoppingLists = () => {
                   {list.totalEstimatedCost && (
                     <MetaItem>
                       <DollarSign size={14} />
-                      ${list.totalEstimatedCost}
+                      ${list.totalEstimatedCost.toFixed(2)}
                     </MetaItem>
                   )}
                 </ShoppingListMeta>

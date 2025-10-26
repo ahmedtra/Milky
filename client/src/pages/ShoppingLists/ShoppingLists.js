@@ -10,7 +10,8 @@ import {
   Loader,
   Calendar,
   DollarSign,
-  MapPin
+  MapPin,
+  ChefHat
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -367,22 +368,64 @@ const Button = styled.button`
   `}
 `;
 
+const Select = styled.select`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid ${props => props.theme.colors.gray[300]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+  background: white;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: ${props => props.theme.colors.primary[500]};
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const MealPlanInfo = styled.div`
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: ${props => props.theme.colors.primary[50]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  border-left: 3px solid ${props => props.theme.colors.primary[600]};
+`;
+
+const MealPlanInfoText = styled.p`
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: ${props => props.theme.colors.gray[700]};
+  
+  strong {
+    color: ${props => props.theme.colors.gray[900]};
+  }
+`;
+
 const ShoppingLists = () => {
   const navigate = useNavigate();
   const [shoppingLists, setShoppingLists] = useState([]);
+  const [mealPlans, setMealPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedMealPlanId, setSelectedMealPlanId] = useState('');
   const [newList, setNewList] = useState({
     title: '',
     description: '',
     store: ''
   });
 
-  // Load shopping lists
+  // Load shopping lists and meal plans
   useEffect(() => {
     fetchShoppingLists();
+    fetchMealPlans();
   }, []);
 
   const fetchShoppingLists = async () => {
@@ -394,6 +437,22 @@ const ShoppingLists = () => {
       toast.error('Failed to load shopping lists');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMealPlans = async () => {
+    try {
+      const response = await axios.get('/api/meal-plans');
+      const plans = response.data.mealPlans || response.data || [];
+      setMealPlans(plans);
+      
+      // Auto-select the first meal plan if available
+      if (plans.length > 0 && !selectedMealPlanId) {
+        setSelectedMealPlanId(plans[0]._id || plans[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching meal plans:', error);
+      toast.error('Failed to load meal plans');
     }
   };
 
@@ -414,24 +473,30 @@ const ShoppingLists = () => {
   };
 
   const handleGenerateFromMealPlan = async () => {
+    if (!selectedMealPlanId) {
+      toast.error('Please select a meal plan');
+      return;
+    }
+
     setIsGenerating(true);
     try {
-      // Get the most recent meal plan from localStorage
-      const savedMealPlans = JSON.parse(localStorage.getItem('mealPlans') || '[]');
-      if (savedMealPlans.length === 0) {
-        toast.error('No meal plans found. Please create a meal plan first.');
+      // Find the selected meal plan
+      const selectedMealPlan = mealPlans.find(plan => 
+        (plan._id || plan.id) === selectedMealPlanId
+      );
+
+      if (!selectedMealPlan) {
+        toast.error('Selected meal plan not found');
         return;
       }
-
-      const latestMealPlan = savedMealPlans[0];
       
       const response = await axios.post('/api/gemini/generate-shopping-list', {
-        mealPlan: latestMealPlan
+        mealPlan: selectedMealPlan
       });
 
       // Create shopping list with generated data
       await axios.post('/api/shopping-lists', {
-        mealPlanId: latestMealPlan.id, // Include meal plan ID
+        mealPlanId: selectedMealPlan._id || selectedMealPlan.id,
         title: response.data.shoppingList.title,
         description: response.data.shoppingList.description,
         items: response.data.shoppingList.items,
@@ -441,6 +506,7 @@ const ShoppingLists = () => {
 
       toast.success('Shopping list generated successfully!');
       setShowGenerateModal(false);
+      setSelectedMealPlanId(''); // Reset selection
       fetchShoppingLists();
     } catch (error) {
       console.error('Error generating shopping list:', error);
@@ -449,6 +515,11 @@ const ShoppingLists = () => {
       setIsGenerating(false);
     }
   };
+
+  // Get selected meal plan details for display
+  const selectedMealPlan = mealPlans.find(plan => 
+    (plan._id || plan.id) === selectedMealPlanId
+  );
 
   const getProgress = (items) => {
     if (!items || items.length === 0) return 0;
@@ -660,7 +731,10 @@ const ShoppingLists = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setShowGenerateModal(false)}
+            onClick={() => {
+              setShowGenerateModal(false);
+              setSelectedMealPlanId(''); // Reset selection when closing
+            }}
           >
             <ModalContent
               initial={{ scale: 0.9, opacity: 0 }}
@@ -670,20 +744,59 @@ const ShoppingLists = () => {
             >
               <ModalHeader>
                 <ModalTitle>Generate from Meal Plan</ModalTitle>
-                <CloseButton onClick={() => setShowGenerateModal(false)}>
+                <CloseButton onClick={() => {
+                  setShowGenerateModal(false);
+                  setSelectedMealPlanId(''); // Reset selection when closing
+                }}>
                   ×
                 </CloseButton>
               </ModalHeader>
 
               <p style={{ marginBottom: '1.5rem', color: '#64748b' }}>
-                Generate a shopping list from your most recent meal plan using AI.
-                This will create a comprehensive list with all ingredients organized by store sections.
+                Select a meal plan to generate a comprehensive shopping list with all ingredients organized by store sections.
               </p>
+
+              <FormGroup>
+                <Label>Select Meal Plan</Label>
+                <Select
+                  value={selectedMealPlanId}
+                  onChange={(e) => setSelectedMealPlanId(e.target.value)}
+                  disabled={isGenerating || mealPlans.length === 0}
+                >
+                  {mealPlans.length === 0 ? (
+                    <option value="">No meal plans available</option>
+                  ) : (
+                    <option value="">-- Select a meal plan --</option>
+                  )}
+                  {mealPlans.map((plan) => (
+                    <option key={plan._id || plan.id} value={plan._id || plan.id}>
+                      {plan.title} ({plan.days?.length || 0} days)
+                    </option>
+                  ))}
+                </Select>
+
+                {selectedMealPlan && (
+                  <MealPlanInfo>
+                    <MealPlanInfoText>
+                      <strong>🍽️ Meals:</strong> {selectedMealPlan.days?.reduce((total, day) => total + (day.meals?.length || 0), 0) || 0} total
+                    </MealPlanInfoText>
+                    <MealPlanInfoText>
+                      <strong>📅 Duration:</strong> {selectedMealPlan.days?.length || 0} days
+                    </MealPlanInfoText>
+                    <MealPlanInfoText>
+                      <strong>🎯 Diet Type:</strong> {selectedMealPlan.preferences?.dietType || 'Balanced'}
+                    </MealPlanInfoText>
+                  </MealPlanInfo>
+                )}
+              </FormGroup>
 
               <ModalActions>
                 <Button
                   $variant="secondary"
-                  onClick={() => setShowGenerateModal(false)}
+                  onClick={() => {
+                    setShowGenerateModal(false);
+                    setSelectedMealPlanId(''); // Reset selection when closing
+                  }}
                   disabled={isGenerating}
                 >
                   Cancel
@@ -691,7 +804,7 @@ const ShoppingLists = () => {
                 <Button
                   $variant="primary"
                   onClick={handleGenerateFromMealPlan}
-                  disabled={isGenerating}
+                  disabled={isGenerating || !selectedMealPlanId || mealPlans.length === 0}
                 >
                   {isGenerating ? (
                     <>

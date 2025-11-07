@@ -11,7 +11,8 @@ import {
   Calendar,
   DollarSign,
   MapPin,
-  ChefHat
+  ChefHat,
+  Trash2
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -52,9 +53,11 @@ const CreateButton = styled(motion.button)`
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  background: ${props => props.$variant === 'secondary' 
-    ? props.theme.colors.gray[100] 
-    : props.theme.colors.primary[600]};
+  background: ${props => {
+    if (props.$variant === 'secondary') return props.theme.colors.gray[100];
+    if (props.$variant === 'danger') return props.theme.colors.error[600];
+    return props.theme.colors.primary[600];
+  }};
   color: ${props => props.$variant === 'secondary' 
     ? props.theme.colors.gray[700] 
     : 'white'};
@@ -66,9 +69,11 @@ const CreateButton = styled(motion.button)`
   transition: all 0.2s ease;
 
   &:hover {
-    background: ${props => props.$variant === 'secondary' 
-      ? props.theme.colors.gray[200] 
-      : props.theme.colors.primary[700]};
+    background: ${props => {
+      if (props.$variant === 'secondary') return props.theme.colors.gray[200];
+      if (props.$variant === 'danger') return props.theme.colors.error[700];
+      return props.theme.colors.primary[700];
+    }};
     transform: translateY(-2px);
     box-shadow: ${props => props.theme.shadows.lg};
   }
@@ -415,6 +420,7 @@ const ShoppingLists = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [selectedMealPlanId, setSelectedMealPlanId] = useState('');
   const [newList, setNewList] = useState({
     title: '',
@@ -516,6 +522,28 @@ const ShoppingLists = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (shoppingLists.length === 0 || isClearing) return;
+
+    const confirmed = window.confirm(
+      'Clear all previous shopping lists? This action cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    setIsClearing(true);
+    try {
+      await axios.delete('/api/shopping-lists');
+      toast.success('All shopping lists cleared successfully!');
+      await fetchShoppingLists();
+    } catch (error) {
+      console.error('Error clearing shopping lists:', error);
+      toast.error('Failed to clear shopping lists');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   // Get selected meal plan details for display
   const selectedMealPlan = mealPlans.find(plan => 
     (plan._id || plan.id) === selectedMealPlanId
@@ -558,6 +586,25 @@ const ShoppingLists = () => {
           Shopping Lists
         </Title>
         <ButtonGroup>
+          <CreateButton
+            $variant="danger"
+            onClick={handleClearAll}
+            disabled={shoppingLists.length === 0 || isClearing}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            {isClearing ? (
+              <>
+                <Loader size={20} className="animate-spin" />
+                Clearing...
+              </>
+            ) : (
+              <>
+                <Trash2 size={20} />
+                Clear Previous Lists
+              </>
+            )}
+          </CreateButton>
           <CreateButton
             $variant="secondary"
             onClick={() => setShowGenerateModal(true)}

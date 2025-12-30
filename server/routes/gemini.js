@@ -76,22 +76,60 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
     endDate.setDate(startDate.getDate() + duration - 1);
 
     // Sanitize meal plan data to ensure it meets schema requirements
-    const sanitizedDays = (aiMealPlan.days || []).map(day => ({
-      ...day,
-      meals: day.meals.map(meal => ({
-        ...meal,
-        recipes: meal.recipes.map(recipe => ({
-          ...recipe,
-          ingredients: recipe.ingredients.map(ing => ({
-            ...ing,
-            unit: ing.unit || 'unit', // Default to 'unit' if missing
-            category: ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'other'].includes(ing.category) 
-              ? ing.category 
-              : 'other' // Default to 'other' if invalid category
-          }))
-        }))
-      }))
-    }));
+    const validCategories = ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'broth', 'other'];
+    const sanitizeIngredient = (ing, idx) => {
+      if (!ing) return null;
+      const nameCandidate = ing.name || ing.item || ing.ingredient || '';
+      const name = String(nameCandidate).trim() || `Ingredient ${idx + 1}`;
+      const hasAmount = ing.amount && String(ing.amount).trim().length > 0;
+      const amount = hasAmount ? String(ing.amount).trim() : '1';
+      const unit = ing?.unit || ing?.measure || 'unit';
+      const category = validCategories.includes(ing?.category) ? ing.category : 'other';
+      return { ...ing, name, amount, unit, category };
+    };
+    const allowedDifficulties = ['easy', 'medium', 'hard'];
+    const sanitizeDifficulty = (val) => {
+      const d = String(val || '').toLowerCase();
+      if (d === 'moderate') return 'medium';
+      if (allowedDifficulties.includes(d)) return d;
+      return 'medium';
+    };
+
+    const sanitizeNutrition = (nut) => ({
+      calories: Number(nut?.calories) || 0,
+      protein: Number(nut?.protein) || 0,
+      carbs: Number(nut?.carbs) || 0,
+      fat: Number(nut?.fat) || 0,
+      fiber: Number(nut?.fiber) || 0,
+      sugar: Number(nut?.sugar) || 0
+    });
+
+    // Build sanitized days asynchronously to allow LLM-based ingredient normalization
+    const sanitizedDays = [];
+    for (const day of aiMealPlan.days || []) {
+      const mealsOut = [];
+      for (const meal of day.meals || []) {
+        const recipesOut = [];
+        for (const recipe of meal.recipes || []) {
+          const normalizedIngredients = await geminiService.normalizeIngredientsWithModel(recipe.ingredients || []);
+          const ingredients = Array.isArray(normalizedIngredients)
+            ? normalizedIngredients.map((ing, idx) => sanitizeIngredient(ing, idx)).filter(Boolean)
+            : [];
+          recipesOut.push({
+            ...recipe,
+            nutrition: sanitizeNutrition(recipe.nutrition),
+            difficulty: sanitizeDifficulty(recipe.difficulty),
+            ingredients
+          });
+        }
+        mealsOut.push({
+          ...meal,
+          totalNutrition: sanitizeNutrition(meal.totalNutrition),
+          recipes: recipesOut
+        });
+      }
+      sanitizedDays.push({ ...day, meals: mealsOut });
+    }
 
     // Create and save meal plan document to MongoDB
     const mealPlan = new MealPlan({
@@ -102,7 +140,8 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       endDate,
       days: sanitizedDays,
       generatedBy: 'gemini-ai',
-      status: 'draft'
+      status: 'draft',
+      preferences
     });
 
     await mealPlan.save();
@@ -169,4 +208,3 @@ router.post('/generate-shopping-list', auth, async (req, res) => {
 });
 
 module.exports = router;
-

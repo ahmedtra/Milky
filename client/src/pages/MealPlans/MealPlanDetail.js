@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Clock,
   Download,
+  Loader2,
+  RefreshCw,
   Share2,
   ShoppingCart,
   ChefHat,
@@ -28,6 +30,11 @@ const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2rem;
+`;
+
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 `;
 
 const Header = styled.div`
@@ -352,6 +359,103 @@ const MealActionButton = styled.button`
   }
 `;
 
+const SwapPanel = styled.div`
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: ${props => props.theme.borderRadius.md};
+  border: 1px dashed ${props => props.theme.colors.gray[300]};
+  background: ${props => props.theme.colors.gray[50]};
+`;
+
+const SwapHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: ${props => props.theme.colors.gray[700]};
+  font-weight: 600;
+`;
+
+const SwapActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const SwapCloseButton = styled.button`
+  border: 1px solid ${props => props.theme.colors.gray[300]};
+  background: white;
+  border-radius: ${props => props.theme.borderRadius.sm};
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: ${props => props.theme.colors.gray[700]};
+`;
+
+const AlternativeList = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem;
+`;
+
+const AlternativeCard = styled.button`
+  text-align: left;
+  width: 100%;
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+  background: white;
+  border-radius: ${props => props.theme.borderRadius.md};
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  &:hover {
+    box-shadow: ${props => props.theme.shadows.sm};
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+  }
+`;
+
+const AlternativeTitle = styled.div`
+  font-weight: 600;
+  color: ${props => props.theme.colors.gray[800]};
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+`;
+
+const AlternativeMeta = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: ${props => props.theme.colors.gray[600]};
+`;
+
+const Badge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: ${props => props.theme.borderRadius.sm};
+  background: ${props => props.$tone === 'info' ? props.theme.colors.primary[50] : props.theme.colors.gray[100]};
+  color: ${props => props.$tone === 'info' ? props.theme.colors.primary[700] : props.theme.colors.gray[700]};
+  border: 1px solid ${props => props.$tone === 'info' ? props.theme.colors.primary[200] : props.theme.colors.gray[200]};
+`;
+
+const SpinnerIcon = styled(Loader2)`
+  animation: ${spin} 1s linear infinite;
+`;
+
 const RecipesList = styled.div`
   display: flex;
   flex-direction: column;
@@ -496,6 +600,12 @@ const MealPlanDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isActive, setIsActive] = useState(false);
   const [expandedMeals, setExpandedMeals] = useState(() => new Set());
+  const [swapState, setSwapState] = useState({
+    key: null,
+    options: [],
+    loading: false,
+    applying: false
+  });
 
   // Fetch the actual meal plan data from database
   React.useEffect(() => {
@@ -722,6 +832,88 @@ const MealPlanDetail = () => {
     }
   }, [mealPlan, id]);
 
+  const swapKeyFor = (dayIndex, mealIndex) => `${dayIndex}-${mealIndex}`;
+
+  const handleFetchAlternatives = React.useCallback(
+    async (dayIndex, mealIndex) => {
+      if (!mealPlan?._id) {
+        toast.error('Swap requires a saved meal plan. Generate or save first.');
+        return;
+      }
+
+      const key = swapKeyFor(dayIndex, mealIndex);
+      setSwapState({ key, options: [], loading: true, applying: false });
+
+      try {
+        const { data } = await axios.get(
+          `/api/meal-plans/${mealPlan._id}/days/${dayIndex}/meals/${mealIndex}/alternatives`,
+          { params: { limit: 3 } }
+        );
+        setSwapState({
+          key,
+          options: data?.alternatives || [],
+          loading: false,
+          applying: false
+        });
+
+        if (!data?.alternatives?.length) {
+          toast('No alternatives found right now.');
+        }
+      } catch (error) {
+        console.error('Error fetching alternatives:', error);
+        toast.error('Failed to load alternatives');
+        setSwapState({ key: null, options: [], loading: false, applying: false });
+      }
+    },
+    [mealPlan]
+  );
+
+  const handleApplyAlternative = React.useCallback(
+    async (dayIndex, mealIndex, recipeId) => {
+      if (!mealPlan?._id) {
+        toast.error('Swap requires a saved meal plan. Generate or save first.');
+        return;
+      }
+
+      if (!recipeId) return;
+      setSwapState(prev => ({ ...prev, applying: true }));
+
+      try {
+        const { data } = await axios.patch(
+          `/api/meal-plans/${mealPlan._id}/days/${dayIndex}/meals/${mealIndex}`,
+          { recipeId }
+        );
+
+        const updatedMeal = data?.meal;
+        if (!updatedMeal) {
+          throw new Error('No meal returned from update');
+        }
+
+        setMealPlan(prev => {
+          if (!prev) return prev;
+          const days = prev.days.map((day, idx) => {
+            if (idx !== dayIndex) return day;
+            const meals = day.meals.map((meal, idx) => (idx === mealIndex ? updatedMeal : meal));
+            return { ...day, meals };
+          });
+          return { ...prev, days };
+        });
+
+        toast.success('Meal swapped');
+        setSwapState({ key: null, options: [], loading: false, applying: false });
+      } catch (error) {
+        console.error('Error applying alternative:', error);
+        toast.error('Failed to swap meal');
+        setSwapState(prev => ({ ...prev, applying: false }));
+      }
+    },
+    [mealPlan]
+  );
+
+  const handleCloseSwap = React.useCallback(() => {
+    setSwapState({ key: null, options: [], loading: false, applying: false });
+  }, []);
+
   if (loading) {
     return (
       <Container>
@@ -869,6 +1061,8 @@ const MealPlanDetail = () => {
                 const mealId = meal.mealId || meal._id?.toString() || mealIndex;
                 const mealKey = `${index}-${mealId}`;
                 const isExpanded = expandedMeals.has(mealKey);
+                const swapKey = swapKeyFor(index, mealIndex);
+                const isSwapOpen = swapState.key === swapKey;
 
                 return (
                   <MealItem
@@ -911,6 +1105,19 @@ const MealPlanDetail = () => {
                           $completed={meal.isCompleted}
                         >
                           {meal.isCompleted ? <CheckCircle size={16} /> : <Circle size={16} />}
+                        </MealActionButton>
+                        <MealActionButton
+                          type="button"
+                          onClick={() => (isSwapOpen ? handleCloseSwap() : handleFetchAlternatives(index, mealIndex))}
+                          aria-label="Swap meal"
+                          title="Swap meal"
+                          disabled={swapState.loading && isSwapOpen}
+                        >
+                          {isSwapOpen && (swapState.loading || swapState.applying) ? (
+                            <SpinnerIcon size={16} />
+                          ) : (
+                            <RefreshCw size={16} />
+                          )}
                         </MealActionButton>
                         <MealActionButton
                           type="button"
@@ -1017,6 +1224,50 @@ const MealPlanDetail = () => {
                         );
                       })}
                     </RecipesList>
+                    {isSwapOpen && (
+                      <SwapPanel>
+                        <SwapHeader>
+                          Meal alternatives
+                          <SwapActions>
+                            {swapState.loading && <SpinnerIcon size={16} />}
+                            <SwapCloseButton type="button" onClick={handleCloseSwap}>
+                              Close
+                            </SwapCloseButton>
+                          </SwapActions>
+                        </SwapHeader>
+                        {swapState.loading ? (
+                          <div>Loading alternatives...</div>
+                        ) : (
+                          <>
+                            <AlternativeList>
+                              {swapState.options.map(option => (
+                                <AlternativeCard
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => handleApplyAlternative(index, mealIndex, option.id)}
+                                  disabled={swapState.applying}
+                                >
+                                  <AlternativeTitle>
+                                    {option.title || 'Untitled recipe'}
+                                  </AlternativeTitle>
+                                  <AlternativeMeta>
+                                    {option.cuisine && <Badge>{option.cuisine}</Badge>}
+                                    {option.calories ? <Badge>{option.calories} cal</Badge> : null}
+                                    {option.protein_grams ? <Badge>{option.protein_grams}g protein</Badge> : null}
+                                    {option.prep_time_minutes ? (
+                                      <Badge>{option.prep_time_minutes} min</Badge>
+                                    ) : null}
+                                  </AlternativeMeta>
+                                </AlternativeCard>
+                              ))}
+                            </AlternativeList>
+                            {!swapState.options.length && (
+                              <div>No alternatives found for this meal type.</div>
+                            )}
+                          </>
+                        )}
+                      </SwapPanel>
+                    )}
                   </MealItem>
                 );
               })}

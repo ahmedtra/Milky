@@ -102,6 +102,10 @@ Milky/
 
 ## 🔧 API Endpoints
 
+### Recipe Search
+- `POST /api/recipes/search` - Query the recipe index (deterministic parser + Gemini fallback)
+- `GET /api/recipes/status` - Check Elasticsearch connectivity
+
 ### Authentication
 - `POST /api/users/register` - Register new user
 - `POST /api/users/login` - User login
@@ -188,6 +192,14 @@ Milky/
 - Responsive sidebar navigation
 - Mobile-friendly design
 - User menu with profile options
+
+## ⚡ Recipe indexing & search pipeline
+
+1. **Prepare env**: set `ELASTICSEARCH_NODE`, `ELASTICSEARCH_RECIPE_INDEX`, and credentials in `.env`.  
+2. **Run Elasticsearch locally**: e.g. `docker run -p 9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false elasticsearch:8`.  
+3. **Normalize + index recipes**: `node server/scripts/preprocessAndIndexRecipes.js --source /path/to/CookingRecipes.jsonl --index recipes`. Accepts `.json` array or `.jsonl`/`.ndjson`.  
+4. **Query**: `POST /api/recipes/search` with `{ "query": "keto chicken dinner under 30 minutes", "filters": { "exclude_ingredients": ["peanut"] } }`. The API does a fast dictionary parse first, then falls back to Gemini (function-style JSON output) only when confidence is low.  
+5. **Latency**: Elasticsearch filters on normalized ingredients, allergens, buckets (calories/protein), cuisine, meal type, and prep time. Use the `/api/recipes/status` endpoint to confirm ES connectivity before hitting search.
 
 ## 🔐 Security Features
 
@@ -309,7 +321,6 @@ If you encounter any issues or have questions:
 ---
 
 **Milky** - Your AI-powered companion for healthy eating! 🥗✨
-
 
 
 

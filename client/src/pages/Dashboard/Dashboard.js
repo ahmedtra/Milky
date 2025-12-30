@@ -301,12 +301,73 @@ const LinkButton = styled.button`
   }
 `;
 
+const SearchInput = styled.input`
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  outline: none;
+
+  &:focus {
+    border-color: ${props => props.theme.colors.primary[500]};
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+`;
+
+const SearchButton = styled.button`
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: ${props => props.theme.colors.primary[600]};
+  color: white;
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${props => props.theme.colors.primary[700]};
+  }
+`;
+
+const SearchResults = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
+const SearchResultItem = styled.li`
+  padding: 0.75rem 0.85rem;
+  border: 1px solid ${props => props.theme.colors.gray[200]};
+  border-radius: ${props => props.theme.borderRadius.md};
+  background: white;
+`;
+
+const ResultTitle = styled.div`
+  font-weight: 700;
+  color: ${props => props.theme.colors.gray[800]};
+`;
+
+const ResultMeta = styled.div`
+  font-size: 0.9rem;
+  color: ${props => props.theme.colors.gray[600]};
+  margin-top: 0.25rem;
+`;
+
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [shoppingLists, setShoppingLists] = React.useState([]);
   const [activeMealPlan, setActiveMealPlan] = React.useState(null);
   const [loadingMealPlan, setLoadingMealPlan] = React.useState(true);
+  const [searchText, setSearchText] = React.useState('');
+  const [searchResults, setSearchResults] = React.useState([]);
+  const [searchLoading, setSearchLoading] = React.useState(false);
 
   const loadActiveMealPlan = React.useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -375,6 +436,29 @@ const Dashboard = () => {
 
     fetchShoppingLists();
   }, []);
+
+  const handleRecipeSearch = React.useCallback(async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const query = searchText.trim();
+    if (!query) {
+      toast.error('Please enter a search query');
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const resp = await axios.post('/api/recipes/search', {
+        query,
+        filters: {},
+        size: 10
+      });
+      setSearchResults(resp.data?.results || []);
+    } catch (err) {
+      console.error('Recipe search failed', err);
+      toast.error('Search failed');
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [searchText]);
 
   const handleToggleMealCompletion = React.useCallback(async (dayIndex, mealId) => {
     // Get current meal using flexible ID matching
@@ -737,6 +821,43 @@ const Dashboard = () => {
                 </button>
               </MealsContainer>
             )}
+          </CardContent>
+        </ContentCard>
+
+        <ContentCard
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <CardHeader>
+            <CardTitle>Find Recipes</CardTitle>
+            <Target size={20} color="#64748b" />
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRecipeSearch}>
+              <SearchInput
+                placeholder="Type ingredients or a dish (e.g., 'quick vegetarian pasta')"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+              <SearchButton type="submit" disabled={searchLoading}>
+                {searchLoading ? 'Searching...' : 'Search'}
+              </SearchButton>
+            </form>
+            <SearchResults>
+              {searchResults.map((item) => (
+                <SearchResultItem key={item.id}>
+                  <ResultTitle>{item.title || 'Untitled recipe'}</ResultTitle>
+                  <ResultMeta>
+                    {item.cuisine || 'unknown cuisine'} · {item.meal_type?.join(', ') || 'any meal'} ·{' '}
+                    {item.total_time_minutes || item.total_time_min || '?'} min
+                  </ResultMeta>
+                </SearchResultItem>
+              ))}
+              {!searchLoading && searchResults.length === 0 && (
+                <ResultMeta>No results yet. Try a search above.</ResultMeta>
+              )}
+            </SearchResults>
           </CardContent>
         </ContentCard>
 

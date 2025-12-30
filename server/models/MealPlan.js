@@ -21,6 +21,7 @@ const ingredientSchema = new mongoose.Schema({
 });
 
 const recipeSchema = new mongoose.Schema({
+  externalId: String, // optional source recipe id (e.g., Elasticsearch)
   name: {
     type: String,
     required: true
@@ -119,7 +120,11 @@ const mealPlanSchema = new mongoose.Schema({
     enum: ['gemini-ai', 'manual', 'template'],
     default: 'gemini-ai'
   },
-  tags: [String]
+  tags: [String],
+  preferences: {
+    type: Object,
+    default: {}
+  }
 }, {
   timestamps: true
 });
@@ -129,4 +134,3 @@ mealPlanSchema.index({ userId: 1, startDate: 1 });
 mealPlanSchema.index({ userId: 1, status: 1 });
 
 module.exports = mongoose.model('MealPlan', mealPlanSchema);
-

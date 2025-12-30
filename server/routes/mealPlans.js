@@ -3,7 +3,77 @@ const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const ShoppingList = require('../models/ShoppingList');
 const geminiService = require('../services/geminiService');
+const { findAlternatives, getRecipeById } = require('../services/recipeSearch/searchService');
 const auth = require('../middleware/auth');
+
+const parseListQuery = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+};
+
+const mapSearchHitToPlanRecipe = (hit) => {
+  if (!hit) return null;
+  const ingredients = Array.isArray(hit.ingredients_parsed) && hit.ingredients_parsed.length
+    ? hit.ingredients_parsed.map((ing) => ({
+        name: ing.name || '',
+        amount: ing.amount || '1',
+        unit: ing.unit || 'unit',
+        category: ing.category || 'other'
+      }))
+    : Array.isArray(hit.ingredients)
+      ? hit.ingredients
+      : [];
+
+  const instructions = hit.instructions
+    ? String(hit.instructions)
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+    : [];
+
+  const nutrition = {};
+  const addNumber = (key, ...candidates) => {
+    for (const val of candidates) {
+      const num = Number(val);
+      if (Number.isFinite(num)) {
+        nutrition[key] = num;
+        return;
+      }
+    }
+  };
+  const nSrc = hit.nutrition || hit;
+  addNumber('calories', nSrc.calories);
+  addNumber('protein', nSrc.protein_g, nSrc.protein_grams, nSrc.protein);
+  addNumber('carbs', nSrc.carbs_g, nSrc.carbs_grams, nSrc.carbs);
+  addNumber('fat', nSrc.fat_g, nSrc.fat_grams, nSrc.fat);
+  addNumber('fiber', nSrc.fiber_g, nSrc.fiber_grams, nSrc.fiber);
+  addNumber('sugar', nSrc.sugar_g, nSrc.sugar_grams, nSrc.sugar);
+
+  return {
+    externalId: hit.id,
+    name: hit.title || hit.name || 'Untitled recipe',
+    description: hit.description || '',
+    prepTime: Number(hit.prep_time_minutes) || Number(hit.total_time_minutes) || undefined,
+    cookTime: Number(hit.cook_time_minutes) || undefined,
+    servings: 1,
+    ingredients,
+    instructions,
+    nutrition,
+    tags: hit.tags || hit.dietary_tags || hit.diet_tags || [],
+    difficulty: hit.difficulty || 'easy'
+  };
+};
+
+const nutritionTotalsFromRecipe = (recipe) => ({
+  calories: recipe?.nutrition?.calories ?? 0,
+  protein: recipe?.nutrition?.protein ?? 0,
+  carbs: recipe?.nutrition?.carbs ?? 0,
+  fat: recipe?.nutrition?.fat ?? 0
+});
 
 // Get all meal plans for user
 router.get('/', auth, async (req, res) => {
@@ -26,7 +96,7 @@ router.get('/', auth, async (req, res) => {
 
     console.log(`✅ Found ${mealPlans.length} meal plans (total: ${total})`);
     console.log('First plan:', mealPlans[0] ? { title: mealPlans[0].title, days: mealPlans[0].days?.length } : 'None');
-
+  
     res.json({
       mealPlans,
       totalPages: Math.ceil(total / limit),
@@ -205,14 +275,20 @@ router.post('/', auth, async (req, res) => {
 // Generate meal plan with AI
 router.post('/generate', auth, async (req, res) => {
   try {
+    console.log('🚀 Starting AI meal plan generation');
     const { duration = 7, preferences } = req.body;
-
+    
     if (!preferences) {
       return res.status(400).json({ message: 'User preferences are required' });
     }
 
+    console.log('⏱️ Duration:', duration);
+    console.log('🎯 Preferences:', preferences);
+
+    const tGenStart = Date.now();
     // Generate meal plan using Gemini AI
     const aiMealPlan = await geminiService.generateMealPlan(preferences, duration);
+    console.log(`✅ Meal plan generated in ${Date.now() - tGenStart} ms`);
     
     // Calculate start and end dates
     const startDate = new Date();
@@ -228,7 +304,8 @@ router.post('/generate', auth, async (req, res) => {
       endDate,
       days: aiMealPlan.days || [],
       generatedBy: 'gemini-ai',
-      status: 'draft'
+      status: 'draft',
+      preferences
     });
 
     await mealPlan.save();
@@ -340,6 +417,148 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (error) {
     console.error('Delete meal plan error:', error);
     res.status(500).json({ message: 'Server error deleting meal plan' });
+  }
+});
+
+// Get alternatives for a specific meal within a meal plan
+router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req, res) => {
+  try {
+    const { id, dayIndex, mealIndex } = req.params;
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 3, 10));
+
+    const mealPlan = await MealPlan.findOne({
+      _id: id,
+      userId: req.user._id
+    });
+
+    if (!mealPlan) {
+      return res.status(404).json({ message: 'Meal plan not found' });
+    }
+
+    const day = mealPlan.days?.[dayIndex];
+    const meal = day?.meals?.[mealIndex];
+    if (!day || !meal) {
+      return res.status(404).json({ message: 'Meal not found at specified indices' });
+    }
+
+    const excludeIds = (meal.recipes || [])
+      .map((r) => r.externalId || r.id)
+      .filter(Boolean);
+
+    const preferences = {
+      // Request-level overrides
+      dietType: req.query.dietType || null,
+      allergies: parseListQuery(req.query.allergies),
+      dislikedFoods: parseListQuery(req.query.dislikedFoods),
+      cuisine: req.query.cuisine || null,
+      goals: req.query.goal_fit || null,
+      activityLevel: req.query.activity_fit || null,
+      additionalNotes: req.query.notes || null
+    };
+
+    const planPrefs = mealPlan.preferences || mealPlan.userPreferences || {};
+    const mergedPrefs = {
+      dietType: preferences.dietType || mealPlan?.dietType || planPrefs.dietType || null,
+      allergies: preferences.allergies.length ? preferences.allergies : parseListQuery(planPrefs.allergies),
+      dislikedFoods: preferences.dislikedFoods.length ? preferences.dislikedFoods : parseListQuery(planPrefs.dislikedFoods),
+      cuisine: preferences.cuisine || day.cuisine || mealPlan?.cuisine || planPrefs.cuisine || null,
+      goals: preferences.goals || mealPlan?.goals || planPrefs.goals || null,
+      activityLevel: preferences.activityLevel || mealPlan?.activityLevel || planPrefs.activityLevel || null,
+      includeIngredients: parseListQuery(planPrefs.includeIngredients),
+      excludeIngredients: parseListQuery(planPrefs.excludeIngredients),
+      additionalNotes: preferences.additionalNotes || planPrefs.additionalNotes || null
+    };
+
+    let alternatives = [];
+    try {
+      console.log(`🔍 Fetching alternatives for ${meal.type} (day ${dayIndex}) with prefs:`, mergedPrefs);
+      const candidates = await geminiService.fetchCandidatesForMeal(meal.type, mergedPrefs, limit * 2);
+      const excludeSet = new Set(excludeIds.filter(Boolean).map(String));
+      alternatives = (candidates || []).filter((c) => !excludeSet.has(String(c.id))).slice(0, limit);
+    } catch (err) {
+      console.warn('⚠️ Alternative fetch via Gemini failed, falling back to ES:', err.message);
+      alternatives = await findAlternatives({
+        mealType: meal.type,
+        cuisine: mergedPrefs.cuisine,
+        dietType: mergedPrefs.dietType,
+        allergies: mergedPrefs.allergies,
+        dislikedFoods: mergedPrefs.dislikedFoods,
+        excludeIds,
+        size: limit,
+        goal_fit: mergedPrefs.goals,
+        activity_fit: mergedPrefs.activityLevel
+      });
+    }
+
+    const summarized = alternatives.map((hit) => ({
+      id: hit.id,
+      title: hit.title,
+      description: hit.description,
+      cuisine: hit.cuisine,
+      meal_type: hit.meal_type,
+      calories: hit.calories,
+      protein_grams: hit.protein_grams,
+      prep_time_minutes: hit.prep_time_minutes,
+      cook_time_minutes: hit.cook_time_minutes,
+      tags: hit.tags || hit.dietary_tags || hit.diet_tags || []
+    }));
+
+    res.json({ alternatives: summarized, count: summarized.length });
+  } catch (error) {
+    console.error('❌ Fetch alternatives error:', error);
+    res.status(500).json({ message: 'Server error fetching alternatives' });
+  }
+});
+
+// Replace a meal with a selected alternative
+router.patch('/:id/days/:dayIndex/meals/:mealIndex', auth, async (req, res) => {
+  try {
+    const { id, dayIndex, mealIndex } = req.params;
+    const { recipeId, recipe: recipePayload } = req.body || {};
+
+    const mealPlan = await MealPlan.findOne({
+      _id: id,
+      userId: req.user._id
+    });
+
+    if (!mealPlan) {
+      return res.status(404).json({ message: 'Meal plan not found' });
+    }
+
+    const day = mealPlan.days?.[dayIndex];
+    const meal = day?.meals?.[mealIndex];
+    if (!day || !meal) {
+      return res.status(404).json({ message: 'Meal not found at specified indices' });
+    }
+
+    let sourceRecipe = recipePayload;
+    if (!sourceRecipe && recipeId) {
+      sourceRecipe = await getRecipeById(recipeId);
+      if (!sourceRecipe) {
+        return res.status(404).json({ message: 'Recipe not found' });
+      }
+    }
+
+    const mappedRecipe = mapSearchHitToPlanRecipe(sourceRecipe);
+    if (!mappedRecipe) {
+      return res.status(400).json({ message: 'No recipe data provided' });
+    }
+
+    meal.recipes = [mappedRecipe];
+    meal.totalNutrition = nutritionTotalsFromRecipe(mappedRecipe);
+    meal.isCompleted = false;
+    meal.completedAt = undefined;
+
+    mealPlan.markModified('days');
+    await mealPlan.save();
+
+    res.json({
+      message: 'Meal updated with alternative',
+      meal: mealPlan.days[dayIndex].meals[mealIndex]
+    });
+  } catch (error) {
+    console.error('❌ Replace meal error:', error);
+    res.status(500).json({ message: 'Server error replacing meal' });
   }
 });
 
@@ -470,9 +689,3 @@ router.post('/:id/shopping-list', auth, async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
-
-

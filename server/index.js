@@ -10,6 +10,7 @@ const userRoutes = require('./routes/users');
 const mealPlanRoutes = require('./routes/mealPlans');
 const shoppingListRoutes = require('./routes/shoppingLists');
 const telegramRoutes = require('./routes/telegram');
+const recipeRoutes = require('./routes/recipes');
 const { initializeTelegramBot } = require('./services/telegramBot');
 const { initializeNotificationScheduler } = require('./services/notificationScheduler');
 
@@ -70,6 +71,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/api/shopping-lists', shoppingListRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/recipes', recipeRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

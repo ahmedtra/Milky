@@ -15,4 +15,9 @@ yarn-error.log*
 .env
 .env.local
 client/.env
+.envprod
+
+# data
+Data.csv
 EOF
+Data.csv # already added in working tree

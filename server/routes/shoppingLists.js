@@ -323,6 +323,28 @@ router.put('/:id/toggle-all', auth, async (req, res) => {
   }
 });
 
+// Delete all shopping lists for the user (optionally filtered by status)
+router.delete('/', auth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = { userId: req.user._id };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const result = await ShoppingList.deleteMany(filter);
+
+    res.json({
+      message: `${result.deletedCount} shopping list${result.deletedCount === 1 ? '' : 's'} cleared successfully`,
+      deleted: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Clear shopping lists error:', error);
+    res.status(500).json({ message: 'Server error clearing shopping lists' });
+  }
+});
+
 // Delete shopping list
 router.delete('/:id', auth, async (req, res) => {
   try {

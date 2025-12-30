@@ -1,18 +1,8 @@
 # Database
 MONGODB_URI=mongodb://localhost:27017/milky-diet-assistant
 
-# AI provider for meal plans/chat/shopping list: gemini | groq | ollama
-AI_PROVIDER=gemini
-
-# Gemini
+# Gemini AI
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
-
-# Groq
-GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.1-8b-instant
-GROQ_BASE=https://api.groq.com/openai/v1
-MEALPLAN_GROQ_MODEL=llama-3.1-8b-instant
 
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
@@ -35,8 +25,6 @@ CLIENT_URLS=http://localhost:3000
 # Elasticsearch (recipe search)
 ELASTICSEARCH_NODE=http://localhost:9200
 ELASTICSEARCH_RECIPE_INDEX=recipes
-# Enrichment provider: ollama (default) or groq
-ENRICH_PROVIDER=ollama
 # Either set username/password for basic auth or ELASTICSEARCH_API_KEY
 # ELASTICSEARCH_USERNAME=
 # ELASTICSEARCH_PASSWORD=

@@ -1,4 +1,27 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { searchRecipes, getRecipeById } = require('./recipeSearch/searchService');
+const { groqChat } = require('./groqClient');
+// Node 18+ has global fetch; no import required.
+
+const EMBED_HOST = process.env.EMBEDDING_HOST || process.env.OLLAMA_HOST || 'http://localhost:11434';
+const EMBED_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
+const LOG_MEALPLAN = process.env.LOG_MEALPLAN === 'true';
+const buildQueryVector = async (text) => {
+  if (!text) return null;
+  try {
+    const res = await fetch(`${EMBED_HOST}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: EMBED_MODEL, prompt: text.slice(0, 2000) })
+    });
+    if (!res.ok) throw new Error(`Embed failed ${res.status}`);
+    const data = await res.json();
+    return data?.embedding || null;
+  } catch (err) {
+    console.warn('⚠️ Query embedding failed:', err.message);
+    return null;
+  }
+};
 
 // Ingredient pools used to build a randomised blueprint before calling Gemini
 const INGREDIENT_LIBRARY = {
@@ -105,6 +128,8 @@ const CUISINE_OPTIONS = [
   'Caribbean'
 ];
 
+const LOG_SEARCH = process.env.LOG_SEARCH === 'true';
+
 const FALLBACK_NAME_TEMPLATES = {
   breakfast: [
     '{cuisine} Sunrise {main}',
@@ -137,17 +162,328 @@ const FALLBACK_NAME_TEMPLATES = {
 
 class GeminiService {
   constructor() {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY environment variable is not set');
+    this.useOllama = process.env.USE_OLLAMA_FOR_MEALPLAN === 'true';
+    this.provider =
+      (process.env.AI_PROVIDER && process.env.AI_PROVIDER.toLowerCase()) ||
+      (process.env.MEALPLAN_PROVIDER && process.env.MEALPLAN_PROVIDER.toLowerCase()) ||
+      (this.useOllama ? 'ollama' : 'gemini');
+    this.ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    this.ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1:8b-instruct-q4_0';
+    this.groqModel = process.env.MEALPLAN_GROQ_MODEL || process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    this.geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+    if (this.provider === 'gemini') {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY environment variable is not set');
+      }
+      this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      this.model = this.genAI.getGenerativeModel({ model: this.geminiModel });
+    } else if (this.provider === 'groq') {
+      if (!process.env.GROQ_API_KEY) {
+        throw new Error('GROQ_API_KEY environment variable is not set for Groq meal generation');
+      }
     }
-    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    // Log active provider once at startup to aid debugging of latency and model selection
+    console.log(
+      `🤖 Meal generation provider: ${this.provider} ` +
+      (this.provider === 'gemini'
+        ? `(model=${this.geminiModel})`
+        : this.provider === 'groq'
+          ? `(model=${this.groqModel})`
+          : `(model=${this.ollamaModel} @ ${this.ollamaHost})`)
+    );
+  }
+
+  /**
+   * Fetch candidate recipes from Elasticsearch for a given meal type and preferences.
+   * This keeps the LLM grounded on existing recipes rather than inventing new ones.
+   */
+  detectCuisineFromNotes(notes) {
+    if (!notes || typeof notes !== 'string') return null;
+    const text = notes.toLowerCase();
+    const known = CUISINE_OPTIONS.map(c => c.toLowerCase());
+    return known.find(c => text.includes(c)) || null;
+  }
+
+  async fetchCandidatesForMeal(mealType, preferences, size = 5) {
+    const tStart = Date.now();
+    let filterMs = 0;
+    let vectorMs = 0;
+    let searchMs = 0;
+    const cuisinePref = preferences?.cuisine
+      || preferences?.preferredCuisine
+      || this.detectCuisineFromNotes(preferences?.additionalNotes);
+    // Expand disliked/allergy terms with common synonyms (e.g., pork family)
+    const baseExcludes = new Set([...(preferences?.allergies || []), ...(preferences?.dislikedFoods || [])].map((v) => v && v.toLowerCase()).filter(Boolean));
+    const excludeExpanded = new Set(baseExcludes);
+    baseExcludes.forEach((term) => {
+      if (term.includes('pork')) {
+        ['pork', 'ham', 'bacon', 'sausage', 'prosciutto', 'chorizo', 'lard', 'pancetta'].forEach((t) => excludeExpanded.add(t));
+      }
+      if (term.includes('shellfish')) {
+        ['shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel'].forEach((t) => excludeExpanded.add(t));
+      }
+      if (term.includes('potato')) {
+        ['potato', 'potatoes', 'russet', 'yukon gold', 'sweet potato', 'yam', 'fries', 'chips', 'hash brown', 'wedges'].forEach((t) =>
+          excludeExpanded.add(t)
+        );
+      }
+    });
+    const excludeList = Array.from(excludeExpanded);
+    const tFiltersStart = Date.now();
+    // Build filters via LLM; fallback to deterministic if it fails
+    let filters = await this.buildEsFiltersWithGemini(mealType, preferences);
+    if (!filters) {
+      filters = {
+        meal_type: mealType,
+        diet_tags: preferences?.dietType ? [preferences.dietType].filter(Boolean) : [],
+        include_ingredients: preferences?.includeIngredients || [],
+        exclude_ingredients: excludeList,
+        cuisine: cuisinePref || null,
+        max_total_time_min: preferences?.maxTotalTimeMin || null,
+        calories_range: preferences?.caloriesRange || null,
+        protein_g_range: preferences?.proteinRange || null,
+        goal_fit: preferences?.goals ? String(preferences.goals).toLowerCase() : null,
+        activity_fit: preferences?.activityLevel ? String(preferences.activityLevel).toLowerCase() : null
+      };
+    }
+    filterMs = Date.now() - tFiltersStart;
+
+    // Optional semantic query vector from free-text preference notes
+    const freeText = preferences?.recipeQuery || preferences?.additionalNotes || '';
+    const tVecStart = Date.now();
+    const queryVector = await buildQueryVector(freeText);
+    if (queryVector) {
+      filters = { ...filters, text: freeText, query_vector: queryVector };
+    } else if (freeText) {
+      filters = { ...filters, text: freeText };
+    }
+    vectorMs = Date.now() - tVecStart;
+
+    
+    const randomSeed = Date.now() + Math.floor(Math.random() * 1_000_000);
+    const tSearchStart = Date.now();
+    let results = await searchRecipes(filters, { size, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+    // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
+    if ((!results.results || results.results.length === 0) && filters.diet_tags?.length) {
+      const relaxedFilters = { ...filters };
+      delete relaxedFilters.diet_tags;
+      delete relaxedFilters.dietary_tags;
+      results = await searchRecipes(relaxedFilters, { size, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+      if (LOG_SEARCH || LOG_MEALPLAN) {
+        console.log(`⚠️ ${mealType} search empty with diet_tags, retried without diet tags`, {
+          originalDietTags: filters.diet_tags,
+          relaxedHits: results?.results?.length || 0
+        });
+      }
+    }
+
+    if (LOG_SEARCH || LOG_MEALPLAN) {
+      console.log(`⏱️ searchRecipes(${mealType}) took ${Date.now() - tSearchStart} ms`);
+    }
+    searchMs = Date.now() - tSearchStart;
+
+    // Shuffle hits locally to avoid stable ordering when the pool is small
+    const rawResults = results.results || [];
+    // Hard post-filter to enforce exclusions even if ES misses variants.
+    // Include both user allergy/dislike expansion AND any LLM-proposed exclude_ingredients.
+    const effectiveExcludes = new Set([
+      ...excludeList,
+      ...((filters?.exclude_ingredients || []).map((t) => t && t.toLowerCase()).filter(Boolean))
+    ]);
+    const loweredExcludes = Array.from(effectiveExcludes);
+    const passesExcludes = (r) => {
+      if (!loweredExcludes.length) return true;
+      const haystack = [
+        r.title,
+        r.description,
+        Array.isArray(r.ingredients_norm) ? r.ingredients_norm.join(' ') : '',
+        Array.isArray(r.ingredients_parsed) ? r.ingredients_parsed.map((ing) => ing?.name).filter(Boolean).join(' ') : '',
+        r.ingredients_raw,
+        r.cuisine,
+        r.meal_type
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return !loweredExcludes.some((term) => term && haystack.includes(term));
+    };
+    console.log(passesExcludes)
+    const filtered = rawResults.filter(passesExcludes);
+    const shuffled = this.shuffle(filtered);
+    if (LOG_SEARCH || LOG_MEALPLAN) {
+      const preview = shuffled.slice(0, 5).map((r) => ({
+        id: r.id || r._id,
+        title: r.title,
+        cuisine: r.cuisine,
+        meal_type: r.meal_type,
+        calories: r.nutrition?.calories || r.calories,
+        time: r.total_time_min || r.total_time_minutes
+      }));
+      console.log(`🍽️ Candidates for ${mealType}:`, preview);
+      console.log(
+        `⏱️ fetchCandidates(${mealType}) total ${Date.now() - tStart} ms (filters ${filterMs} ms, vector ${vectorMs} ms, search ${searchMs} ms), hits=${shuffled.length} (filtered from ${rawResults.length})`
+      );
+    }
+    return shuffled.map(r => ({
+      id: r.id || r._id,
+      title: r.title,
+      cuisine: r.cuisine,
+      meal_type: r.meal_type,
+      diet_tags: r.dietary_tags || r.diet_tags || [],
+      total_time_min: r.total_time_min || r.total_time_minutes || null,
+      calories: r.nutrition?.calories || r.calories || null,
+      url: r.url,
+      ingredients: r.ingredients_norm || r.ingredients_raw || [],
+      ingredients_parsed: r.ingredients_parsed || [],
+      instructions: r.instructions || []
+    }));
+  }
+
+  formatCandidatesForPrompt(candidateMap) {
+    const sections = Object.entries(candidateMap).map(([mealType, list]) => {
+      // Guard against oversized lists; keep prompt short and lightly shuffle to avoid same ordering
+      const limited = Array.isArray(list) ? this.shuffle(list).slice(0, 20) : [];
+      const lines = limited.map(c => {
+        const time = c.total_time_min ? `, time ~${c.total_time_min} min` : '';
+        const cals = c.calories ? `, cal ~${c.calories}` : '';
+        return `- ${c.title} (id: ${c.id}, cuisine: ${c.cuisine || 'n/a'}${time}${cals})`;
+      }).join('\n');
+      return `${mealType.toUpperCase()} candidates:\n${lines || '- none found'}`;
+    });
+    return sections.join('\n\n');
+  }
+
+  /**
+   * Ask Gemini to propose ES filters given a meal type and preferences.
+   * Returns null on failure to avoid blocking.
+   */
+  async buildEsFiltersWithGemini(mealType, preferences) {
+    // Use Ollama or Gemini to synthesize filters; return null on failure.
+    const prompt = `
+    You build Elasticsearch filters for recipes. Given a meal type and user preferences, return ONLY JSON (no markdown, no backticks) with these keys:
+    {
+      "meal_type": "<meal type>",
+      "diet_tags": [strings],
+      "include_ingredients": [strings],
+      "exclude_ingredients": [strings],
+      "cuisine": "<string or null>",
+      "max_total_time_min": number or null,
+      "calories_range": { "gte": number, "lte": number } or null,
+      "protein_g_range": { "gte": number, "lte": number } or null,
+      "goal_fit": "<weight_loss|weight_maintenance|weight_gain|null>",
+      "activity_fit": "<low_activity|moderate_activity|high_activity|null>"
+    }
+    - Keep arrays short (<=6 items). Use lowercase for tags/ingredients.
+    - If you are unsure, set fields to null or empty arrays.
+    Meal type: ${mealType}
+    Preferences: ${JSON.stringify(preferences, null, 2)}
+    `;
+    
+    const parseJsonLoose = (raw) => {
+      if (!raw) return null;
+      const fence = raw.match(/```json\s*([\s\S]*?)```/i);
+      const cleaned = fence ? fence[1] : raw.replace(/```/g, '');
+      try {
+        return JSON.parse(cleaned);
+      } catch {
+        return null;
+      }
+    };
+
+    try {
+      const text = await this.callTextModel(prompt, 0); // temperature 0 for deterministic filters
+      const parsed = parseJsonLoose(text);
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!parsed.meal_type) parsed.meal_type = mealType;
+      if (!parsed.goal_fit && preferences?.goals) {
+        parsed.goal_fit = String(preferences.goals).toLowerCase();
+      }
+      if (!parsed.activity_fit && preferences?.activityLevel) {
+        parsed.activity_fit = String(preferences.activityLevel).toLowerCase();
+      }
+      return parsed;
+    } catch (err) {
+      console.warn('⚠️ LLM filter synthesis failed, using deterministic filters. Error:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Call either Gemini or local Ollama (if USE_OLLAMA_FOR_MEALPLAN=true) with configurable temperature.
+   */
+  async callTextModel(prompt, temperature = 0.6) {
+    if (this.provider === 'gemini') {
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }]}],
+        generationConfig: { temperature }
+      });
+      const response = await result.response;
+      return response.text();
+    }
+
+    if (this.provider === 'groq') {
+      const { content } = await groqChat({
+        model: this.groqModel,
+        temperature,
+        maxTokens: 4096,
+        responseFormat: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant that only returns the requested JSON or text. Do not add Markdown fences.' },
+          { role: 'user', content: prompt }
+        ]
+      });
+      return content;
+    }
+
+    // Ollama path
+    const res = await fetch(`${this.ollamaHost}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.ollamaModel,
+        prompt,
+        stream: false,
+        options: { temperature }
+      })
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Ollama error ${res.status}: ${body}`);
+    }
+    const data = await res.json();
+    return data?.response || '';
+  }
+
+  /**
+   * Normalize a list of ingredient strings/objects into [{name, amount, unit, category}]
+   * using the active text model. Falls back to original input on failure.
+   */
+  async normalizeIngredientsWithModel(rawIngredients = []) {
+    try {
+      const prompt = `
+      Normalize this ingredient list into JSON array of objects:
+      [
+        { "name": "<string>", "amount": "<string>", "unit": "<string>", "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other" }
+      ]
+      Return ONLY JSON (no markdown). If amount/unit are missing, infer reasonable defaults.
+      Input ingredients:
+      ${JSON.stringify(rawIngredients, null, 2)}
+      `;
+      const text = await this.callTextModel(prompt, 0.2);
+      const fence = text.match(/```json\s*([\s\S]*?)```/i);
+      const cleaned = fence ? fence[1] : text.replace(/```/g, '');
+      const parsed = JSON.parse(cleaned);
+      return Array.isArray(parsed) ? parsed : rawIngredients;
+    } catch (err) {
+      console.warn('⚠️ Ingredient normalization failed, using original list:', err.message);
+      return rawIngredients;
+    }
   }
 
   async generateMealPlan(userPreferences, duration = 7) {
     const randomSeed = Math.floor(Math.random() * 1_000_000_000);
-    console.log('🎲 Meal plan generation seed:', randomSeed);
-    console.log(`📅 Generating ${duration}-day meal plan (one day at a time)`);
 
     const ingredientBlueprint = this.buildIngredientBlueprint({
       preferences: userPreferences,
@@ -166,10 +502,9 @@ class GeminiService {
       // Generate one day at a time for better reliability
       const days = [];
       const startDate = new Date();
-      
-      console.log('🔍 Blueprint has', ingredientBlueprint.length, 'days');
-      console.log('🔍 Duration:', duration);
-      
+      const recentIds = []; // track recent recipe ids to avoid back-to-back repeats
+      const usedRecipeIds = new Set(); // track all recipes used in the plan to avoid repeats
+
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
         const dayBlueprint = ingredientBlueprint[dayIndex]; // Blueprint is an array, not object with .days
         
@@ -179,12 +514,38 @@ class GeminiService {
           continue;
         }
         
+        if (LOG_MEALPLAN) {
+          console.log(`📅 Generating day ${dayIndex + 1}/${duration} (${dayBlueprint.cuisine || 'any'} cuisine)`);
+        }
+        
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + dayIndex);
         const dateStr = currentDate.toISOString().split('T')[0];
         
-        console.log(`📅 Generating Day ${dayIndex + 1}/${duration} (${dateStr}) with ${dayBlueprint.cuisine} cuisine...`);
-        
+        // Fetch ES candidates per meal type to ground the LLM on existing recipes
+        const candidateMap = {
+          breakfast: await this.fetchCandidatesForMeal('breakfast', userPreferences, 10),
+          lunch: await this.fetchCandidatesForMeal('lunch', userPreferences, 12),
+          dinner: await this.fetchCandidatesForMeal('dinner', userPreferences, 12),
+          snack: await this.fetchCandidatesForMeal('snack', userPreferences, 6)
+        };
+        const filterUsed = (list = []) => {
+          const filtered = list.filter((r) => r?.id && !usedRecipeIds.has(String(r.id)));
+          return filtered.length ? filtered : list;
+        };
+        candidateMap.breakfast = filterUsed(candidateMap.breakfast);
+        candidateMap.lunch = filterUsed(candidateMap.lunch);
+        candidateMap.dinner = filterUsed(candidateMap.dinner);
+        candidateMap.snack = filterUsed(candidateMap.snack);
+        if (LOG_MEALPLAN) {
+          const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
+          console.log(`🔍 Candidate counts:`, counts);
+          Object.entries(candidateMap).forEach(([mealType, list]) => {
+            const sample = (list || []).slice(0, 3).map(r => `${r.title || 'untitled'} (${r.id})`);
+            console.log(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
+          });
+        }
+        const candidateText = this.formatCandidatesForPrompt(candidateMap);
         const dayPrompt = `
         Create ONE DAY of meals for date ${dateStr}.
 
@@ -193,7 +554,7 @@ class GeminiService {
         Allergies: ${userPreferences.allergies?.join(', ') || 'None'}
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
         
-        Cuisine for this day: ${dayBlueprint.cuisine}
+        Cuisine for this day: ${dayBlueprint.cuisine || 'any'}
 
         Meal Times:
         - Breakfast: ${userPreferences.mealTimes?.breakfast || '08:00'}
@@ -203,9 +564,16 @@ class GeminiService {
         Use these ingredients as inspiration:
         ${JSON.stringify(dayBlueprint, null, 2)}
 
-        IMPORTANT: Write ALL text (recipe names, descriptions, instructions) in ENGLISH only. Use ${dayBlueprint.cuisine} cuisine-inspired flavors, but keep all text in English.
-        
-        Return ONLY valid JSON (no markdown, no extra text) with this structure:
+        Here are EXISTING recipes you must prefer and pick from (by id and title).
+        You MUST select only from these; do not invent ids or titles. If none fits, pick the closest candidate instead of leaving empty.
+        ${candidateText}
+
+        IMPORTANT:
+        - Write ALL text (recipe names, descriptions, instructions) in ENGLISH.
+        - Prefer the listed existing recipes by id/title; do not invent ids.
+        - Return ONLY strict JSON. Do NOT include ellipses, comments, or markdown fences.
+
+        JSON schema to return (fill every field with concrete values):
         {
           "date": "${dateStr}",
           "meals": [
@@ -214,6 +582,7 @@ class GeminiService {
               "scheduledTime": "${userPreferences.mealTimes?.breakfast || '08:00'}",
               "recipes": [
                 {
+                  "id": "existing-recipe-id-or-null",
                   "name": "Recipe Name",
                   "description": "Brief description",
                   "prepTime": 10,
@@ -233,58 +602,124 @@ class GeminiService {
             {
               "type": "lunch",
               "scheduledTime": "${userPreferences.mealTimes?.lunch || '13:00'}",
-              "recipes": [...],
-              "totalNutrition": {...}
+              "recipes": [
+                {
+                  "id": "existing-recipe-id-or-null",
+                  "name": "Recipe Name",
+                  "description": "Brief description",
+                  "prepTime": 10,
+                  "cookTime": 15,
+                  "servings": 1,
+                  "ingredients": [
+                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
+                  ],
+                  "instructions": ["Step 1", "Step 2"],
+                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
+                  "tags": ["${dayBlueprint.cuisine}"],
+                  "difficulty": "easy"
+                }
+              ],
+              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
             },
             {
               "type": "dinner",
               "scheduledTime": "${userPreferences.mealTimes?.dinner || '19:00'}",
-              "recipes": [...],
-              "totalNutrition": {...}
+              "recipes": [
+                {
+                  "id": "existing-recipe-id-or-null",
+                  "name": "Recipe Name",
+                  "description": "Brief description",
+                  "prepTime": 10,
+                  "cookTime": 15,
+                  "servings": 1,
+                  "ingredients": [
+                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
+                  ],
+                  "instructions": ["Step 1", "Step 2"],
+                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
+                  "tags": ["${dayBlueprint.cuisine}"],
+                  "difficulty": "easy"
+                }
+              ],
+              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
             },
             {
               "type": "snack",
               "scheduledTime": "15:00",
-              "recipes": [...],
-              "totalNutrition": {...}
+              "recipes": [
+                {
+                  "id": "existing-recipe-id-or-null",
+                  "name": "Recipe Name",
+                  "description": "Brief description",
+                  "prepTime": 5,
+                  "cookTime": 0,
+                  "servings": 1,
+                  "ingredients": [
+                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "fruit"}
+                  ],
+                  "instructions": ["Step 1", "Step 2"],
+                  "nutrition": {"calories": 150, "protein": 5, "carbs": 20, "fat": 5, "fiber": 3, "sugar": 10},
+                  "tags": ["${dayBlueprint.cuisine}"],
+                  "difficulty": "easy"
+                }
+              ],
+              "totalNutrition": {"calories": 150, "protein": 5, "carbs": 20, "fat": 5}
             }
           ]
         }
         `;
 
         try {
-          const result = await this.model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: dayPrompt }]}],
-            generationConfig: {
-              temperature: 1.1
+          const tLLMStart = Date.now();
+          if (LOG_MEALPLAN) console.log(`🧠 Calling LLM for day ${dayIndex + 1}/${duration}...`);
+          const text = await this.callTextModel(dayPrompt, 0.8);
+          if (LOG_MEALPLAN) console.log(`🧠 LLM response for day ${dayIndex + 1} in ${Date.now() - tLLMStart} ms (length ${text?.length || 0})`);
+
+          // Parse the day's JSON with a few tolerant repairs (handles trailing commas)
+          const tryParse = (raw) => {
+            if (!raw) return null;
+            // strip markdown fences if present
+            const fence = raw.match(/```json\s*([\s\S]*?)\s*```/);
+            const body = fence ? fence[1] : raw;
+            const cleaned = body
+              // remove single-line // comments
+              .replace(/\/\/.*$/gm, '')
+              // remove /* */ comments
+              .replace(/\/\*[\s\S]*?\*\//g, '')
+              // remove trailing commas before ] or }
+              .replace(/,\s*]/g, ']')
+              .replace(/,\s*}/g, '}');
+            try {
+              return JSON.parse(cleaned);
+            } catch {
+              return null;
             }
-          });
-          const response = await result.response;
-          const text = response.text();
-          
-          // Parse the day's JSON
-          let dayData = null;
-          
-          // Try direct parse
-          try {
-            dayData = JSON.parse(text);
-          } catch {
-            // Try extracting from markdown
-            const markdownMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-            if (markdownMatch) {
-              dayData = JSON.parse(markdownMatch[1].trim());
-            } else {
-              // Try finding JSON object
-              const jsonMatch = text.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                dayData = JSON.parse(jsonMatch[0]);
-              }
+          };
+
+          let dayData = tryParse(text);
+          if (!dayData) {
+            // Try to extract JSON object if parsing whole text failed
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              dayData = tryParse(jsonMatch[0]);
             }
           }
           
           if (dayData && dayData.meals) {
+            // Post-process to force recipes to come from candidateMap when available
+            await this.enforceCandidateRecipes(dayData, candidateMap);
+            // Keep only one recipe per meal to avoid duplicates in UI
+            dayData.meals = (dayData.meals || []).map((meal) => {
+              const recipes = Array.isArray(meal.recipes) ? meal.recipes : [];
+              const first = recipes[0] ? [recipes[0]] : [];
+              return { ...meal, recipes: first };
+            });
+            this.dedupeDayRecipes(dayData, recentIds, usedRecipeIds);
+            // Track ids for next day dedupe (keep last day’s ids)
+            const idsToday = this.collectRecipeIds(dayData);
+            recentIds.splice(0, recentIds.length, ...idsToday);
+            idsToday.forEach((id) => usedRecipeIds.add(String(id)));
             days.push(dayData);
-            console.log(`✅ Day ${dayIndex + 1} generated successfully (${dayData.meals.length} meals)`);
           } else {
             console.warn(`⚠️ Day ${dayIndex + 1} failed, using fallback`);
             days.push(fallbackPlan.days[dayIndex]);
@@ -295,8 +730,10 @@ class GeminiService {
         }
       }
 
-      console.log(`✅ Meal plan generation complete: ${days.length} days generated`);
-      
+      // Generation complete
+      if (LOG_MEALPLAN) {
+        console.log(`✅ Meal plan generation complete: ${days.length} days`);
+      }
       return {
         title: `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`,
         description: `A ${duration}-day meal plan tailored to your preferences`,
@@ -309,19 +746,293 @@ class GeminiService {
     }
   }
 
+  /**
+   * Ensure LLM-picked recipes align with ES candidates:
+   * - If id matches a candidate, force name/ingredients/instructions from candidate (ground truth).
+   * - If id is missing or not in candidates, replace with the first candidate for that meal type.
+   */
+  async enforceCandidateRecipes(dayData, candidateMap) {
+    if (!dayData?.meals || !candidateMap) return;
+
+    const hasIngredientsData = (src = {}) => {
+      return (
+        (Array.isArray(src.ingredients_parsed) && src.ingredients_parsed.length) ||
+        (typeof src.ingredients_raw === 'string' && src.ingredients_raw.trim()) ||
+        (Array.isArray(src.ingredients_norm) && src.ingredients_norm.length) ||
+        (Array.isArray(src.ingredients) && src.ingredients.length)
+      );
+    };
+
+    const candidatesByMeal = {};
+    for (const [mealType, list] of Object.entries(candidateMap)) {
+      const map = new Map();
+      const hydrated = [];
+      for (const c of list || []) {
+        if (c?.id && !hasIngredientsData(c)) {
+          try {
+            const fetched = await getRecipeById(c.id);
+            if (fetched) {
+              if (LOG_MEALPLAN) {
+                console.log(`📦 Hydrated candidate ${c.id} for ${mealType} with ingredients from ES`);
+              }
+              const merged = { ...c, ...fetched };
+              hydrated.push(merged);
+              map.set(String(c.id), merged);
+              continue;
+            }
+          } catch (err) {
+            console.warn(`⚠️ Failed to hydrate candidate ${c?.id}: ${err.message}`);
+          }
+        }
+        if (c?.id) map.set(String(c.id), c);
+        hydrated.push(c);
+      }
+      candidatesByMeal[mealType] = { list: hydrated, map };
+    }
+
+    if (LOG_MEALPLAN) {
+      console.log('🧭 enforceCandidateRecipes start', {
+        meals: dayData.meals.length,
+        candidateTypes: Object.keys(candidateMap)
+      });
+    }
+
+    dayData.meals = dayData.meals.map((meal) => {
+      const mealType = (meal?.type || '').toLowerCase();
+      const bucket = candidatesByMeal[mealType];
+      if (!bucket || !bucket.list?.length) {
+        // No candidates for this meal type: drop non-grounded recipes
+        if (LOG_MEALPLAN) {
+          console.warn(`⚠️ No candidates for meal type "${mealType}", clearing recipes`);
+        }
+        return { ...meal, recipes: [] };
+      }
+
+      const fixRecipe = (r) => {
+        if (r && bucket.map.has(String(r.id))) {
+          const src = bucket.map.get(String(r.id));
+          // Always use parsed ingredients_raw to stay grounded
+          let ingredients = this.parseIngredientsFromSource(src);
+          if (!ingredients.length && Array.isArray(r.ingredients)) {
+            ingredients = r.ingredients;
+          }
+          const nutrition = Object.keys(this.extractNutritionFromSource(src)).length
+            ? this.extractNutritionFromSource(src)
+            : r.nutrition;
+          if (LOG_MEALPLAN) {
+            console.log('🔧 fixRecipe: matched candidate', {
+              mealType,
+              recipeId: r.id,
+              candidateIngredients: ingredients,
+              nutrition
+            });
+          }
+          return {
+            ...r,
+            id: src.id,
+            name: src.title || r.name,
+            description: src.description || r.description,
+            ingredients,
+            instructions: src.instructions || r?.instructions || [],
+            nutrition
+          };
+        }
+        // Always pick a candidate if none/mismatch
+        const first = this.shuffle(bucket.list)[0];
+        let ingredients = this.parseIngredientsFromSource(first);
+        if (!ingredients.length && Array.isArray(r?.ingredients)) {
+          ingredients = r.ingredients;
+        }
+        const nutrition = Object.keys(this.extractNutritionFromSource(first)).length
+          ? this.extractNutritionFromSource(first)
+          : r?.nutrition;
+        if (LOG_MEALPLAN) {
+          console.log('🔄 fixRecipe: replacing with candidate', {
+            mealType,
+            chosenId: first?.id || null,
+            ingredients,
+            nutrition
+          });
+        }
+        const base = {
+          id: first?.id || null,
+          name: first?.title || r?.name || 'Recipe',
+          description: first?.title || r?.description || '',
+          tags: r?.tags || [first?.cuisine].filter(Boolean),
+          ingredients,
+          instructions: first?.instructions || r?.instructions || [],
+          nutrition
+        };
+        return { ...r, ...base };
+      };
+
+      const recipes = Array.isArray(meal?.recipes) && meal.recipes.length
+        ? meal.recipes.map(fixRecipe)
+        : [fixRecipe(null)];
+
+      return { ...meal, recipes };
+    });
+
+    if (LOG_MEALPLAN) {
+      const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);
+      console.log(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`);
+    }
+  }
+
+  /**
+   * Remove duplicate recipes within the same day and avoid repeats from the previous day.
+   */
+  dedupeDayRecipes(dayData, recentIds = [], usedSet = new Set()) {
+    if (!dayData?.meals) return;
+    const daySeen = new Set();
+    const recentSet = new Set(recentIds || []);
+
+    dayData.meals = dayData.meals.map((meal) => {
+      const recipes = Array.isArray(meal?.recipes) ? meal.recipes : [];
+      const filtered = [];
+      recipes.forEach((r) => {
+        const rid = r?.id;
+        if (!rid) return;
+        if (daySeen.has(rid)) return;
+        if (recentSet.has(rid)) return;
+        if (usedSet.has(String(rid))) return;
+        daySeen.add(rid);
+        filtered.push(r);
+      });
+      return { ...meal, recipes: filtered.length ? filtered : recipes };
+    });
+  }
+
+  collectRecipeIds(dayData) {
+    const ids = [];
+    if (!dayData?.meals) return ids;
+    dayData.meals.forEach((meal) => {
+      (meal.recipes || []).forEach((r) => {
+        if (r?.id) ids.push(String(r.id));
+      });
+    });
+    return ids;
+  }
+
+  shuffle(arr) {
+    const copy = [...(arr || [])];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  /**
+   * Build a simple ingredient list from the ES source: prefer structured ingredients,
+   * otherwise split ingredients_raw into separate items.
+   */
+  parseIngredientsFromSource(src = {}) {
+    console.log('parseIngredientsFromSource input:', src);
+    // Prefer fully parsed ingredients from ES; fallback to ingredients_raw, ingredients_norm, then structured ingredients
+    if (Array.isArray(src.ingredients_parsed) && src.ingredients_parsed.length) {
+      return src.ingredients_parsed.map((ing) => ({
+        name: ing.name || '',
+        amount: ing.amount || '1',
+        unit: ing.unit || 'unit',
+        category: (ing.category || 'other').toLowerCase()
+      }));
+    }
+
+    // Legacy fallbacks
+    if (typeof src.ingredients_raw === 'string' && src.ingredients_raw.trim().length) {
+      return src.ingredients_raw
+        .split(',')
+        .map((s) => this.parseRawIngredient(s))
+        .filter(Boolean);
+    }
+    if (Array.isArray(src.ingredients_norm) && src.ingredients_norm.length) {
+      return src.ingredients_norm
+        .map((name) => (name ? { name: String(name).trim() } : null))
+        .filter(Boolean);
+    }
+    if (Array.isArray(src.ingredients) && src.ingredients.length) {
+      return src.ingredients;
+    }
+    return [];
+  }
+
+  /**
+   * Parse a single raw ingredient string into { name, amount, unit } when possible.
+   */
+  parseRawIngredient(raw = '') {
+    const str = String(raw).trim();
+    if (!str) return null;
+
+    // Normalize whitespace
+    const cleaned = str.replace(/\s+/g, ' ').trim();
+    const tokens = cleaned.split(' ');
+
+    const isNumberish = (t) => /^(\d+(\.\d+)?|\d+\/\d+)$/.test(t);
+    const knownUnits = new Set([
+      'tsp', 'tsp.', 'teaspoon', 'teaspoons',
+      'tbsp', 'tbsp.', 'tablespoon', 'tablespoons',
+      'cup', 'cups', 'c', 'c.',
+      'oz', 'oz.', 'ounce', 'ounces',
+      'lb', 'lb.', 'pound', 'pounds',
+      'g', 'gram', 'grams',
+      'kg', 'ml', 'stick', 'sticks',
+      'clove', 'cloves', 'slice', 'slices',
+      'can', 'cans'
+    ]);
+
+    let amount = null;
+    let unit = '';
+    let idx = 0;
+
+    // handle amounts like "2", "1/2", "2 1/2", "3/4"
+    if (tokens[idx] && isNumberish(tokens[idx])) {
+      amount = tokens[idx];
+      idx += 1;
+      if (tokens[idx] && isNumberish(tokens[idx])) {
+        amount = `${amount} ${tokens[idx]}`;
+        idx += 1;
+      }
+    }
+
+    if (tokens[idx]) {
+      const u = tokens[idx].replace(/\.$/, '').toLowerCase();
+      if (knownUnits.has(u)) {
+        unit = tokens[idx];
+        idx += 1;
+      }
+    }
+
+    const name = tokens.slice(idx).join(' ').trim();
+    return {
+      name: name || str,
+      amount: amount || '1',
+      unit: unit || 'unit'
+    };
+  }
+
+  extractNutritionFromSource(src = {}) {
+    const nutrition = {};
+    const addNumber = (key, value) => {
+      const num = Number(value);
+      if (Number.isFinite(num)) {
+        nutrition[key] = num;
+      }
+    };
+    addNumber('calories', src.calories);
+    addNumber('protein', src.protein_grams || src.protein_g || src.protein);
+    addNumber('carbs', src.carbs_grams || src.carbs_g || src.carbs);
+    addNumber('fat', src.fat_grams || src.fat_g || src.fat);
+    addNumber('fiber', src.fiber_grams || src.fiber_g || src.fiber);
+    addNumber('sugar', src.sugar_grams || src.sugar_g || src.sugar);
+    return nutrition;
+  }
+
   async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null) {
     try {
-      console.log('💬 Chat request:', {
-        hasMealPlan: !!activeMealPlan,
-        hasUser: !!user,
-        mealPlanTitle: activeMealPlan?.title,
-        mealPlanDays: activeMealPlan?.days?.length
-      });
-
       // Build meal plan context if available
       let mealPlanContext = '';
       if (activeMealPlan && activeMealPlan.days && activeMealPlan.days.length > 0) {
-        console.log('✅ Including meal plan context in chat');
         mealPlanContext = `\n\n**USER'S ACTIVE MEAL PLAN CONTEXT:**
         
         Title: ${activeMealPlan.title}
@@ -343,7 +1054,7 @@ class GeminiService {
         
         Use this meal plan context to provide personalized advice. Reference specific meals, recipes, or days when relevant to the user's question.`;
       } else {
-        console.log('⚠️ No meal plan context available for chat');
+        // no meal plan context
       }
 
       // Build user profile context if available
@@ -390,9 +1101,7 @@ class GeminiService {
 
       const fullPrompt = `${systemPrompt}\n\nConversation History:\n${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\nUser: ${message}\n\nAssistant:`;
 
-      const result = await this.model.generateContent(fullPrompt);
-      const response = await result.response;
-      return response.text();
+      return await this.callTextModel(fullPrompt, 0.6);
     } catch (error) {
       console.error('Error in dietitian chat:', error);
       
@@ -417,7 +1126,42 @@ class GeminiService {
         throw new Error('Meal plan does not contain any ingredients to convert into a shopping list');
       }
 
-      const consolidatedIngredients = this.consolidateIngredients(extractedIngredients);
+      // Normalize with LLM to reduce duplicates (e.g., onion vs Onion vs red onion)
+      const normalizedForList = await this.normalizeIngredientsWithModel(extractedIngredients);
+
+      const isPlaceholderName = (name = '') => {
+        const n = String(name || '').trim();
+        const lower = n.toLowerCase();
+        return (
+          !n ||
+          /^ingredient\s*\d+/i.test(n) ||
+          /^item\s*\d+/i.test(n) ||
+          /^recipe\s*\d+/i.test(n) ||
+          lower === 'ingredient' ||
+          lower === 'item'
+        );
+      };
+
+      const filterGeneric = (list) => {
+        const badName = (name = '') => {
+          const n = String(name).toLowerCase().trim();
+          return (
+            !n ||
+            /^ingredient\s*\d+/i.test(name) ||
+            /^item\s*\d+/i.test(name) ||
+            n === 'ingredient' ||
+            n === 'item'
+          );
+        };
+        return (list || []).filter((ing) => ing && !badName(ing.name));
+      };
+
+      let cleaned = filterGeneric(normalizedForList);
+      if (!cleaned.length) {
+        cleaned = filterGeneric(extractedIngredients);
+      }
+
+      const consolidatedIngredients = this.consolidateIngredients(cleaned);
 
       try {
         const prompt = `
@@ -452,20 +1196,16 @@ class GeminiService {
         5. For each item, set estimatedPrice to a reasonable USD amount based on typical grocery prices
         6. Calculate totalEstimatedCost as the sum of all item prices
         7. Add helpful notes for shopping
-        
+        8. Use sensible units: whole produce (onion, garlic, tomato, potato, pepper, apple, banana, avocado, carrot, lemon, lime, orange) should be counted as pieces, not cups/oz/ml.
+
         IMPORTANT: Every item must have a valid estimatedPrice number greater than 0.
       `;
 
-        const result = await this.model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-
-        console.log('🤖 Shopping list generation response length:', text.length);
+        const text = await this.callTextModel(prompt, 0.3);
 
         // Try to parse JSON directly first
         try {
           const parsed = JSON.parse(text);
-          console.log('✅ Successfully parsed shopping list directly');
 
           // Validate and fix shopping list items - map to correct shopping categories
           const categoryMap = {
@@ -487,20 +1227,47 @@ class GeminiService {
             'other': 'other'
           };
 
+          const normalizeUnit = (unit) => {
+            const u = (unit || '').toLowerCase();
+            if (u === 'each') return 'piece';
+            return unit || 'piece';
+          };
+
+          const fixUnitForWholeProduce = (item) => {
+            const name = (item.name || '').toLowerCase();
+            const category = (item.category || '').toLowerCase();
+            const isWholeProduce = category === 'produce' || ['onion', 'garlic', 'tomato', 'potato', 'pepper', 'apple', 'banana', 'avocado', 'carrot', 'lemon', 'lime', 'orange'].some((n) => name.includes(n));
+            if (!isWholeProduce) return item;
+            const volumeUnits = ['cup', 'cups', 'ml', 'milliliter', 'milliliters', 'l', 'liter', 'liters', 'oz', 'ounce', 'ounces'];
+            if (volumeUnits.includes((item.unit || '').toLowerCase())) {
+              return { ...item, unit: 'piece', amount: item.amount && item.amount !== '0' ? item.amount : '1' };
+            }
+            if ((item.unit || '').toLowerCase() === 'each') {
+              return { ...item, unit: 'piece' };
+            }
+            return item;
+          };
+
           if (parsed.items && Array.isArray(parsed.items)) {
-            parsed.items = parsed.items.map(item => {
-              const rawCategory = (item.category || 'other').toLowerCase();
-              const mappedCategory = categoryMap[rawCategory] || 'other';
-              
-              return {
-                ...item,
-                amount: item.amount || '1',
-                unit: item.unit || 'piece',
-                category: mappedCategory,
-                priority: item.priority || 'medium',
-                purchased: item.purchased || false
-              };
-            });
+            parsed.items = parsed.items
+              .map(item => {
+                if (isPlaceholderName(item.name)) return null;
+                const rawCategory = (item.category || 'other').toLowerCase();
+                const mappedCategory = categoryMap[rawCategory] || 'other';
+                
+                return fixUnitForWholeProduce({
+                  ...item,
+                  amount: item.amount || '1',
+                  unit: normalizeUnit(item.unit),
+                  category: mappedCategory,
+                  priority: item.priority || 'medium',
+                  purchased: item.purchased || false
+                });
+              })
+              .filter(Boolean);
+            if (!parsed.items.length) {
+              throw new Error('Parsed items empty after placeholder filter');
+            }
           }
 
           return parsed;
@@ -565,19 +1332,25 @@ class GeminiService {
 
             // Validate and fix shopping list items
             if (parsed.items && Array.isArray(parsed.items)) {
-              parsed.items = parsed.items.map(item => {
-                const rawCategory = (item.category || 'other').toLowerCase();
-                const mappedCategory = categoryMap[rawCategory] || 'other';
-                
-                return {
-                  ...item,
-                  amount: item.amount || '1',
-                  unit: item.unit || 'piece',
-                  category: mappedCategory,
-                  priority: item.priority || 'medium',
-                  purchased: item.purchased || false
-                };
-              });
+              parsed.items = parsed.items
+                .map(item => {
+                  if (isPlaceholderName(item.name)) return null;
+                  const rawCategory = (item.category || 'other').toLowerCase();
+                  const mappedCategory = categoryMap[rawCategory] || 'other';
+                  
+                  return fixUnitForWholeProduce({
+                    ...item,
+                    amount: item.amount || '1',
+                    unit: normalizeUnit(item.unit),
+                    category: mappedCategory,
+                    priority: item.priority || 'medium',
+                    purchased: item.purchased || false
+                  });
+                })
+                .filter(Boolean);
+              if (!parsed.items.length) {
+                throw new Error('Parsed items empty after placeholder filter');
+              }
             }
 
             return parsed;
@@ -586,12 +1359,20 @@ class GeminiService {
             console.log('Raw JSON preview:', jsonString.substring(0, 500));
 
             // Try cleaning the JSON
-            let cleanedJson = jsonString
-              .replace(/,\s*}/g, '}')  // Remove trailing commas before }
-              .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-              .replace(/,\s*,/g, ',')  // Remove double commas
-              .replace(/\n\s*\n/g, '\n')  // Remove empty lines
-              .replace(/\s+/g, ' ');  // Normalize whitespace
+            const repairShoppingListJson = (raw) => {
+              if (!raw) return raw;
+              let cleaned = raw.replace(/```json|```/gi, '');
+              cleaned = cleaned.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+              cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']').replace(/,\s*,/g, ',');
+              cleaned = cleaned.replace(/"notes"\s*:\s*"[^"\n]*$/gm, '"notes": ""');
+              const lastBrace = cleaned.lastIndexOf('}');
+              if (lastBrace !== -1) {
+                cleaned = cleaned.slice(0, lastBrace + 1);
+              }
+              return cleaned;
+            };
+
+            const cleanedJson = repairShoppingListJson(jsonString);
 
             try {
               const cleanedParsed = JSON.parse(cleanedJson);
@@ -618,21 +1399,27 @@ class GeminiService {
               };
 
               // Validate and fix shopping list items
-              if (cleanedParsed.items && Array.isArray(cleanedParsed.items)) {
-                cleanedParsed.items = cleanedParsed.items.map(item => {
-                  const rawCategory = (item.category || 'other').toLowerCase();
-                  const mappedCategory = categoryMap[rawCategory] || 'other';
-                  
-                  return {
-                    ...item,
-                    amount: item.amount || '1',
-                    unit: item.unit || 'piece',
-                    category: mappedCategory,
-                    priority: item.priority || 'medium',
-                    purchased: item.purchased || false
-                  };
-                });
-              }
+                  if (cleanedParsed.items && Array.isArray(cleanedParsed.items)) {
+                    cleanedParsed.items = cleanedParsed.items
+                      .map(item => {
+                        if (isPlaceholderName(item.name)) return null;
+                        const rawCategory = (item.category || 'other').toLowerCase();
+                        const mappedCategory = categoryMap[rawCategory] || 'other';
+                        
+                        return fixUnitForWholeProduce({
+                          ...item,
+                          amount: item.amount || '1',
+                          unit: normalizeUnit(item.unit),
+                          category: mappedCategory,
+                          priority: item.priority || 'medium',
+                          purchased: item.purchased || false
+                        });
+                      })
+                      .filter(Boolean);
+                    if (!cleanedParsed.items.length) {
+                      throw new Error('Parsed items empty after placeholder filter');
+                    }
+                  }
 
               return cleanedParsed;
             } catch (cleanedParseError) {
@@ -655,6 +1442,7 @@ class GeminiService {
 
   extractIngredientsFromMealPlan(mealPlan = {}) {
     const ingredients = [];
+    const onionLog = [];
 
     if (!mealPlan || !Array.isArray(mealPlan.days)) {
       return ingredients;
@@ -674,6 +1462,10 @@ class GeminiService {
               const normalised = this.normalizeIngredient(ingredient);
               if (normalised) {
                 ingredients.push(normalised);
+                const lower = normalised.name.toLowerCase();
+                if (lower.includes('onion')) {
+                  onionLog.push({ source: 'recipe', recipe: recipe.name, ingredient: normalised });
+                }
               }
             });
           });
@@ -685,10 +1477,18 @@ class GeminiService {
           const normalised = this.normalizeIngredient(ingredient);
           if (normalised) {
             ingredients.push(normalised);
+            const lower = normalised.name.toLowerCase();
+            if (lower.includes('onion')) {
+              onionLog.push({ source: 'meal', meal: meal.type, ingredient: normalised });
+            }
           }
         });
       });
     });
+
+    if (onionLog.length && process.env.LOG_MEALPLAN === 'true') {
+      console.log('🧅 Onion entries collected for shopping list:', onionLog);
+    }
 
     return ingredients;
   }
@@ -876,10 +1676,17 @@ class GeminiService {
     const disliked = new Set((preferences.dislikedFoods || []).map(item => item.toLowerCase()));
     const allergies = new Set((preferences.allergies || []).map(item => item.toLowerCase()));
     const dietType = (preferences.dietType || 'balanced').toLowerCase();
+    const forcedCuisineRaw = (
+      preferences.cuisine ||
+      preferences.preferredCuisine ||
+      this.detectCuisineFromNotes(preferences.additionalNotes) ||
+      null
+    );
+    const forcedCuisine = forcedCuisineRaw ? forcedCuisineRaw.toLowerCase() : null;
 
     const blueprint = [];
     for (let dayIndex = 0; dayIndex < duration; dayIndex += 1) {
-      const cuisine = this.pickCuisine(random);
+      const cuisine = forcedCuisine || null;
       const meals = mealTypes.map(type => {
         const ingredients = this.pickIngredientsForMeal({
           mealType: type,
@@ -988,10 +1795,6 @@ class GeminiService {
     };
   }
 
-  pickCuisine(random) {
-    return CUISINE_OPTIONS[Math.floor(random() * CUISINE_OPTIONS.length)];
-  }
-
   buildFallbackMealPlan({ blueprint, preferences, duration, randomSeed }) {
     const today = new Date();
     const dietLabel = this.capitalize(preferences.dietType || 'balanced');
@@ -1000,7 +1803,7 @@ class GeminiService {
     const days = blueprint.map((blueprintDay, index) => {
       const date = new Date(today);
       date.setDate(today.getDate() + index);
-      const cuisine = blueprintDay.cuisine || this.pickCuisine(random);
+      const cuisine = blueprintDay.cuisine || 'Any';
       const cuisineName = this.capitalizeWords(cuisine);
       const cuisineSlug = cuisineName.toLowerCase().replace(/\s+/g, '-');
 
@@ -1112,17 +1915,76 @@ class GeminiService {
   consolidateIngredients(ingredients) {
     const consolidated = {};
 
+    const parseAmountNumber = (value, unit, name) => {
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+
+      const unicodeFractions = {
+        '¼': '1/4',
+        '½': '1/2',
+        '¾': '3/4',
+        '⅓': '1/3',
+        '⅔': '2/3'
+      };
+      const replaced = raw.replace(/[¼½¾⅓⅔]/g, (m) => unicodeFractions[m] || m);
+
+      // Handle patterns like "1 1/2"
+      const mixedMatch = replaced.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      if (mixedMatch) {
+        const whole = Number(mixedMatch[1]);
+        const num = Number(mixedMatch[2]);
+        const den = Number(mixedMatch[3]);
+        if (den) return whole + num / den;
+      }
+
+      // Handle simple fractions "3/4"
+      const fracMatch = replaced.match(/^(\d+)\/(\d+)$/);
+      if (fracMatch) {
+        const num = Number(fracMatch[1]);
+        const den = Number(fracMatch[2]);
+        if (den) return num / den;
+      }
+
+      // Heuristic: amounts like "34" or "12" for cups of onion likely mean 3/4 or 1/2
+      if (/^\d{2}$/.test(replaced) && unit && /cup/i.test(unit) && name && /onion/i.test(name)) {
+        const first = replaced[0];
+        const second = replaced[1];
+        if (['2', '4', '8'].includes(second)) {
+          const mapped = `${first}/${second}`;
+          const f = mapped.split('/');
+          const num = Number(f[0]);
+          const den = Number(f[1]);
+          if (den) return num / den;
+        }
+      }
+
+      const num = Number(replaced.replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(num) && num > 0) return num;
+      return null;
+    };
+
+    const normalizeName = (name) => {
+      if (!name) return '';
+      const base = String(name).toLowerCase().trim();
+      const parts = base.split(/\s+/).filter(Boolean);
+      // Remove common descriptors to reduce variants (e.g., red onion -> onion)
+      const remove = new Set(['red', 'yellow', 'white', 'small', 'large', 'medium', 'sweet']);
+      const filtered = parts.filter((p) => !remove.has(p));
+      return (filtered.length ? filtered.join(' ') : parts.join(' ')).trim();
+    };
+
     ingredients.forEach(ingredient => {
       if (!ingredient || !ingredient.name) {
         return;
       }
 
       const unitKey = (ingredient.unit || 'unit').toLowerCase();
-      const key = `${ingredient.name.toLowerCase()}__${unitKey}`;
+      const nameKey = normalizeName(ingredient.name);
+      const key = `${nameKey}__${unitKey}`;
 
       if (consolidated[key]) {
-        const existingAmount = parseFloat(consolidated[key].amount);
-        const newAmount = parseFloat(ingredient.amount);
+        const existingAmount = parseAmountNumber(consolidated[key].amount, unitKey, nameKey);
+        const newAmount = parseAmountNumber(ingredient.amount, unitKey, nameKey);
 
         if (!Number.isNaN(existingAmount) && !Number.isNaN(newAmount)) {
           consolidated[key].amount = (existingAmount + newAmount).toString();
@@ -1142,7 +2004,10 @@ class GeminiService {
           }
         }
       } else {
-        consolidated[key] = { ...ingredient };
+        consolidated[key] = {
+          ...ingredient,
+          name: this.capitalizeWords(nameKey || ingredient.name)
+        };
       }
     });
 
@@ -1182,9 +2047,7 @@ class GeminiService {
         }
       `;
 
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await this.callTextModel(prompt, 0.4);
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

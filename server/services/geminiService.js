@@ -14,22 +14,29 @@ const buildQueryVector = async (text) => {
 
   // 1) Nomic hosted embeddings (keeps dims compatible with nomic-embed-text: 768)
   if (process.env.NOMIC_API_KEY) {
+    const nomicPayload = {
+      model: process.env.NOMIC_EMBED_MODEL || 'nomic-embed-text-v1',
+      texts: [text.slice(0, 2000)],
+      long_text_mode: 'mean'
+    };
+    const nomicHeaders = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${process.env.NOMIC_API_KEY}`
+    };
     try {
-      const res = await fetch('https://api-atlas.nomic.ai/v1/embedding', {
+      const res = await fetch('https://api-atlas.nomic.ai/v1/embedding/text', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.NOMIC_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: process.env.NOMIC_EMBED_MODEL || 'nomic-embed-text-v1.5',
-          input: [text.slice(0, 2000)]
-        })
+        headers: nomicHeaders,
+        body: JSON.stringify(nomicPayload)
       });
       if (!res.ok) throw new Error(`Nomic embed failed ${res.status}`);
       const data = await res.json();
-      const vector = data?.data?.[0]?.embedding;
-      if (Array.isArray(vector)) return vector;
+      const vector = data?.embeddings?.[0];
+      if (Array.isArray(vector)) {
+        logMealplan('✅ Nomic embedding success', { model: nomicPayload.model, dims: vector.length });
+        return vector;
+      }
     } catch (err) {
       console.warn('⚠️ Nomic query embedding failed:', err.message);
     }

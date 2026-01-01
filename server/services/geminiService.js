@@ -341,12 +341,15 @@ class GeminiService {
         relaxedHits: results?.results?.length || 0
       });
     }
-    // If ES still returns nothing, synthesize a single fallback recipe via LLM to avoid empty candidates
+    // If ES still returns nothing, synthesize multiple fallback recipes via LLM to avoid empty candidates
     if (!results.results || results.results.length === 0) {
-      const fallbackRecipe = await this.generateLLMFallbackRecipe(mealType, preferences);
-      if (fallbackRecipe) {
-        results.results = [fallbackRecipe];
-        logMealplan(`✨ Using LLM fallback recipe for ${mealType}`, { id: fallbackRecipe.id, title: fallbackRecipe.title });
+      const fallbackRecipes = await this.generateLLMFallbackRecipes(mealType, preferences, 10);
+      if (fallbackRecipes?.length) {
+        results.results = fallbackRecipes;
+        logMealplan(`✨ Using LLM fallback recipes for ${mealType}`, {
+          count: fallbackRecipes.length,
+          titles: fallbackRecipes.map((r) => r.title)
+        });
       }
     }
     logMealplan(`⏱️ searchRecipes(${mealType}) took ${Date.now() - tSearchStart} ms`);
@@ -378,7 +381,19 @@ class GeminiService {
       return !loweredExcludes.some((term) => term && haystack.includes(term));
     };
 
-    const filtered = rawResults.filter(passesExcludes);
+    let filtered = rawResults.filter(passesExcludes);
+    // If all hits were filtered out, backfill with LLM recipes to avoid empty candidate lists
+    if (!filtered.length) {
+      console.log("generating LLM Fall back")
+      const llmFallbacks = await this.generateLLMFallbackRecipes(mealType, preferences, 4);
+      if (llmFallbacks.length) {
+        logMealplan(`✨ All ${mealType} hits filtered out; injecting LLM candidates`, {
+          count: llmFallbacks.length,
+          titles: llmFallbacks.map((r) => r.title)
+        });
+        filtered = llmFallbacks;
+      }
+    }
     const shuffled = this.shuffle(filtered);
     logMealplan(`🍽️ Candidates fetched for ${mealType}: ${shuffled.length} (filtered from ${rawResults.length})`, {
       totalMs: Date.now() - tStart,
@@ -431,6 +446,15 @@ class GeminiService {
       const nutrition = hasNutritionData(esNutrition)
         ? esNutrition
         : (hasNutritionData(llmNutrition) ? llmNutrition : esNutrition);
+      if (LOG_MEALPLAN && r.id && String(r.id).startsWith('llm-')) {
+        logMealplan('🧠 LLM candidate used', {
+          id: r.id,
+          title: r.title,
+          meal_type: r.meal_type,
+          calories: nutrition.calories,
+          protein: nutrition.protein
+        });
+      }
       return {
         id: r.id || r._id,
         title: r.title,
@@ -617,6 +641,24 @@ class GeminiService {
       const recentIds = []; // track recent recipe ids to avoid back-to-back repeats
       const usedRecipeIds = new Set(); // track all recipes used in the plan to avoid repeats
 
+      // Build candidate pools once per meal type, then reuse across days to reduce repeats
+      const padWithLLM = async (mealType, list, targetSize = 6) => {
+        const output = [...(list || [])];
+        while (output.length < targetSize) {
+          const remaining = targetSize - output.length;
+          const llmRecipes = await this.generateLLMFallbackRecipes(mealType, userPreferences, Math.min(remaining, 5));
+          if (!llmRecipes.length) break;
+          output.push(...llmRecipes);
+        }
+        return output;
+      };
+      const baseCandidateMap = {
+        breakfast: await padWithLLM('breakfast', await this.fetchCandidatesForMeal('breakfast', userPreferences, 16), 14),
+        lunch: await padWithLLM('lunch', await this.fetchCandidatesForMeal('lunch', userPreferences, 18), 16),
+        dinner: await padWithLLM('dinner', await this.fetchCandidatesForMeal('dinner', userPreferences, 18), 16),
+        snack: await padWithLLM('snack', await this.fetchCandidatesForMeal('snack', userPreferences, 10), 10)
+      };
+
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
         const dayBlueprint = ingredientBlueprint[dayIndex]; // Blueprint is an array, not object with .days
         
@@ -632,21 +674,17 @@ class GeminiService {
         currentDate.setDate(startDate.getDate() + dayIndex);
         const dateStr = currentDate.toISOString().split('T')[0];
         
-        // Fetch ES candidates per meal type to ground the LLM on existing recipes
-        const candidateMap = {
-          breakfast: await this.fetchCandidatesForMeal('breakfast', userPreferences, 10),
-          lunch: await this.fetchCandidatesForMeal('lunch', userPreferences, 12),
-          dinner: await this.fetchCandidatesForMeal('dinner', userPreferences, 12),
-          snack: await this.fetchCandidatesForMeal('snack', userPreferences, 6)
-        };
+        // Reuse pre-fetched candidates; filter out recently used and shuffle to avoid repeats
         const filterUsed = (list = []) => {
           const filtered = list.filter((r) => r?.id && !usedRecipeIds.has(String(r.id)));
           return filtered.length ? filtered : list;
         };
-        candidateMap.breakfast = filterUsed(candidateMap.breakfast);
-        candidateMap.lunch = filterUsed(candidateMap.lunch);
-        candidateMap.dinner = filterUsed(candidateMap.dinner);
-        candidateMap.snack = filterUsed(candidateMap.snack);
+        const candidateMap = {
+          breakfast: this.shuffle(filterUsed(baseCandidateMap.breakfast)),
+          lunch: this.shuffle(filterUsed(baseCandidateMap.lunch)),
+          dinner: this.shuffle(filterUsed(baseCandidateMap.dinner)),
+          snack: this.shuffle(filterUsed(baseCandidateMap.snack))
+        };
         const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
         logMealplan(`🔍 Candidate counts for day ${dayIndex + 1}`, counts);
         Object.entries(candidateMap).forEach(([mealType, list]) => {
@@ -1042,6 +1080,60 @@ class GeminiService {
     } catch (err) {
       logMealplan('⚠️ LLM fallback recipe failed:', err.message);
       return null;
+    }
+  }
+
+  async generateLLMFallbackRecipes(mealType, preferences = {}, count = 3) {
+    try {
+      const prompt = `
+      Return ONLY JSON (no markdown) for an array of ${count} recipes matching:
+      meal_type: ${mealType}
+      cuisine preference: ${preferences.cuisine || preferences.preferredCuisine || 'any'}
+      diet: ${preferences.dietType || 'any'}
+      allergies/dislikes: ${(preferences.allergies || []).join(', ')}; ${(preferences.dislikedFoods || []).join(', ')}
+      The JSON shape:
+      [
+        {
+          "id": "string",
+          "title": "string",
+          "cuisine": "string",
+          "meal_type": ["${mealType}"],
+          "nutrition": { "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sugar": number },
+          "ingredients_parsed": [ { "name": "string", "amount": "string", "unit": "string", "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other" } ],
+          "instructions": ["Step 1", "Step 2"]
+        }
+      ]
+      Use reasonable macro values (>0). Keep ingredients_parsed to 8-14 items.
+      `;
+      const raw = await this.callTextModel(prompt, 0.4);
+      const parseLooseArray = (text) => {
+        if (!text) return null;
+        let body = text.replace(/```json|```/gi, '').trim();
+        const arrayMatch = body.match(/\[[\s\S]*\]/);
+        if (arrayMatch) body = arrayMatch[0];
+        try {
+          const parsed = JSON.parse(body);
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && typeof parsed === 'object') return [parsed];
+        } catch {
+          return null;
+        }
+        return null;
+      };
+      const arr = parseLooseArray(raw);
+      if (!Array.isArray(arr)) {
+        logMealplan('⚠️ LLM batch returned non-array', { mealType, preview: raw?.slice(0, 200) });
+        return [];
+      }
+      const mapped = arr.map((r) => ({
+        ...r,
+        id: r.id || `llm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType]
+      }));
+      return mapped;
+    } catch (err) {
+      logMealplan('⚠️ LLM batch fallback recipes failed:', err.message);
+      return [];
     }
   }
 

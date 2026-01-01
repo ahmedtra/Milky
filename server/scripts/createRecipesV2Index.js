@@ -35,8 +35,6 @@ const client = new Client({ node: defaultNode, auth });
 
 const mapping = {
   settings: {
-    number_of_shards: 1,
-    number_of_replicas: 0,
     analysis: {
       analyzer: {
         recipe_text: {
@@ -72,6 +70,8 @@ const mapping = {
       prep_time_min: { type: 'integer' },
       cook_time_min: { type: 'integer' },
       total_time_min: { type: 'integer' },
+      enriched: { type: 'boolean' },
+      enriched_at: { type: 'date' },
       nutrition: {
         properties: {
           calories: { type: 'float' },

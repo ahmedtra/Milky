@@ -52,6 +52,8 @@ const mapSearchHitToPlanRecipe = (hit) => {
   addNumber('fat', nSrc.fat_g, nSrc.fat_grams, nSrc.fat);
   addNumber('fiber', nSrc.fiber_g, nSrc.fiber_grams, nSrc.fiber);
   addNumber('sugar', nSrc.sugar_g, nSrc.sugar_grams, nSrc.sugar);
+  addNumber('fiber', nSrc.fiber_g, nSrc.fiber_grams, nSrc.fiber);
+  addNumber('sugar', nSrc.sugar_g, nSrc.sugar_grams, nSrc.sugar);
 
   return {
     externalId: hit.id,

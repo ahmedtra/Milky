@@ -6,6 +6,9 @@ const { groqChat } = require('./groqClient');
 const EMBED_HOST = process.env.EMBEDDING_HOST || process.env.OLLAMA_HOST || 'http://localhost:11434';
 const EMBED_MODEL = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
 const LOG_MEALPLAN = process.env.LOG_MEALPLAN === 'true';
+const logMealplan = (...args) => {
+  if (LOG_MEALPLAN) console.log(...args);
+};
 const buildQueryVector = async (text) => {
   if (!text) return null;
   try {
@@ -185,7 +188,7 @@ class GeminiService {
     }
 
     // Log active provider once at startup to aid debugging of latency and model selection
-    console.log(
+    logMealplan(
       `🤖 Meal generation provider: ${this.provider} ` +
       (this.provider === 'gemini'
         ? `(model=${this.geminiModel})`
@@ -265,23 +268,33 @@ class GeminiService {
     const randomSeed = Date.now() + Math.floor(Math.random() * 1_000_000);
     const tSearchStart = Date.now();
     let results = await searchRecipes(filters, { size, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+    // Attach nutrition snapshot so downstream consumers don't lose macros
+    if (results?.results?.length) {
+      results.results = results.results.map((r) => ({
+        ...r,
+        nutrition: this.extractNutritionFromSource(r)
+      }));
+    }
     // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
     if ((!results.results || results.results.length === 0) && filters.diet_tags?.length) {
       const relaxedFilters = { ...filters };
       delete relaxedFilters.diet_tags;
       delete relaxedFilters.dietary_tags;
       results = await searchRecipes(relaxedFilters, { size, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-      if (LOG_SEARCH || LOG_MEALPLAN) {
-        console.log(`⚠️ ${mealType} search empty with diet_tags, retried without diet tags`, {
-          originalDietTags: filters.diet_tags,
-          relaxedHits: results?.results?.length || 0
-        });
+      logMealplan(`⚠️ ${mealType} search empty with diet_tags, retried without diet tags`, {
+        originalDietTags: filters.diet_tags,
+        relaxedHits: results?.results?.length || 0
+      });
+    }
+    // If ES still returns nothing, synthesize a single fallback recipe via LLM to avoid empty candidates
+    if (!results.results || results.results.length === 0) {
+      const fallbackRecipe = await this.generateLLMFallbackRecipe(mealType, preferences);
+      if (fallbackRecipe) {
+        results.results = [fallbackRecipe];
+        logMealplan(`✨ Using LLM fallback recipe for ${mealType}`, { id: fallbackRecipe.id, title: fallbackRecipe.title });
       }
     }
-
-    if (LOG_SEARCH || LOG_MEALPLAN) {
-      console.log(`⏱️ searchRecipes(${mealType}) took ${Date.now() - tSearchStart} ms`);
-    }
+    logMealplan(`⏱️ searchRecipes(${mealType}) took ${Date.now() - tSearchStart} ms`);
     searchMs = Date.now() - tSearchStart;
 
     // Shuffle hits locally to avoid stable ordering when the pool is small
@@ -309,36 +322,80 @@ class GeminiService {
         .toLowerCase();
       return !loweredExcludes.some((term) => term && haystack.includes(term));
     };
-    console.log(passesExcludes)
+
     const filtered = rawResults.filter(passesExcludes);
     const shuffled = this.shuffle(filtered);
-    if (LOG_SEARCH || LOG_MEALPLAN) {
-      const preview = shuffled.slice(0, 5).map((r) => ({
+    logMealplan(`🍽️ Candidates fetched for ${mealType}: ${shuffled.length} (filtered from ${rawResults.length})`, {
+      totalMs: Date.now() - tStart,
+      filterMs,
+      vectorMs,
+      searchMs
+    });
+    // Light-weight peek to trace what we're returning (id/title/macros/ingredient coverage)
+    logMealplan('🍽️ Candidates preview', shuffled.slice(0, 5).map((c) => ({
+      id: c.id || c._id,
+      title: c.title,
+      calories: c.nutrition?.calories ?? c.calories,
+      protein: c.nutrition?.protein ?? c.protein ?? c.protein_grams ?? c.protein_g,
+      carbs: c.nutrition?.carbs,
+      fat: c.nutrition?.fat,
+      nutrition: c.nutrition,
+      hasParsedIngredients: Array.isArray(c.ingredients_parsed) && c.ingredients_parsed.length,
+      hasRawIngredients: typeof c.ingredients_raw === 'string' && !!c.ingredients_raw.trim()
+    })));
+
+    const buildNutrition = (src) => {
+      const nutrition = {};
+      const addNumber = (key, ...candidates) => {
+        for (const val of candidates) {
+          const num = Number(val);
+          if (Number.isFinite(num)) {
+            nutrition[key] = num;
+            return;
+          }
+        }
+      };
+      const nSrc = src?.nutrition || src || {};
+      addNumber('calories', nSrc.calories);
+      addNumber('protein', nSrc.protein_g, nSrc.protein_grams, nSrc.protein);
+      addNumber('carbs', nSrc.carbs_g, nSrc.carbs_grams, nSrc.carbs);
+      addNumber('fat', nSrc.fat_g, nSrc.fat_grams, nSrc.fat);
+      addNumber('fiber', nSrc.fiber_g, nSrc.fiber_grams, nSrc.fiber);
+      addNumber('sugar', nSrc.sugar_g, nSrc.sugar_grams, nSrc.sugar);
+      return nutrition;
+    };
+
+    const hasNutritionData = (n) => {
+      if (!n || typeof n !== 'object') return false;
+      return ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'].some((k) => Number(n[k]) > 0);
+    };
+
+    return shuffled.map(r => {
+      const esNutrition = buildNutrition(r);
+      const llmNutrition = r.nutrition;
+      const nutrition = hasNutritionData(esNutrition)
+        ? esNutrition
+        : (hasNutritionData(llmNutrition) ? llmNutrition : esNutrition);
+      return {
         id: r.id || r._id,
         title: r.title,
         cuisine: r.cuisine,
         meal_type: r.meal_type,
-        calories: r.nutrition?.calories || r.calories,
-        time: r.total_time_min || r.total_time_minutes
-      }));
-      console.log(`🍽️ Candidates for ${mealType}:`, preview);
-      console.log(
-        `⏱️ fetchCandidates(${mealType}) total ${Date.now() - tStart} ms (filters ${filterMs} ms, vector ${vectorMs} ms, search ${searchMs} ms), hits=${shuffled.length} (filtered from ${rawResults.length})`
-      );
-    }
-    return shuffled.map(r => ({
-      id: r.id || r._id,
-      title: r.title,
-      cuisine: r.cuisine,
-      meal_type: r.meal_type,
-      diet_tags: r.dietary_tags || r.diet_tags || [],
-      total_time_min: r.total_time_min || r.total_time_minutes || null,
-      calories: r.nutrition?.calories || r.calories || null,
-      url: r.url,
-      ingredients: r.ingredients_norm || r.ingredients_raw || [],
-      ingredients_parsed: r.ingredients_parsed || [],
-      instructions: r.instructions || []
-    }));
+        diet_tags: r.dietary_tags || r.diet_tags || [],
+        total_time_min: r.total_time_min || r.total_time_minutes || null,
+        calories: nutrition.calories ?? r.calories ?? null,
+        protein: nutrition.protein ?? null,
+        carbs: nutrition.carbs ?? null,
+        fat: nutrition.fat ?? null,
+        fiber: nutrition.fiber ?? null,
+        sugar: nutrition.sugar ?? null,
+        nutrition: Object.keys(nutrition).length ? nutrition : null,
+        url: r.url,
+        ingredients: r.ingredients_norm || r.ingredients_raw || [],
+        ingredients_parsed: r.ingredients_parsed || [],
+        instructions: r.instructions || []
+      };
+    });
   }
 
   formatCandidatesForPrompt(candidateMap) {
@@ -514,9 +571,7 @@ class GeminiService {
           continue;
         }
         
-        if (LOG_MEALPLAN) {
-          console.log(`📅 Generating day ${dayIndex + 1}/${duration} (${dayBlueprint.cuisine || 'any'} cuisine)`);
-        }
+        logMealplan(`📅 Generating day ${dayIndex + 1}/${duration} (${dayBlueprint.cuisine || 'any'} cuisine)`);
         
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + dayIndex);
@@ -537,14 +592,12 @@ class GeminiService {
         candidateMap.lunch = filterUsed(candidateMap.lunch);
         candidateMap.dinner = filterUsed(candidateMap.dinner);
         candidateMap.snack = filterUsed(candidateMap.snack);
-        if (LOG_MEALPLAN) {
-          const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
-          console.log(`🔍 Candidate counts:`, counts);
-          Object.entries(candidateMap).forEach(([mealType, list]) => {
-            const sample = (list || []).slice(0, 3).map(r => `${r.title || 'untitled'} (${r.id})`);
-            console.log(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
-          });
-        }
+        const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
+        logMealplan(`🔍 Candidate counts for day ${dayIndex + 1}`, counts);
+        Object.entries(candidateMap).forEach(([mealType, list]) => {
+          const sample = (list || []).slice(0, 3).map(r => `${r.title || 'untitled'} (${r.id})`);
+          logMealplan(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
+        });
         const candidateText = this.formatCandidatesForPrompt(candidateMap);
         const dayPrompt = `
         Create ONE DAY of meals for date ${dateStr}.
@@ -671,9 +724,9 @@ class GeminiService {
 
         try {
           const tLLMStart = Date.now();
-          if (LOG_MEALPLAN) console.log(`🧠 Calling LLM for day ${dayIndex + 1}/${duration}...`);
+          logMealplan(`🧠 Calling LLM for day ${dayIndex + 1}/${duration}...`);
           const text = await this.callTextModel(dayPrompt, 0.8);
-          if (LOG_MEALPLAN) console.log(`🧠 LLM response for day ${dayIndex + 1} in ${Date.now() - tLLMStart} ms (length ${text?.length || 0})`);
+          logMealplan(`🧠 LLM response for day ${dayIndex + 1} in ${Date.now() - tLLMStart} ms (length ${text?.length || 0})`);
 
           // Parse the day's JSON with a few tolerant repairs (handles trailing commas)
           const tryParse = (raw) => {
@@ -731,9 +784,7 @@ class GeminiService {
       }
 
       // Generation complete
-      if (LOG_MEALPLAN) {
-        console.log(`✅ Meal plan generation complete: ${days.length} days`);
-      }
+      logMealplan(`✅ Meal plan generation complete: ${days.length} days`);
       return {
         title: `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`,
         description: `A ${duration}-day meal plan tailored to your preferences`,
@@ -772,9 +823,7 @@ class GeminiService {
           try {
             const fetched = await getRecipeById(c.id);
             if (fetched) {
-              if (LOG_MEALPLAN) {
-                console.log(`📦 Hydrated candidate ${c.id} for ${mealType} with ingredients from ES`);
-              }
+              logMealplan(`📦 Hydrated candidate ${c.id} for ${mealType} with ingredients from ES`);
               const merged = { ...c, ...fetched };
               hydrated.push(merged);
               map.set(String(c.id), merged);
@@ -790,21 +839,17 @@ class GeminiService {
       candidatesByMeal[mealType] = { list: hydrated, map };
     }
 
-    if (LOG_MEALPLAN) {
-      console.log('🧭 enforceCandidateRecipes start', {
-        meals: dayData.meals.length,
-        candidateTypes: Object.keys(candidateMap)
-      });
-    }
+    logMealplan('🧭 enforceCandidateRecipes start', {
+      meals: dayData.meals.length,
+      candidateTypes: Object.keys(candidateMap)
+    });
 
     dayData.meals = dayData.meals.map((meal) => {
       const mealType = (meal?.type || '').toLowerCase();
       const bucket = candidatesByMeal[mealType];
       if (!bucket || !bucket.list?.length) {
         // No candidates for this meal type: drop non-grounded recipes
-        if (LOG_MEALPLAN) {
-          console.warn(`⚠️ No candidates for meal type "${mealType}", clearing recipes`);
-        }
+        logMealplan(`⚠️ No candidates for meal type "${mealType}", clearing recipes`);
         return { ...meal, recipes: [] };
       }
 
@@ -816,17 +861,10 @@ class GeminiService {
           if (!ingredients.length && Array.isArray(r.ingredients)) {
             ingredients = r.ingredients;
           }
-          const nutrition = Object.keys(this.extractNutritionFromSource(src)).length
-            ? this.extractNutritionFromSource(src)
-            : r.nutrition;
-          if (LOG_MEALPLAN) {
-            console.log('🔧 fixRecipe: matched candidate', {
-              mealType,
-              recipeId: r.id,
-              candidateIngredients: ingredients,
-              nutrition
-            });
-          }
+          const extracted = this.extractNutritionFromSource(src);
+          const nutrition = this.hasNutritionData(extracted)
+            ? extracted
+            : (this.hasNutritionData(r.nutrition) ? r.nutrition : extracted);
           return {
             ...r,
             id: src.id,
@@ -843,17 +881,10 @@ class GeminiService {
         if (!ingredients.length && Array.isArray(r?.ingredients)) {
           ingredients = r.ingredients;
         }
-        const nutrition = Object.keys(this.extractNutritionFromSource(first)).length
-          ? this.extractNutritionFromSource(first)
-          : r?.nutrition;
-        if (LOG_MEALPLAN) {
-          console.log('🔄 fixRecipe: replacing with candidate', {
-            mealType,
-            chosenId: first?.id || null,
-            ingredients,
-            nutrition
-          });
-        }
+        const extracted = this.extractNutritionFromSource(first);
+        const nutrition = this.hasNutritionData(extracted)
+          ? extracted
+          : (this.hasNutritionData(r?.nutrition) ? r?.nutrition : extracted);
         const base = {
           id: first?.id || null,
           name: first?.title || r?.name || 'Recipe',
@@ -870,13 +901,13 @@ class GeminiService {
         ? meal.recipes.map(fixRecipe)
         : [fixRecipe(null)];
 
-      return { ...meal, recipes };
+      const totalNutrition = this.sumRecipeNutrition(recipes);
+
+      return { ...meal, recipes, totalNutrition };
     });
 
-    if (LOG_MEALPLAN) {
-      const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);
-      console.log(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`);
-    }
+    const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);
+    logMealplan(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`);
   }
 
   /**
@@ -924,11 +955,46 @@ class GeminiService {
   }
 
   /**
+   * Generate a single recipe via LLM when ES returns no candidates.
+   */
+  async generateLLMFallbackRecipe(mealType, preferences = {}) {
+    try {
+      const prompt = `
+      Return ONLY JSON (no markdown) for ONE recipe matching:
+      meal_type: ${mealType}
+      cuisine preference: ${preferences.cuisine || preferences.preferredCuisine || 'any'}
+      diet: ${preferences.dietType || 'any'}
+      allergies/dislikes: ${(preferences.allergies || []).join(', ')}; ${(preferences.dislikedFoods || []).join(', ')}
+      The JSON shape:
+      {
+        "id": "string",
+        "title": "string",
+        "cuisine": "string",
+        "meal_type": ["${mealType}"],
+        "nutrition": { "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sugar": number },
+        "ingredients_parsed": [ { "name": "string", "amount": "string", "unit": "string", "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other" } ],
+        "instructions": ["Step 1", "Step 2"]
+      }
+      Use reasonable macro values (>0). Keep ingredients_parsed to 8-14 items.
+      `;
+      const raw = await this.callTextModel(prompt, 0.4);
+      const cleaned = raw.replace(/```json|```/gi, '');
+      const recipe = JSON.parse(cleaned);
+      if (!recipe) return null;
+      recipe.id = recipe.id || `llm-${Date.now()}`;
+      recipe.meal_type = Array.isArray(recipe.meal_type) ? recipe.meal_type : [mealType];
+      return recipe;
+    } catch (err) {
+      logMealplan('⚠️ LLM fallback recipe failed:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Build a simple ingredient list from the ES source: prefer structured ingredients,
    * otherwise split ingredients_raw into separate items.
    */
   parseIngredientsFromSource(src = {}) {
-    console.log('parseIngredientsFromSource input:', src);
     // Prefer fully parsed ingredients from ES; fallback to ingredients_raw, ingredients_norm, then structured ingredients
     if (Array.isArray(src.ingredients_parsed) && src.ingredients_parsed.length) {
       return src.ingredients_parsed.map((ing) => ({
@@ -1011,21 +1077,57 @@ class GeminiService {
     };
   }
 
+  hasNutritionData(n) {
+    if (!n || typeof n !== 'object') return false;
+    const required = ['calories', 'protein', 'carbs', 'fat'];
+    return required.every((k) => Number(n[k]) > 0);
+  }
+
   extractNutritionFromSource(src = {}) {
     const nutrition = {};
-    const addNumber = (key, value) => {
-      const num = Number(value);
-      if (Number.isFinite(num)) {
-        nutrition[key] = num;
+    const parseNumeric = (val) => {
+      if (val === undefined || val === null) return null;
+      if (typeof val === 'number' && Number.isFinite(val)) return val;
+      if (typeof val === 'string') {
+        const match = val.match(/-?\\d+(?:\\.\\d+)?/);
+        if (match) {
+          const num = Number(match[0]);
+          if (Number.isFinite(num)) return num;
+        }
+      }
+      return null;
+    };
+    const addNumber = (key, ...candidates) => {
+      for (const val of candidates) {
+        const num = parseNumeric(val);
+        if (num !== null) {
+          nutrition[key] = num;
+          return;
+        }
       }
     };
-    addNumber('calories', src.calories);
-    addNumber('protein', src.protein_grams || src.protein_g || src.protein);
-    addNumber('carbs', src.carbs_grams || src.carbs_g || src.carbs);
-    addNumber('fat', src.fat_grams || src.fat_g || src.fat);
-    addNumber('fiber', src.fiber_grams || src.fiber_g || src.fiber);
-    addNumber('sugar', src.sugar_grams || src.sugar_g || src.sugar);
+    const nSrc = src.nutrition || {};
+    addNumber('calories', src.calories, nSrc.calories);
+    addNumber('protein', src.protein_grams, src.protein_g, src.protein, nSrc.protein_g, nSrc.protein);
+    addNumber('carbs', src.carbs_grams, src.carbs_g, src.carbs, nSrc.carbs_g, nSrc.carbs);
+    addNumber('fat', src.fat_grams, src.fat_g, src.fat, nSrc.fat_g, nSrc.fat);
+    addNumber('fiber', src.fiber_grams, src.fiber_g, src.fiber, nSrc.fiber_g, nSrc.fiber);
+    addNumber('sugar', src.sugar_grams, src.sugar_g, src.sugar, nSrc.sugar_g, nSrc.sugar);
     return nutrition;
+  }
+
+  sumRecipeNutrition(recipes = []) {
+    const total = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 };
+    recipes.forEach((r) => {
+      const n = r?.nutrition || {};
+      total.calories += Number(n.calories) || 0;
+      total.protein += Number(n.protein) || 0;
+      total.carbs += Number(n.carbs) || 0;
+      total.fat += Number(n.fat) || 0;
+      total.fiber += Number(n.fiber) || 0;
+      total.sugar += Number(n.sugar) || 0;
+    });
+    return total;
   }
 
   async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null) {
@@ -1272,7 +1374,7 @@ class GeminiService {
 
           return parsed;
         } catch (directParseError) {
-          console.log('❌ Direct parsing failed, trying extraction methods...');
+          logMealplan('❌ Direct parsing failed, trying extraction methods...');
         }
 
         // Try multiple JSON extraction methods
@@ -1282,7 +1384,7 @@ class GeminiService {
         const markdownMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
         if (markdownMatch) {
           jsonString = markdownMatch[1].trim();
-          console.log('📝 Found JSON in markdown code block, length:', jsonString.length);
+          logMealplan('📝 Found JSON in markdown code block', { length: jsonString.length });
         }
 
         // Method 2: Look for JSON between curly braces
@@ -1290,7 +1392,7 @@ class GeminiService {
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             jsonString = jsonMatch[0];
-            console.log('🔍 Found JSON match, length:', jsonString.length);
+            logMealplan('🔍 Found JSON match', { length: jsonString.length });
           }
         }
 
@@ -1300,7 +1402,7 @@ class GeminiService {
           const lastIndex = text.lastIndexOf('}');
           if (startIndex !== -1 && lastIndex !== -1 && lastIndex > startIndex) {
             jsonString = text.substring(startIndex, lastIndex + 1);
-            console.log('📍 Found JSON by position, length:', jsonString.length);
+            logMealplan('📍 Found JSON by position', { length: jsonString.length });
           }
         }
 
@@ -1308,7 +1410,7 @@ class GeminiService {
           // Try parsing the JSON as-is first
           try {
             const parsed = JSON.parse(jsonString);
-            console.log('✅ Successfully parsed shopping list!');
+            logMealplan('✅ Successfully parsed shopping list');
 
             // Category mapping function
             const categoryMap = {
@@ -1356,7 +1458,7 @@ class GeminiService {
             return parsed;
           } catch (parseError) {
             console.error('❌ JSON parsing failed:', parseError.message);
-            console.log('Raw JSON preview:', jsonString.substring(0, 500));
+            logMealplan('Raw JSON preview:', jsonString.substring(0, 500));
 
             // Try cleaning the JSON
             const repairShoppingListJson = (raw) => {
@@ -1376,7 +1478,7 @@ class GeminiService {
 
             try {
               const cleanedParsed = JSON.parse(cleanedJson);
-              console.log('✅ Successfully parsed with cleaning!');
+              logMealplan('✅ Successfully parsed with cleaning!');
 
               // Category mapping function
               const categoryMap = {
@@ -1487,7 +1589,7 @@ class GeminiService {
     });
 
     if (onionLog.length && process.env.LOG_MEALPLAN === 'true') {
-      console.log('🧅 Onion entries collected for shopping list:', onionLog);
+      logMealplan('🧅 Onion entries collected for shopping list:', onionLog);
     }
 
     return ingredients;

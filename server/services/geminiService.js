@@ -11,6 +11,54 @@ const logMealplan = (...args) => {
 };
 const buildQueryVector = async (text) => {
   if (!text) return null;
+
+  // 1) Nomic hosted embeddings (keeps dims compatible with nomic-embed-text: 768)
+  if (process.env.NOMIC_API_KEY) {
+    try {
+      const res = await fetch('https://api-atlas.nomic.ai/v1/embedding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NOMIC_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: process.env.NOMIC_EMBED_MODEL || 'nomic-embed-text-v1.5',
+          input: [text.slice(0, 2000)]
+        })
+      });
+      if (!res.ok) throw new Error(`Nomic embed failed ${res.status}`);
+      const data = await res.json();
+      const vector = data?.data?.[0]?.embedding;
+      if (Array.isArray(vector)) return vector;
+    } catch (err) {
+      console.warn('⚠️ Nomic query embedding failed:', err.message);
+    }
+  }
+
+  // 2) OpenAI embeddings if available (note: dims differ, requires matching index)
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          input: text.slice(0, 2000),
+          model: process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small'
+        })
+      });
+      if (!res.ok) throw new Error(`OpenAI embed failed ${res.status}`);
+      const data = await res.json();
+      const vector = data?.data?.[0]?.embedding;
+      if (Array.isArray(vector)) return vector;
+    } catch (err) {
+      console.warn('⚠️ OpenAI query embedding failed:', err.message);
+    }
+  }
+
+  // 3) Local/hosted Ollama embedding path
   try {
     const res = await fetch(`${EMBED_HOST}/api/embeddings`, {
       method: 'POST',

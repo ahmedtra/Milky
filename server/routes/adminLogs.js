@@ -9,7 +9,15 @@ router.get('/', auth, isAdmin, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const logs = await Log.find({ createdAt: { $gte: since } })
+    const userFilter = req.query.user ? String(req.query.user).trim() : '';
+    const query = { createdAt: { $gte: since } };
+    if (userFilter) {
+      query.$or = [
+        { 'meta.userEmail': { $regex: userFilter, $options: 'i' } },
+        { 'meta.userName': { $regex: userFilter, $options: 'i' } }
+      ];
+    }
+    const logs = await Log.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();

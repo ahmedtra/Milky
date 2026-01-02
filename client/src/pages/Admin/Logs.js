@@ -36,6 +36,24 @@ const Button = styled.button`
   }
 `;
 
+const FilterRow = styled.div`
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+`;
+
+const Input = styled.input`
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid ${props => props.theme.colors.gray[300]};
+  min-width: 220px;
+  &:focus {
+    border-color: ${props => props.theme.colors.primary[400]};
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+`;
+
 const LogList = styled.div`
   border: 1px solid ${props => props.theme.colors.gray[200]};
   border-radius: 12px;
@@ -87,11 +105,17 @@ const AdminLogs = () => {
   const { isAdmin } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [userFilter, setUserFilter] = useState('');
 
   const loadLogs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/admin/logs?limit=200');
+      const res = await axios.get('/api/admin/logs', {
+        params: {
+          limit: 200,
+          user: userFilter || undefined
+        }
+      });
       setLogs(res.data.logs || []);
     } catch (err) {
       console.error('Failed to fetch logs', err);
@@ -112,10 +136,17 @@ const AdminLogs = () => {
     <Wrapper>
       <Header>
         <Title>Admin Logs (last 7 days)</Title>
-        <Button onClick={loadLogs} disabled={loading}>
-          <RefreshCw size={16} />
-          {loading ? 'Loading...' : 'Refresh'}
-        </Button>
+        <FilterRow>
+          <Input
+            placeholder="Filter by username or email"
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+          />
+          <Button onClick={loadLogs} disabled={loading}>
+            <RefreshCw size={16} />
+            {loading ? 'Loading...' : 'Refresh'}
+          </Button>
+        </FilterRow>
       </Header>
       <LogList>
         {logs.map((log) => (

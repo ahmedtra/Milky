@@ -85,7 +85,7 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
     endDate.setDate(startDate.getDate() + duration - 1);
 
     // Sanitize meal plan data to ensure it meets schema requirements
-    const validCategories = ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'broth', 'other'];
+    const validCategories = ['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'broth', 'herb', 'other'];
     const sanitizeIngredient = (ing, idx) => {
       if (!ing) return null;
       const nameCandidate = ing.name || ing.item || ing.ingredient || '';
@@ -93,7 +93,8 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       const hasAmount = ing.amount && String(ing.amount).trim().length > 0;
       const amount = hasAmount ? String(ing.amount).trim() : '1';
       const unit = ing?.unit || ing?.measure || 'unit';
-      const category = validCategories.includes(ing?.category) ? ing.category : 'other';
+      const cat = String(ing?.category || '').toLowerCase();
+      const category = validCategories.includes(cat) ? cat : 'other';
       return { ...ing, name, amount, unit, category };
     };
     const allowedDifficulties = ['easy', 'medium', 'hard'];

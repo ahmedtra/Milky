@@ -1348,6 +1348,14 @@ class GeminiService {
         };
         return { ...meal, recipes: [mapped], totalNutrition: this.sumRecipeNutrition([mapped]) };
       });
+      logMealplan('✅ sanityCheckDayPlan replacements applied', {
+        replacements: parsed?.replacements || [],
+        meals: dayData.meals.map((m) => ({
+          type: m.type,
+          id: m.recipes?.[0]?.id,
+          title: m.recipes?.[0]?.name || m.recipes?.[0]?.title
+        }))
+      });
     } catch (err) {
       logMealplan('⚠️ sanityCheckDayPlan failed', err.message);
     }

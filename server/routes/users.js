@@ -64,6 +64,7 @@ router.post('/register', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        isAdmin: user.isAdmin,
         preferences: user.preferences,
         profile: user.profile,
         telegramChatId: user.telegramChatId
@@ -121,6 +122,7 @@ router.post('/login', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        isAdmin: user.isAdmin,
         preferences: user.preferences,
         profile: user.profile,
         telegramChatId: user.telegramChatId
@@ -140,6 +142,7 @@ router.get('/me', auth, async (req, res) => {
         id: req.user._id,
         username: req.user.username,
         email: req.user.email,
+        isAdmin: req.user.isAdmin,
         preferences: req.user.preferences,
         profile: req.user.profile,
         telegramChatId: req.user.telegramChatId
@@ -258,7 +261,6 @@ router.delete('/unlink-telegram', auth, async (req, res) => {
 });
 
 module.exports = router;
-
 
 
 

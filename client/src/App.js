@@ -21,6 +21,7 @@ import ShoppingListDetail from './pages/ShoppingLists/ShoppingListDetail';
 import Settings from './pages/Settings/Settings';
 import Profile from './pages/Profile/Profile';
 import Stats from './pages/Stats/Stats';
+import AdminLogs from './pages/Admin/Logs';
 
 // Hooks
 import { useAuth } from './contexts/AuthContext';
@@ -278,6 +279,20 @@ function App() {
                             transition={pageTransition}
                           >
                             <Stats />
+                          </PageContainer>
+                        } 
+                      />
+                      <Route 
+                        path="/admin/logs" 
+                        element={
+                          <PageContainer
+                            initial="initial"
+                            animate="in"
+                            exit="out"
+                            variants={pageVariants}
+                            transition={pageTransition}
+                          >
+                            <AdminLogs />
                           </PageContainer>
                         } 
                       />

@@ -1,5 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { searchRecipes, getRecipeById } = require('./recipeSearch/searchService');
+const { logEvent } = require('../utils/logger');
 const { groqChat } = require('./groqClient');
 // Node 18+ has global fetch; no import required.
 
@@ -631,7 +632,7 @@ class GeminiService {
     }
   }
 
-  async generateMealPlan(userPreferences, duration = 7) {
+  async generateMealPlan(userPreferences, duration = 7, user = null) {
     const randomSeed = Math.floor(Math.random() * 1_000_000_000);
 
     const ingredientBlueprint = this.buildIngredientBlueprint({
@@ -706,6 +707,21 @@ class GeminiService {
         });
         const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
         logMealplan(`🔍 Candidate counts for day ${dayIndex + 1}`, counts);
+        logEvent({
+          level: 'info',
+          message: 'mealPlan:candidates',
+          meta: {
+            day: dayIndex + 1,
+            counts,
+            candidates: {
+              breakfast: (candidateMap.breakfast || []).map((c) => ({ id: c.id, title: c.title })),
+              lunch: (candidateMap.lunch || []).map((c) => ({ id: c.id, title: c.title })),
+              dinner: (candidateMap.dinner || []).map((c) => ({ id: c.id, title: c.title })),
+              snack: (candidateMap.snack || []).map((c) => ({ id: c.id, title: c.title }))
+            }
+          },
+          user
+        }).catch(() => {});
         Object.entries(candidateMap).forEach(([mealType, list]) => {
           const sample = (list || []).slice(0, 3).map(r => `${r.title || 'untitled'} (${r.id})`);
           logMealplan(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
@@ -882,6 +898,8 @@ class GeminiService {
               return { ...meal, recipes: first };
             });
             this.dedupeDayRecipes(dayData, recentIds, usedRecipeIds);
+            // Sanity check with LLM after dedupe to catch off-theme meals and propose replacements
+            await this.sanityCheckDayPlan(dayData, candidateMap);
             // Track ids for next day dedupe (keep last day’s ids)
             const idsToday = this.collectRecipeIds(dayData);
             recentIds.splice(0, recentIds.length, ...idsToday);
@@ -1267,6 +1285,72 @@ class GeminiService {
     if (!n || typeof n !== 'object') return false;
     const required = ['calories', 'protein', 'carbs', 'fat'];
     return required.every((k) => Number(n[k]) > 0);
+  }
+
+  /**
+   * Ask LLM to sanity-check a day's meals and suggest replacements by candidate id.
+   */
+  async sanityCheckDayPlan(dayData, candidateMap) {
+    try {
+      if (!dayData?.meals?.length) return;
+    const summary = dayData.meals.map((m) => {
+      const r = m.recipes?.[0] || {};
+      return {
+        type: m.type,
+        id: r.id || r.externalId || null,
+        title: r.name || r.title,
+        calories: r.nutrition?.calories || r.calories,
+        protein: r.nutrition?.protein || r.protein
+      };
+    });
+      const candidatesByType = Object.fromEntries(
+        Object.entries(candidateMap || {}).map(([k, v]) => [
+          k,
+          (v || []).map((c) => ({ id: c.id, title: c.title, calories: c.calories || c.nutrition?.calories || 0 }))
+        ])
+      );
+      const prompt = `
+      Evaluate this meal day for sanity. Rules:
+      - Avoid off-theme items (e.g., desserts for dinner, cleaning products, obviously non-food).
+      - Avoid repeated proteins for breakfast (prefer traditional breakfast foods); keep lunch/dinner savory mains.
+      - Prefer meals with protein > 0 and sensible calories (skip obvious near-zero calorie meals).
+      - Keep meal type coherent: breakfast should be breakfast-like; dinner should not be sweets-only.
+      - If a meal looks off-theme, propose a replacement id from the SAME meal type candidates.
+      Return ONLY JSON: {"replacements":[{"type":"breakfast","replaceWithId":"candidate-id-or-null"}, ...]}
+      Meals: ${JSON.stringify(summary)}
+      Candidates: ${JSON.stringify(candidatesByType)}
+      `;
+      const raw = await this.callTextModel(prompt, 0.3);
+      const cleaned = raw.replace(/```json|```/gi, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (!parsed?.replacements) return;
+      const replMap = {};
+      parsed.replacements.forEach((r) => {
+        if (r?.type && r.replaceWithId) replMap[r.type.toLowerCase()] = r.replaceWithId;
+      });
+      dayData.meals = dayData.meals.map((meal) => {
+        const desiredId = replMap[meal.type];
+        if (!desiredId) return meal;
+        const bucket = candidateMap?.[meal.type] || [];
+        const found = bucket.find((c) => String(c.id) === String(desiredId));
+        if (!found) return meal;
+        const mapped = {
+          id: found.id,
+          name: found.title,
+          description: found.description || '',
+          ingredients: found.ingredients_parsed || found.ingredients_norm || [],
+          instructions: Array.isArray(found.instructions)
+            ? found.instructions
+            : typeof found.instructions === 'string'
+              ? found.instructions.split(/\r?\n/).filter(Boolean)
+              : [],
+          nutrition: found.nutrition || {}
+        };
+        return { ...meal, recipes: [mapped], totalNutrition: this.sumRecipeNutrition([mapped]) };
+      });
+    } catch (err) {
+      logMealplan('⚠️ sanityCheckDayPlan failed', err.message);
+    }
   }
 
   extractNutritionFromSource(src = {}) {

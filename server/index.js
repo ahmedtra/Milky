@@ -11,6 +11,8 @@ const mealPlanRoutes = require('./routes/mealPlans');
 const shoppingListRoutes = require('./routes/shoppingLists');
 const telegramRoutes = require('./routes/telegram');
 const recipeRoutes = require('./routes/recipes');
+const adminLogRoutes = require('./routes/adminLogs');
+const requestLogger = require('./middleware/requestLogger');
 const { initializeTelegramBot } = require('./services/telegramBot');
 const { initializeNotificationScheduler } = require('./services/notificationScheduler');
 
@@ -56,6 +58,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Request logging (persists to Mongo)
+app.use(requestLogger);
+
 // Connect to database
 connectDB();
 
@@ -72,6 +77,7 @@ app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/api/shopping-lists', shoppingListRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/recipes', recipeRoutes);
+app.use('/api/admin/logs', adminLogRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

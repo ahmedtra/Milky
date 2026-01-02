@@ -210,7 +210,7 @@ const menuItems = [
 ];
 
 const Sidebar = ({ isOpen, onToggle, isMobile }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   // const location = useLocation(); // Removed unused variable
 
   return (
@@ -231,7 +231,7 @@ const Sidebar = ({ isOpen, onToggle, isMobile }) => {
       </SidebarHeader>
 
       <Navigation>
-        {menuItems.map((item) => (
+        {menuItems.concat(isAdmin ? [{ path: '/admin/logs', icon: BarChart3, label: 'Admin Logs' }] : []).map((item) => (
           <NavItem
             key={item.path}
             to={item.path}

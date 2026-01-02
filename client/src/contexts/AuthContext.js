@@ -160,6 +160,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    isAdmin: !!user?.isAdmin,
     token,
     loading,
     login,

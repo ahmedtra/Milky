@@ -3,6 +3,7 @@ const router = express.Router();
 const geminiService = require('../services/geminiService');
 const auth = require('../middleware/auth');
 const MealPlan = require('../models/MealPlan');
+const { logEvent } = require('../utils/logger');
 
 // Chat with dietitian
 router.post('/chat', auth, async (req, res) => {
@@ -67,8 +68,16 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       return res.status(400).json({ message: 'User preferences are required' });
     }
 
+    const tStart = Date.now();
+    await logEvent({
+      level: 'info',
+      message: 'mealPlan:generation:start',
+      user: req.user,
+      meta: { duration, preferences }
+    });
+
     // Generate meal plan using Gemini AI
-    const aiMealPlan = await geminiService.generateMealPlan(preferences, duration);
+    const aiMealPlan = await geminiService.generateMealPlan(preferences, duration, req.user);
     
     // Calculate start and end dates
     const startDate = new Date();
@@ -146,6 +155,17 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
 
     await mealPlan.save();
     console.log(`✅ Saved meal plan to database: ${mealPlan._id} - "${mealPlan.title}"`);
+    await logEvent({
+      level: 'info',
+      message: 'mealPlan:generation:success',
+      user: req.user,
+      meta: {
+        duration,
+        mealPlanId: mealPlan._id,
+        title: mealPlan.title,
+        tookMs: Date.now() - tStart
+      }
+    });
 
     res.json({
       mealPlan,
@@ -153,6 +173,12 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating meal plan:', error);
+    await logEvent({
+      level: 'error',
+      message: 'mealPlan:generation:error',
+      user: req.user,
+      meta: { error: error.message, stack: error.stack }
+    });
     res.status(500).json({ message: 'Failed to generate meal plan' });
   }
 });
@@ -195,7 +221,21 @@ router.post('/generate-shopping-list', auth, async (req, res) => {
       return res.status(400).json({ message: 'Meal plan is required' });
     }
 
+    const tStart = Date.now();
+    await logEvent({
+      level: 'info',
+      message: 'shoppingList:generation:start',
+      user: req.user,
+      meta: { mealPlanId: mealPlan?._id || mealPlan?.id }
+    });
+
     const shoppingList = await geminiService.generateShoppingList(mealPlan);
+    await logEvent({
+      level: 'info',
+      message: 'shoppingList:generation:success',
+      user: req.user,
+      meta: { mealPlanId: mealPlan?._id || mealPlan?.id, tookMs: Date.now() - tStart }
+    });
     
     res.json({
       shoppingList,
@@ -203,6 +243,12 @@ router.post('/generate-shopping-list', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating shopping list:', error);
+    await logEvent({
+      level: 'error',
+      message: 'shoppingList:generation:error',
+      user: req.user,
+      meta: { error: error.message, stack: error.stack }
+    });
     res.status(500).json({ message: 'Failed to generate shopping list' });
   }
 });

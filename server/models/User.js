@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
   telegramChatId: {
     type: String,
     default: null
@@ -93,4 +97,3 @@ userSchema.methods.toJSON = function() {
 };
 
 module.exports = mongoose.model('User', userSchema);
-

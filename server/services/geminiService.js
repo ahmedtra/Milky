@@ -356,7 +356,20 @@ class GeminiService {
     searchMs = Date.now() - tSearchStart;
 
     // Shuffle hits locally to avoid stable ordering when the pool is small
-    const rawResults = results.results || [];
+    // Drop candidates missing required fields (title + instructions + ingredients)
+    const hasTitle = (r) => !!(r?.title && String(r.title).trim().length);
+    const hasInstructions = (r) => {
+      if (Array.isArray(r?.instructions)) return r.instructions.filter(Boolean).length > 0;
+      return typeof r?.instructions === 'string' && r.instructions.trim().length > 0;
+    };
+    const hasIngredients = (r) => {
+      return (
+        (Array.isArray(r?.ingredients_parsed) && r.ingredients_parsed.length > 0) ||
+        (Array.isArray(r?.ingredients_norm) && r.ingredients_norm.length > 0) ||
+        (typeof r?.ingredients_raw === 'string' && r.ingredients_raw.trim().length > 0)
+      );
+    };
+    const rawResults = (results.results || []).filter((r) => hasTitle(r) && hasInstructions(r) && hasIngredients(r));
     // Hard post-filter to enforce exclusions even if ES misses variants.
     // Include both user allergy/dislike expansion AND any LLM-proposed exclude_ingredients.
     const effectiveExcludes = new Set([
@@ -646,17 +659,17 @@ class GeminiService {
         const output = [...(list || [])];
         while (output.length < targetSize) {
           const remaining = targetSize - output.length;
-          const llmRecipes = await this.generateLLMFallbackRecipes(mealType, userPreferences, Math.min(remaining, 5));
+          const llmRecipes = await this.generateLLMFallbackRecipes(mealType, userPreferences, Math.min(remaining, 8));
           if (!llmRecipes.length) break;
           output.push(...llmRecipes);
         }
         return output;
       };
       const baseCandidateMap = {
-        breakfast: await padWithLLM('breakfast', await this.fetchCandidatesForMeal('breakfast', userPreferences, 16), 14),
-        lunch: await padWithLLM('lunch', await this.fetchCandidatesForMeal('lunch', userPreferences, 18), 16),
-        dinner: await padWithLLM('dinner', await this.fetchCandidatesForMeal('dinner', userPreferences, 18), 16),
-        snack: await padWithLLM('snack', await this.fetchCandidatesForMeal('snack', userPreferences, 10), 10)
+        breakfast: await padWithLLM('breakfast', await this.fetchCandidatesForMeal('breakfast', userPreferences, 24), 20),
+        lunch: await padWithLLM('lunch', await this.fetchCandidatesForMeal('lunch', userPreferences, 28), 24),
+        dinner: await padWithLLM('dinner', await this.fetchCandidatesForMeal('dinner', userPreferences, 28), 24),
+        snack: await padWithLLM('snack', await this.fetchCandidatesForMeal('snack', userPreferences, 14), 12)
       };
 
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
@@ -685,6 +698,12 @@ class GeminiService {
           dinner: this.shuffle(filterUsed(baseCandidateMap.dinner)),
           snack: this.shuffle(filterUsed(baseCandidateMap.snack))
         };
+        logMealplan(`🎲 Shuffled candidates for day ${dayIndex + 1}`, {
+          breakfast: candidateMap.breakfast.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
+          lunch: candidateMap.lunch.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
+          dinner: candidateMap.dinner.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
+          snack: candidateMap.snack.slice(0, 5).map((c) => ({ id: c.id, title: c.title }))
+        });
         const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
         logMealplan(`🔍 Candidate counts for day ${dayIndex + 1}`, counts);
         Object.entries(candidateMap).forEach(([mealType, list]) => {
@@ -978,6 +997,12 @@ class GeminiService {
         const nutrition = this.hasNutritionData(extracted)
           ? extracted
           : (this.hasNutritionData(r?.nutrition) ? r?.nutrition : extracted);
+        logMealplan('🔄 fixRecipe: replacing with random candidate', {
+          mealType,
+          chosenId: first?.id || null,
+          candidateTitles: this.shuffle(bucket.list).slice(0, 3).map((c) => c.title),
+          nutrition
+        });
         const base = {
           id: first?.id || null,
           name: first?.title || r?.name || 'Recipe',

@@ -734,6 +734,8 @@ class GeminiService {
         ${candidateText}
 
         IMPORTANT:
+        - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
+        - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
         - Write ALL text (recipe names, descriptions, instructions) in ENGLISH.
         - Prefer the listed existing recipes by id/title; do not invent ids.
         - Return ONLY strict JSON. Do NOT include ellipses, comments, or markdown fences.
@@ -917,6 +919,7 @@ class GeminiService {
   async enforceCandidateRecipes(dayData, candidateMap) {
     if (!dayData?.meals || !candidateMap) return;
 
+    const dayUsedIds = new Set();
     const hasIngredientsData = (src = {}) => {
       return (
         (Array.isArray(src.ingredients_parsed) && src.ingredients_parsed.length) ||
@@ -977,6 +980,7 @@ class GeminiService {
           const nutrition = this.hasNutritionData(extracted)
             ? extracted
             : (this.hasNutritionData(r.nutrition) ? r.nutrition : extracted);
+          if (src?.id) dayUsedIds.add(String(src.id));
           return {
             ...r,
             id: src.id,
@@ -988,7 +992,7 @@ class GeminiService {
           };
         }
         // Always pick a candidate if none/mismatch
-        const first = this.shuffle(bucket.list)[0];
+        const first = this.shuffle(bucket.list).find((c) => c?.id && !dayUsedIds.has(String(c.id))) || this.shuffle(bucket.list)[0];
         let ingredients = this.parseIngredientsFromSource(first);
         if (!ingredients.length && Array.isArray(r?.ingredients)) {
           ingredients = r.ingredients;
@@ -1012,6 +1016,7 @@ class GeminiService {
           instructions: first?.instructions || r?.instructions || [],
           nutrition
         };
+        if (first?.id) dayUsedIds.add(String(first.id));
         return { ...r, ...base };
       };
 
@@ -1116,6 +1121,7 @@ class GeminiService {
       cuisine preference: ${preferences.cuisine || preferences.preferredCuisine || 'any'}
       diet: ${preferences.dietType || 'any'}
       allergies/dislikes: ${(preferences.allergies || []).join(', ')}; ${(preferences.dislikedFoods || []).join(', ')}
+      Ensure the meal makes sense for ${mealType} (e.g., breakfast = breakfast foods, lunch/dinner = savory mains, snack = light snack), avoid cleaning products or non-food items.
       The JSON shape:
       [
         {
@@ -1150,11 +1156,19 @@ class GeminiService {
         logMealplan('⚠️ LLM batch returned non-array', { mealType, preview: raw?.slice(0, 200) });
         return [];
       }
-      const mapped = arr.map((r) => ({
-        ...r,
-        id: r.id || `llm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType]
-      }));
+      const calorieFloors = { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
+      const mealCalFloor = calorieFloors[mealType] || 0;
+      const mapped = arr
+        .map((r) => ({
+          ...r,
+          id: r.id || `llm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType]
+        }))
+        .filter((r) => {
+          const cal = Number(r?.nutrition?.calories ?? r?.calories ?? 0);
+          const protein = Number(r?.nutrition?.protein ?? r?.protein ?? 0);
+          return cal >= mealCalFloor && protein > 0;
+        });
       return mapped;
     } catch (err) {
       logMealplan('⚠️ LLM batch fallback recipes failed:', err.message);

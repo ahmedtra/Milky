@@ -189,15 +189,16 @@ const DaysGrid = styled.div`
 `;
 
 const DayCard = styled(motion.div)`
-  background: white;
+  background: rgba(255, 255, 255, 0.92);
   border-radius: ${props => props.theme.borderRadius.lg};
-  box-shadow: ${props => props.theme.shadows.md};
-  border: 1px solid ${props => props.theme.colors.gray[200]};
+  box-shadow: ${props => props.theme.shadows.lg};
+  border: 1px solid ${props => props.theme.colors.primary[50]};
+  backdrop-filter: blur(8px);
   overflow: hidden;
 `;
 
 const DayHeader = styled.div`
-  background: ${props => props.theme.colors.primary[50]};
+  background: linear-gradient(135deg, ${props => props.theme.colors.primary[50]}, #f5f3ff);
   padding: 1.5rem;
   border-bottom: 1px solid ${props => props.theme.colors.gray[200]};
 `;

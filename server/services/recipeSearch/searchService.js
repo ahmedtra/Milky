@@ -1,6 +1,52 @@
 const { client, recipeIndex } = require('./elasticsearchClient');
 const { ensureRecipeIndex } = require('./indexManagement');
 
+const parseNumeric = (val) => {
+  if (val === undefined || val === null) return null;
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val === 'string') {
+    const match = val.match(/-?\d+(?:\.\d+)?/);
+    if (match) {
+      const num = Number(match[0]);
+      if (Number.isFinite(num)) return num;
+    }
+  }
+  return null;
+};
+
+const normalizeNutrition = (src = {}) => {
+  const nutrition = {};
+  const nSrc = src.nutrition || {};
+  const pick = (...candidates) => {
+    for (const val of candidates) {
+      const num = parseNumeric(val);
+      if (num !== null) return num;
+    }
+    return null;
+  };
+
+  const calories = pick(nSrc.calories, src.calories, src.total_calories);
+  const protein = pick(
+    nSrc.protein,
+    nSrc.protein_g,
+    src.protein,
+    src.protein_g,
+    src.protein_grams
+  );
+  const carbs = pick(nSrc.carbs, nSrc.carbs_g, src.carbs, src.carbs_g, src.carbs_grams);
+  const fat = pick(nSrc.fat, nSrc.fat_g, src.fat, src.fat_g, src.fat_grams);
+  const fiber = pick(nSrc.fiber, nSrc.fiber_g, src.fiber, src.fiber_g, src.fiber_grams);
+  const sugar = pick(nSrc.sugar, nSrc.sugar_g, src.sugar, src.sugar_g, src.sugar_grams);
+
+  if (calories !== null) nutrition.calories = calories;
+  if (protein !== null) nutrition.protein = protein;
+  if (carbs !== null) nutrition.carbs = carbs;
+  if (fat !== null) nutrition.fat = fat;
+  if (fiber !== null) nutrition.fiber = fiber;
+  if (sugar !== null) nutrition.sugar = sugar;
+  return nutrition;
+};
+
 const normalizeCuisine = (value) => {
   if (!value) return null;
   return String(value).toLowerCase().replace(/\s+/g, '_');
@@ -21,6 +67,16 @@ const macroFilters = (macro) => {
 
 const buildQuery = (filters = {}) => {
   const bool = { must: [], filter: [], must_not: [], should: [] };
+
+  const addRangeFilter = (fields = [], range = {}) => {
+    if (!fields.length || !Object.keys(range).length) return;
+    const should = fields
+      .filter(Boolean)
+      .map((field) => ({ range: { [field]: range } }));
+    if (should.length) {
+      bool.filter.push({ bool: { should, minimum_should_match: 1 } });
+    }
+  };
 
   if (filters.text) {
     bool.must.push({
@@ -87,14 +143,13 @@ const buildQuery = (filters = {}) => {
     const target = Number(filters.calorie_target);
     if (!Number.isNaN(target)) {
       const tolerance = Math.max(25, Math.round(target * 0.1));
-      bool.filter.push({
-        range: {
-          calories: {
-            gte: Math.max(0, target - tolerance),
-            lte: target + tolerance
-          }
+      addRangeFilter(
+        ['calories', 'nutrition.calories'],
+        {
+          gte: Math.max(0, target - tolerance),
+          lte: target + tolerance
         }
-      });
+      );
     }
   }
 
@@ -103,9 +158,7 @@ const buildQuery = (filters = {}) => {
     const range = {};
     if (Number.isFinite(gte)) range.gte = gte;
     if (Number.isFinite(lte)) range.lte = lte;
-    if (Object.keys(range).length) {
-      bool.filter.push({ range: { calories: range } });
-    }
+    addRangeFilter(['calories', 'nutrition.calories'], range);
   }
 
   if (filters.protein_g_range) {
@@ -113,9 +166,7 @@ const buildQuery = (filters = {}) => {
     const range = {};
     if (Number.isFinite(gte)) range.gte = gte;
     if (Number.isFinite(lte)) range.lte = lte;
-    if (Object.keys(range).length) {
-      bool.filter.push({ range: { protein_grams: range } });
-    }
+    addRangeFilter(['protein_grams', 'protein_g', 'nutrition.protein'], range);
   }
 
   macroFilters(filters.macro_focus).forEach((f) => bool.filter.push(f));
@@ -190,7 +241,10 @@ const searchRecipes = async (filters = {}, options = {}) => {
     results: hits.map((hit) => ({
       id: hit._id,
       score: hit._score,
-      ...hit._source
+      ...hit._source,
+      // Expose a normalized nutrition snapshot so downstream consumers can
+      // rely on either canonical fields or legacy *_g fields.
+      nutrition: normalizeNutrition(hit._source)
     }))
   };
 };

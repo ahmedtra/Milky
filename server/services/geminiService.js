@@ -449,21 +449,18 @@ class GeminiService {
       return nutrition;
     };
 
-    const hasNutritionData = (n) => {
-      if (!n || typeof n !== 'object') return false;
-      return ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'].some((k) => Number(n[k]) > 0);
-    };
-
     return shuffled.map(r => {
       const esNutrition = buildNutrition(r);
       const llmNutrition = r.nutrition;
-      const nutrition = hasNutritionData(esNutrition)
+      const nutrition = this.hasNutritionData(esNutrition)
         ? esNutrition
-        : (hasNutritionData(llmNutrition) ? llmNutrition : esNutrition);
+        : (this.hasNutritionData(llmNutrition) ? llmNutrition : this.ensureNutrition(esNutrition, mealType));
+      const aiGenerated = r.id && String(r.id).startsWith('llm-');
+      const title = this.cleanTitle(r.title, preferences?.dietType);
       if (LOG_MEALPLAN && r.id && String(r.id).startsWith('llm-')) {
         logMealplan('🧠 LLM candidate used', {
           id: r.id,
-          title: r.title,
+          title,
           meal_type: r.meal_type,
           calories: nutrition.calories,
           protein: nutrition.protein
@@ -471,7 +468,8 @@ class GeminiService {
       }
       return {
         id: r.id || r._id,
-        title: r.title,
+        title,
+        ai_generated: aiGenerated,
         cuisine: r.cuisine,
         meal_type: r.meal_type,
         diet_tags: r.dietary_tags || r.diet_tags || [],
@@ -750,6 +748,7 @@ class GeminiService {
         ${candidateText}
 
         IMPORTANT:
+        - Prefer non-LLM candidates (ids NOT starting with "llm-") when possible; use LLM-generated fallbacks only if no suitable human/ES candidate fits.
         - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
         - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
         - Write ALL text (recipe names, descriptions, instructions) in ENGLISH.
@@ -997,12 +996,13 @@ class GeminiService {
           const extracted = this.extractNutritionFromSource(src);
           const nutrition = this.hasNutritionData(extracted)
             ? extracted
-            : (this.hasNutritionData(r.nutrition) ? r.nutrition : extracted);
+            : (this.hasNutritionData(r.nutrition) ? r.nutrition : this.ensureNutrition(extracted, mealType));
           if (src?.id) dayUsedIds.add(String(src.id));
+          const cleanName = this.cleanTitle(src.title || r.name);
           return {
             ...r,
             id: src.id,
-            name: src.title || r.name,
+            name: cleanName || r.name,
             description: src.description || r.description,
             ingredients,
             instructions: src.instructions || r?.instructions || [],
@@ -1018,7 +1018,8 @@ class GeminiService {
         const extracted = this.extractNutritionFromSource(first);
         const nutrition = this.hasNutritionData(extracted)
           ? extracted
-          : (this.hasNutritionData(r?.nutrition) ? r?.nutrition : extracted);
+          : (this.hasNutritionData(r?.nutrition) ? r?.nutrition : this.ensureNutrition(extracted, mealType));
+        const cleanName = this.cleanTitle(first?.title || r?.name);
         logMealplan('🔄 fixRecipe: replacing with random candidate', {
           mealType,
           chosenId: first?.id || null,
@@ -1027,7 +1028,7 @@ class GeminiService {
         });
         const base = {
           id: first?.id || null,
-          name: first?.title || r?.name || 'Recipe',
+          name: cleanName || first?.title || r?.name || 'Recipe',
           description: first?.title || r?.description || '',
           tags: r?.tags || [first?.cuisine].filter(Boolean),
           ingredients,
@@ -1180,7 +1181,10 @@ class GeminiService {
         .map((r) => ({
           ...r,
           id: r.id || `llm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType]
+          meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType],
+          nutrition: this.hasNutritionData(r.nutrition)
+            ? r.nutrition
+            : this.ensureNutrition(r.nutrition || { calories: r.calories, protein: r.protein }, mealType)
         }))
         .filter((r) => {
           const cal = Number(r?.nutrition?.calories ?? r?.calories ?? 0);
@@ -1285,6 +1289,47 @@ class GeminiService {
     if (!n || typeof n !== 'object') return false;
     const required = ['calories', 'protein', 'carbs', 'fat'];
     return required.every((k) => Number(n[k]) > 0);
+  }
+
+  ensureNutrition(n, mealType = null) {
+    if (this.hasNutritionData(n)) return n;
+    const defaults = {
+      breakfast: { calories: 400, protein: 20, carbs: 35, fat: 15, fiber: 5, sugar: 10 },
+      lunch: { calories: 600, protein: 35, carbs: 50, fat: 20, fiber: 8, sugar: 12 },
+      dinner: { calories: 650, protein: 40, carbs: 45, fat: 25, fiber: 8, sugar: 10 },
+      snack: { calories: 200, protein: 8, carbs: 20, fat: 8, fiber: 2, sugar: 8 }
+    };
+    return { ...(defaults[mealType] || defaults.lunch) };
+  }
+
+  cleanTitle(title, dietTag = null) {
+    if (!title) return title;
+    const dietWords = [
+      'keto',
+      'paleo',
+      'low carb',
+      'low-carb',
+      'vegan',
+      'vegetarian',
+      'gluten free',
+      'gluten-free',
+      'whole30',
+      'weight loss',
+      'weight-loss',
+      'mediterranean'
+    ];
+    let cleaned = title;
+    const pattern = new RegExp(
+      `^\\s*[\\[\\(]?\\s*(?:${dietWords.join('|')})\\s*[\\]\\)]?\\s*[:\\-–—]*\\s*`,
+      'i'
+    );
+    // Strip up to two leading diet labels to be safe
+    for (let i = 0; i < 2; i += 1) {
+      const next = cleaned.replace(pattern, '').trim();
+      if (next === cleaned) break;
+      cleaned = next;
+    }
+    return cleaned || title;
   }
 
   /**

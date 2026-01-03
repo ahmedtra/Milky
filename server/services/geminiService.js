@@ -323,6 +323,7 @@ class GeminiService {
     
     const randomSeed = Date.now() + Math.floor(Math.random() * 1_000_000);
     const tSearchStart = Date.now();
+    
     let results = await searchRecipes(filters, { size, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
     // Attach nutrition snapshot so downstream consumers don't lose macros
     if (results?.results?.length) {
@@ -331,6 +332,7 @@ class GeminiService {
         nutrition: this.extractNutritionFromSource(r)
       }));
     }
+
     // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
     if ((!results.results || results.results.length === 0) && filters.diet_tags?.length) {
       const relaxedFilters = { ...filters };
@@ -415,24 +417,25 @@ class GeminiService {
       vectorMs,
       searchMs
     });
-    // Light-weight peek to trace what we're returning (id/title/macros/ingredient coverage)
-    logMealplan('🍽️ Candidates preview', shuffled.slice(0, 5).map((c) => ({
-      id: c.id || c._id,
-      title: c.title,
-      calories: c.nutrition?.calories ?? c.calories,
-      protein: c.nutrition?.protein ?? c.protein ?? c.protein_grams ?? c.protein_g,
-      carbs: c.nutrition?.carbs,
-      fat: c.nutrition?.fat,
-      nutrition: c.nutrition,
-      hasParsedIngredients: Array.isArray(c.ingredients_parsed) && c.ingredients_parsed.length,
-      hasRawIngredients: typeof c.ingredients_raw === 'string' && !!c.ingredients_raw.trim()
-    })));
+    // Final concise snapshot after all filtering/shuffle
+    logMealplan(`🍽️ Candidates final snapshot for ${mealType}`, {
+      count: shuffled.length,
+      entries: shuffled.slice(0, 10).map((c) => ({
+        id: c.id || c._id,
+        title: c.title,
+        prep: c.prep_time_minutes ?? c.prepTime ?? null,
+        cook: c.cook_time_minutes ?? c.cookTime ?? null,
+        total: c.total_time_min ?? c.total_time_minutes ?? null,
+        hasParsedIngredients: Array.isArray(c.ingredients_parsed) && c.ingredients_parsed.length,
+        hasRawIngredients: typeof c.ingredients_raw === 'string' && !!c.ingredients_raw.trim()
+      }))
+    });
 
     const buildNutrition = (src) => {
       const nutrition = {};
       const addNumber = (key, ...candidates) => {
         for (const val of candidates) {
-          const num = Number(val);
+          const num = typeof val === 'string' ? Number(val) : Number(val);
           if (Number.isFinite(num)) {
             nutrition[key] = num;
             return;
@@ -440,12 +443,13 @@ class GeminiService {
         }
       };
       const nSrc = src?.nutrition || src || {};
-      addNumber('calories', nSrc.calories);
-      addNumber('protein', nSrc.protein_g, nSrc.protein_grams, nSrc.protein);
-      addNumber('carbs', nSrc.carbs_g, nSrc.carbs_grams, nSrc.carbs);
-      addNumber('fat', nSrc.fat_g, nSrc.fat_grams, nSrc.fat);
-      addNumber('fiber', nSrc.fiber_g, nSrc.fiber_grams, nSrc.fiber);
-      addNumber('sugar', nSrc.sugar_g, nSrc.sugar_grams, nSrc.sugar);
+      console.log(nSrc)
+      addNumber('calories', nSrc.calories, src?.calories);
+      addNumber('protein', nSrc.protein, nSrc.protein_g, nSrc.protein_grams, src?.protein, src?.protein_g, src?.protein_grams);
+      addNumber('carbs', nSrc.carbs, nSrc.carbs_g, nSrc.carbs_grams, src?.carbs, src?.carbs_g, src?.carbs_grams);
+      addNumber('fat', nSrc.fat, nSrc.fat_g, nSrc.fat_grams, src?.fat, src?.fat_g, src?.fat_grams);
+      addNumber('fiber', nSrc.fiber, nSrc.fiber_g, nSrc.fiber_grams, src?.fiber, src?.fiber_g, src?.fiber_grams);
+      addNumber('sugar', nSrc.sugar, nSrc.sugar_g, nSrc.sugar_grams, src?.sugar, src?.sugar_g, src?.sugar_grams);
       return nutrition;
     };
 
@@ -899,6 +903,10 @@ class GeminiService {
             this.dedupeDayRecipes(dayData, recentIds, usedRecipeIds);
             // Sanity check with LLM after dedupe to catch off-theme meals and propose replacements
             await this.sanityCheckDayPlan(dayData, candidateMap);
+            // Re-enforce candidates after sanity replacements to ensure times/nutrition/ingredients are grounded
+            await this.enforceCandidateRecipes(dayData, candidateMap);
+            // Final dedupe after enforcement
+            this.dedupeDayRecipes(dayData, recentIds, usedRecipeIds);
             // Track ids for next day dedupe (keep last day’s ids)
             const idsToday = this.collectRecipeIds(dayData);
             recentIds.splice(0, recentIds.length, ...idsToday);
@@ -999,11 +1007,30 @@ class GeminiService {
             : (this.hasNutritionData(r.nutrition) ? r.nutrition : this.ensureNutrition(extracted, mealType));
           if (src?.id) dayUsedIds.add(String(src.id));
           const cleanName = this.cleanTitle(src.title || r.name);
+          const totalTime = (src.total_time_min ?? src.total_time_minutes) ??
+            ((Number(src.prep_time_minutes || src.prepTime || 0) + Number(src.cook_time_minutes || src.cookTime || 0)) || null);
+          const prepTime = src.prep_time_minutes ?? src.prepTime ?? r.prepTime ?? 0;
+          const cookTime = src.cook_time_minutes ?? src.cookTime ?? r.cookTime ?? 0;
+          const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
+          logMealplan('✅ enforceCandidateRecipes: matched candidate', {
+            mealType,
+            id: src.id,
+            title: cleanName || src.title,
+            calories: nutrition?.calories,
+            protein: nutrition?.protein,
+            prep: normalizedPrep || null,
+            cook: cookTime || null,
+            total: totalTime || (normalizedPrep + cookTime) || null,
+            ingredientsCount: ingredients.length
+          });
           return {
             ...r,
             id: src.id,
             name: cleanName || r.name,
             description: src.description || r.description,
+            prepTime: normalizedPrep,
+            cookTime,
+            total_time_min: totalTime || (normalizedPrep + cookTime) || null,
             ingredients,
             instructions: src.instructions || r?.instructions || [],
             nutrition
@@ -1020,6 +1047,22 @@ class GeminiService {
           ? extracted
           : (this.hasNutritionData(r?.nutrition) ? r?.nutrition : this.ensureNutrition(extracted, mealType));
         const cleanName = this.cleanTitle(first?.title || r?.name);
+        const totalTime = (first?.total_time_min ?? first?.total_time_minutes) ??
+          ((Number(first?.prep_time_minutes || first?.prepTime || 0) + Number(first?.cook_time_minutes || first?.cookTime || 0)) || null);
+        const prepTime = first?.prep_time_minutes ?? first?.prepTime ?? r?.prepTime ?? 0;
+        const cookTime = first?.cook_time_minutes ?? first?.cookTime ?? r?.cookTime ?? 0;
+        const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
+        logMealplan('🔄 enforceCandidateRecipes: replacing with candidate', {
+          mealType,
+          chosenId: first?.id || null,
+          title: cleanName || first?.title,
+          calories: nutrition?.calories,
+          protein: nutrition?.protein,
+          prep: normalizedPrep || null,
+          cook: cookTime || null,
+          total: totalTime || (normalizedPrep + cookTime) || null,
+          ingredientsCount: ingredients.length
+        });
         logMealplan('🔄 fixRecipe: replacing with random candidate', {
           mealType,
           chosenId: first?.id || null,
@@ -1030,6 +1073,9 @@ class GeminiService {
           id: first?.id || null,
           name: cleanName || first?.title || r?.name || 'Recipe',
           description: first?.title || r?.description || '',
+          prepTime: normalizedPrep,
+          cookTime,
+          total_time_min: totalTime || (normalizedPrep + cookTime) || null,
           tags: r?.tags || [first?.cuisine].filter(Boolean),
           ingredients,
           instructions: first?.instructions || r?.instructions || [],
@@ -1287,19 +1333,28 @@ class GeminiService {
 
   hasNutritionData(n) {
     if (!n || typeof n !== 'object') return false;
-    const required = ['calories', 'protein', 'carbs', 'fat'];
-    return required.every((k) => Number(n[k]) > 0);
+    const keys = ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'];
+    const populated = keys.filter((k) => Number(n[k]) > 0);
+    return populated.length >= 2;
   }
 
   ensureNutrition(n, mealType = null) {
-    if (this.hasNutritionData(n)) return n;
     const defaults = {
       breakfast: { calories: 400, protein: 20, carbs: 35, fat: 15, fiber: 5, sugar: 10 },
       lunch: { calories: 600, protein: 35, carbs: 50, fat: 20, fiber: 8, sugar: 12 },
       dinner: { calories: 650, protein: 40, carbs: 45, fat: 25, fiber: 8, sugar: 10 },
       snack: { calories: 200, protein: 8, carbs: 20, fat: 8, fiber: 2, sugar: 8 }
     };
-    return { ...(defaults[mealType] || defaults.lunch) };
+    const base = { ...(defaults[mealType] || defaults.lunch) };
+    const src = n || {};
+    const keys = ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'];
+    keys.forEach((k) => {
+      const val = Number(src[k]);
+      if (Number.isFinite(val) && val >= 0) {
+        base[k] = val;
+      }
+    });
+    return base;
   }
 
   cleanTitle(title, dietTag = null) {
@@ -1430,8 +1485,8 @@ class GeminiService {
       }
     };
     const nSrc = src.nutrition || {};
-    addNumber('calories', src.calories, nSrc.calories);
-    addNumber('protein', src.protein_grams, src.protein_g, src.protein, nSrc.protein_g, nSrc.protein);
+    addNumber('calories', nSrc.calories, src.calories);
+    addNumber('protein', nSrc.protein_g, nSrc.protein, src.protein_grams, src.protein_g, src.protein);
     addNumber('carbs', src.carbs_grams, src.carbs_g, src.carbs, nSrc.carbs_g, nSrc.carbs);
     addNumber('fat', src.fat_grams, src.fat_g, src.fat, nSrc.fat_g, nSrc.fat);
     addNumber('fiber', src.fiber_grams, src.fiber_g, src.fiber, nSrc.fiber_g, nSrc.fiber);
@@ -1928,11 +1983,20 @@ class GeminiService {
     const unitCandidate = rawIngredient.unit || rawIngredient.measure || rawIngredient.measurement || '';
     const categoryCandidate = rawIngredient.category || rawIngredient.type || 'other';
 
+    const allowedCategories = new Set(['protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat', 'spice', 'nut', 'seed', 'broth', 'herb', 'other']);
+    let category = String(categoryCandidate || 'other').trim().toLowerCase() || 'other';
+    if (!allowedCategories.has(category)) {
+      // Map common out-of-enum values to nearest bucket, else other
+      if (['sweetener', 'sugar', 'honey', 'syrup'].includes(category)) category = 'other';
+      else if (['legume', 'beans', 'lentils'].includes(category)) category = 'protein';
+      else category = 'other';
+    }
+
     const normalised = {
       name: String(nameCandidate).trim(),
       amount: String(amountCandidate || '1').trim() || '1',
       unit: String(unitCandidate || 'unit').trim() || 'unit',
-      category: String(categoryCandidate || 'other').trim().toLowerCase() || 'other'
+      category
     };
 
     if (!normalised.name) {

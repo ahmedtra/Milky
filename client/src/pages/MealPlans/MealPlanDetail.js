@@ -1133,7 +1133,53 @@ const MealPlanDetail = () => {
                     </MealHeader>
                     <RecipesList>
                       {meal.recipes.map((recipe, recipeIndex) => {
-                        const totalTime = (Number(recipe.prepTime) || 0) + (Number(recipe.cookTime) || 0);
+                        const firstNumber = (...vals) => {
+                          for (const v of vals) {
+                            const num = Number(v);
+                            if (Number.isFinite(num) && num >= 0) return num;
+                          }
+                          return 0;
+                        };
+                        const totalTime =
+                          firstNumber(recipe.total_time_min, recipe.total_time_minutes) ||
+                          (firstNumber(recipe.prepTime) + firstNumber(recipe.cookTime));
+                        // Always prefer normalized nutrition fields, with minimal fallback
+                        const calories = firstNumber(
+                          recipe?.nutrition?.calories,
+                          recipe?.calories
+                        );
+                        const protein = firstNumber(
+                          recipe?.nutrition?.protein,
+                          recipe?.protein,
+                          recipe?.protein_grams,
+                          recipe?.protein_g
+                        );
+                        const carbs = firstNumber(
+                          recipe?.nutrition?.carbs,
+                          recipe?.carbs,
+                          recipe?.carbs_grams,
+                          recipe?.carbs_g,
+                          recipe?.totalNutrition?.carbs
+                        );
+                        const fat = firstNumber(
+                          recipe?.nutrition?.fat,
+                          recipe?.fat,
+                          recipe?.fat_grams,
+                          recipe?.fat_g,
+                          recipe?.totalNutrition?.fat
+                        );
+                        const fiber = firstNumber(
+                          recipe?.nutrition?.fiber,
+                          recipe?.fiber,
+                          recipe?.fiber_grams,
+                          recipe?.fiber_g
+                        );
+                        const sugar = firstNumber(
+                          recipe?.nutrition?.sugar,
+                          recipe?.sugar,
+                          recipe?.sugar_grams,
+                          recipe?.sugar_g
+                        );
 
                         return (
                           <RecipeItem key={recipeIndex}>
@@ -1150,10 +1196,10 @@ const MealPlanDetail = () => {
                               </MetaItem>
                               <MetaItem>
                                 <Target size={12} />
-                                {recipe.nutrition.calories} cal
+                                {calories} cal
                               </MetaItem>
                             </RecipeMeta>
-                            {recipe.nutrition && (
+                            {(calories || protein || carbs || fat || fiber || sugar) && (
                               <NutritionInfo>
                                 <NutritionTitle>
                                   <Target size={14} />
@@ -1161,20 +1207,28 @@ const MealPlanDetail = () => {
                                 </NutritionTitle>
                                 <NutritionGrid>
                                   <NutritionItem>
-                                    <NutritionValue>{recipe.nutrition.calories}</NutritionValue>
+                                    <NutritionValue>{calories}</NutritionValue>
                                     <NutritionLabel>Calories</NutritionLabel>
                                   </NutritionItem>
                                   <NutritionItem>
-                                    <NutritionValue>{recipe.nutrition.protein}g</NutritionValue>
+                                    <NutritionValue>{protein}g</NutritionValue>
                                     <NutritionLabel>Protein</NutritionLabel>
                                   </NutritionItem>
                                   <NutritionItem>
-                                    <NutritionValue>{recipe.nutrition.carbs}g</NutritionValue>
+                                    <NutritionValue>{carbs}g</NutritionValue>
                                     <NutritionLabel>Carbs</NutritionLabel>
                                   </NutritionItem>
                                   <NutritionItem>
-                                    <NutritionValue>{recipe.nutrition.fat}g</NutritionValue>
+                                    <NutritionValue>{fat}g</NutritionValue>
                                     <NutritionLabel>Fat</NutritionLabel>
+                                  </NutritionItem>
+                                  <NutritionItem>
+                                    <NutritionValue>{fiber}g</NutritionValue>
+                                    <NutritionLabel>Fiber</NutritionLabel>
+                                  </NutritionItem>
+                                  <NutritionItem>
+                                    <NutritionValue>{sugar}g</NutritionValue>
+                                    <NutritionLabel>Sugar</NutritionLabel>
                                   </NutritionItem>
                                 </NutritionGrid>
                               </NutritionInfo>
@@ -1253,8 +1307,18 @@ const MealPlanDetail = () => {
                                   </AlternativeTitle>
                                   <AlternativeMeta>
                                     {option.cuisine && <Badge>{option.cuisine}</Badge>}
-                                    {option.calories ? <Badge>{option.calories} cal</Badge> : null}
-                                    {option.protein_grams ? <Badge>{option.protein_grams}g protein</Badge> : null}
+                                    {(() => {
+                                      const cals = option?.nutrition?.calories ?? option?.calories;
+                                      return cals ? <Badge>{cals} cal</Badge> : null;
+                                    })()}
+                                    {(() => {
+                                      const protein =
+                                        option?.nutrition?.protein ??
+                                        option?.protein ??
+                                        option?.protein_grams ??
+                                        option?.protein_g;
+                                      return protein ? <Badge>{protein}g protein</Badge> : null;
+                                    })()}
                                     {option.prep_time_minutes ? (
                                       <Badge>{option.prep_time_minutes} min</Badge>
                                     ) : null}

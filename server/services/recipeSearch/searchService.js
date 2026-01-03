@@ -226,11 +226,25 @@ const searchRecipes = async (filters = {}, options = {}) => {
   });
 
   if (options.logSearch) {
+    const preview = (response?.hits?.hits || []).slice(0, 5).map((h) => {
+      const src = h._source || {};
+      return {
+        id: h._id,
+        title: src.title,
+        calories: src.nutrition?.calories ?? src.calories,
+        protein: src.nutrition?.protein ?? src.protein ?? src.protein_grams ?? src.protein_g,
+        carbs: src.nutrition?.carbs ?? src.carbs ?? src.carbs_g ?? src.carbs_grams,
+        fat: src.nutrition?.fat ?? src.fat ?? src.fat_g ?? src.fat_grams,
+        fiber: src.nutrition?.fiber ?? src.fiber ?? src.fiber_g ?? src.fiber_grams,
+        sugar: src.nutrition?.sugar ?? src.sugar ?? src.sugar_g ?? src.sugar_grams
+      };
+    });
     console.log('🔎 ES search', {
       size,
       hasVector,
       totalHits: response?.hits?.total?.value || 0,
-      filters: { ...filters, query_vector: hasVector ? '[vector]' : undefined }
+      filters: { ...filters, query_vector: hasVector ? '[vector]' : undefined },
+      preview
     });
   }
 

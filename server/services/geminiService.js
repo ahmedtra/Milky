@@ -336,11 +336,12 @@ class GeminiService {
     // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
     if ((!results.results || results.results.length === 0) && filters.diet_tags?.length) {
       const relaxedFilters = { ...filters };
-      delete relaxedFilters.diet_tags;
-      delete relaxedFilters.dietary_tags;
+      // keep diet tags; relax goal/activity first
+      delete relaxedFilters.goal_fit;
+      delete relaxedFilters.activity_fit;
       results = await searchRecipes(relaxedFilters, { size, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-      logMealplan(`⚠️ ${mealType} search empty with diet_tags, retried without diet tags`, {
-        originalDietTags: filters.diet_tags,
+      logMealplan(`⚠️ ${mealType} search empty; retried without goals/activity (diet tags kept)`, {
+        dietTags: filters.diet_tags,
         relaxedHits: results?.results?.length || 0
       });
     }
@@ -1508,8 +1509,96 @@ class GeminiService {
     return total;
   }
 
+  async detectRecipeSearchIntent(message) {
+    try {
+      const prompt = `
+      Decide if this user message is asking to FIND RECIPES or to GET RECIPE DETAILS. Return ONLY JSON with:
+      {
+        "intent": "recipe_search" | "recipe_detail" | "chat",
+        "diet": "<diet tag like vegetarian|vegan|keto|balanced|null>",
+        "includeIngredients": [strings],
+        "excludeIngredients": [strings],
+        "cuisine": "<string|null>",
+        "quick": true|false,
+        "recipeId": "<id if user mentions a specific recipe id or code, else null>",
+        "recipeTitle": "<title if user asks about a specific recipe by name, else null>"
+      }
+      If unsure, set intent to "chat".
+      Message: """${message}"""
+      `;
+      const text = await this.callTextModel(prompt, 0);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      return JSON.parse(jsonMatch[0]);
+    } catch (err) {
+      return null;
+    }
+  }
+
   async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null) {
     try {
+      // Let the LLM classify intent; if it's a recipe search, route to ES results.
+      const intent = await this.detectRecipeSearchIntent(message);
+      if (intent?.intent === 'recipe_search') {
+        const filters = {
+          diet_tags: intent.diet ? [intent.diet] : [],
+          include_ingredients: intent.includeIngredients || [],
+          exclude_ingredients: intent.excludeIngredients || [],
+          cuisine: intent.cuisine || null,
+          quick: intent.quick === true
+        };
+        const { results } = await searchRecipes(filters, { size: 5, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+        if (!results?.length) {
+          return 'I could not find matching recipes right now. Try adjusting the ingredients or diet.';
+        }
+        const summary = results.map((r, idx) => {
+          const calories = r.nutrition?.calories ?? r.calories ?? 'n/a';
+          const protein = r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g ?? 'n/a';
+          const time = r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes ?? 'n/a';
+          return `${idx + 1}. ${r.title} — ${calories} cal, protein ${protein}g, time ${time} min (id: ${r.id})`;
+        }).join('\n');
+        return `Here are some recipes I found based on your request:\n${summary}\n\nTell me which id you want more details about.`;
+      }
+      if (intent?.intent === 'recipe_detail') {
+        let recipe = null;
+        if (intent.recipeId) {
+          recipe = await getRecipeById(intent.recipeId);
+        }
+        if (!recipe && intent.recipeTitle) {
+          // Prefer exact title match, then fall back to fuzzy text search
+          let results = [];
+          const exact = await searchRecipes({ title_exact: intent.recipeTitle }, { size: 1 });
+          if (exact?.results?.length) {
+            results = exact.results;
+          } else {
+            const fuzzy = await searchRecipes({ text: intent.recipeTitle }, { size: 3, randomize: false });
+            results = fuzzy?.results || [];
+          }
+          recipe = results?.[0] || null;
+        }
+        if (!recipe) {
+          return 'I could not find that recipe. Please provide a recipe id or exact name.';
+        }
+        const calories = recipe.nutrition?.calories ?? recipe.calories ?? 'n/a';
+        const protein = recipe.nutrition?.protein ?? recipe.protein ?? recipe.protein_grams ?? recipe.protein_g ?? 'n/a';
+        const carbs = recipe.nutrition?.carbs ?? recipe.carbs ?? recipe.carbs_g ?? recipe.carbs_grams ?? 'n/a';
+        const fat = recipe.nutrition?.fat ?? recipe.fat ?? recipe.fat_g ?? recipe.fat_grams ?? 'n/a';
+        const time = recipe.total_time_min ?? recipe.total_time_minutes ?? recipe.prep_time_minutes ?? 'n/a';
+        const ing = Array.isArray(recipe.ingredients_parsed)
+          ? recipe.ingredients_parsed.map((i) => `${i.amount || ''} ${i.unit || ''} ${i.name || ''}`.trim()).join('\n- ')
+          : (recipe.ingredients_raw || 'Not provided');
+        const instructions = Array.isArray(recipe.instructions)
+          ? recipe.instructions.join('\n')
+          : (recipe.instructions || 'Not provided');
+        return `Here are the details for "${recipe.title || recipe.name}":
+Calories: ${calories}, Protein: ${protein}g, Carbs: ${carbs}g, Fat: ${fat}g, Time: ${time} min
+Ingredients:
+- ${ing}
+
+Instructions:
+${instructions}`;
+      }
+
       // Build meal plan context if available
       let mealPlanContext = '';
       if (activeMealPlan && activeMealPlan.days && activeMealPlan.days.length > 0) {

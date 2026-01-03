@@ -322,6 +322,7 @@ const MealPlans = () => {
     dislikedFoods: '',
     goals: 'maintain_weight',
     activityLevel: 'moderate',
+    quick: false,
     mealTimes: {
       breakfast: '08:00',
       lunch: '13:00',
@@ -388,6 +389,7 @@ const MealPlans = () => {
       // Convert comma-separated strings to arrays for backend compatibility
       const processedPreferences = {
         ...preferences,
+        quick: Boolean(preferences.quick),
         allergies: preferences.allergies ? preferences.allergies.split(',').map(item => item.trim()).filter(item => item) : [],
         dislikedFoods: preferences.dislikedFoods ? preferences.dislikedFoods.split(',').map(item => item.trim()).filter(item => item) : []
       };
@@ -497,6 +499,18 @@ const MealPlans = () => {
               <option value="build_muscle">Build Muscle</option>
               <option value="improve_health">Improve Health</option>
             </Select>
+          </FormGroup>
+
+          <FormGroup>
+            <Label>Prefer quick recipes</Label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 500 }}>
+              <input
+                type="checkbox"
+                checked={preferences.quick}
+                onChange={(e) => handleInputChange('quick', e.target.checked)}
+              />
+              Quick (under ~30 minutes)
+            </label>
           </FormGroup>
 
           <FormGroup>

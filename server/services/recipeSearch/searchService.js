@@ -88,6 +88,10 @@ const buildQuery = (filters = {}) => {
     });
   }
 
+  if (filters.title_exact) {
+    bool.filter.push({ term: { 'title.raw': filters.title_exact } });
+  }
+
   // Support both legacy dietary_tags and canonical diet_tags stored in the index
   const dietTags = filters.dietary_tags || filters.diet_tags;
   if (dietTags?.length) {
@@ -127,6 +131,10 @@ const buildQuery = (filters = {}) => {
 
   if (filters.cuisine) {
     bool.filter.push({ term: { cuisine: filters.cuisine } });
+  }
+
+  if (filters.quick === true) {
+    bool.filter.push({ term: { quick: true } });
   }
 
   if (filters.course) {

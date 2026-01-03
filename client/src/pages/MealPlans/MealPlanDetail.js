@@ -1183,7 +1183,10 @@ const MealPlanDetail = () => {
 
                         return (
                           <RecipeItem key={recipeIndex}>
-                            <RecipeName>{recipe.name}</RecipeName>
+                            <RecipeName>
+                              {recipe.name}
+                              {recipe.ai_generated && <Badge style={{ marginLeft: '8px' }}>AI</Badge>}
+                            </RecipeName>
                             <RecipeDescription>{recipe.description}</RecipeDescription>
                             <RecipeMeta>
                               <MetaItem>

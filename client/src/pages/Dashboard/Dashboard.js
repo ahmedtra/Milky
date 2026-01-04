@@ -8,6 +8,7 @@ import {
   CheckCircle,
   Circle,
   Clock,
+  ArrowRight,
   MessageCircle,
   ShoppingCart,
   Target,
@@ -26,51 +27,97 @@ const DashboardContainer = styled.div`
 `;
 
 const WelcomeSection = styled.div`
-  background: linear-gradient(135deg, ${props => props.theme.colors.primary[600]} 0%, ${props => props.theme.colors.primary[800]} 100%);
+  position: relative;
+  overflow: hidden;
   color: white;
-  padding: 2rem;
+  padding: 2.25rem;
   border-radius: ${props => props.theme.borderRadius.xl};
   box-shadow: ${props => props.theme.shadows.lg};
+  background: radial-gradient(circle at 18% 18%, rgba(255,255,255,0.18), rgba(255,255,255,0)) ,
+              radial-gradient(circle at 90% 0%, rgba(255,255,255,0.12), rgba(255,255,255,0)) ,
+              linear-gradient(135deg, #1d4ed8 0%, #2563eb 40%, #0ea5e9 75%, #0ea5e9 100%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(120% 140% at 80% -10%, rgba(255,255,255,0.15), transparent 40%),
+                radial-gradient(120% 120% at 0% 120%, rgba(255,255,255,0.12), transparent 35%);
+    pointer-events: none;
+  }
 `;
 
 const WelcomeTitle = styled.h1`
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
 `;
 
 const WelcomeSubtitle = styled.p`
-  font-size: 1.1rem;
-  opacity: 0.9;
+  font-size: 1.05rem;
+  opacity: 0.95;
   margin-bottom: 1.5rem;
 `;
 
-const QuickActions = styled.div`
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+const WelcomeGrid = styled.div`
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+`;
 
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
+const HeroContent = styled.div`
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const HeroBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  width: fit-content;
+`;
+
+const QuickActions = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
 `;
 
 const ActionButton = styled.button`
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.2);
+  padding: 0.95rem 1.1rem;
+  background: rgba(255, 255, 255, 0.16);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: ${props => props.theme.borderRadius.md};
-  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: ${props => props.theme.borderRadius.lg};
+  font-weight: 600;
+  letter-spacing: 0.01em;
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.24);
+    transform: translateY(-2px) scale(1.01);
   }
+`;
+
+const ActionLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const StatsGrid = styled.div`
@@ -86,6 +133,18 @@ const StatCard = styled(motion.div)`
   border-radius: ${props => props.theme.borderRadius.lg};
   box-shadow: ${props => props.theme.shadows.md};
   border: 1px solid ${props => props.theme.colors.gray[200]};
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -40% auto auto 60%;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.08), transparent 60%);
+    transform: rotate(18deg);
+  }
 `;
 
 const StatHeader = styled.div`
@@ -123,6 +182,7 @@ const StatChange = styled.div`
   color: ${props => props.$positive ? props.theme.colors.success[600] : props.theme.colors.error[600]};
   margin-top: 0.25rem;
 `;
+
 
 const ContentGrid = styled.div`
   display: grid;
@@ -301,73 +361,12 @@ const LinkButton = styled.button`
   }
 `;
 
-const SearchInput = styled.input`
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid ${props => props.theme.colors.gray[200]};
-  border-radius: ${props => props.theme.borderRadius.md};
-  font-size: 1rem;
-  margin-bottom: 0.75rem;
-  outline: none;
-
-  &:focus {
-    border-color: ${props => props.theme.colors.primary[500]};
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-`;
-
-const SearchButton = styled.button`
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: ${props => props.theme.colors.primary[600]};
-  color: white;
-  border-radius: ${props => props.theme.borderRadius.md};
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: ${props => props.theme.colors.primary[700]};
-  }
-`;
-
-const SearchResults = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-`;
-
-const SearchResultItem = styled.li`
-  padding: 0.75rem 0.85rem;
-  border: 1px solid ${props => props.theme.colors.gray[200]};
-  border-radius: ${props => props.theme.borderRadius.md};
-  background: white;
-`;
-
-const ResultTitle = styled.div`
-  font-weight: 700;
-  color: ${props => props.theme.colors.gray[800]};
-`;
-
-const ResultMeta = styled.div`
-  font-size: 0.9rem;
-  color: ${props => props.theme.colors.gray[600]};
-  margin-top: 0.25rem;
-`;
-
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [shoppingLists, setShoppingLists] = React.useState([]);
   const [activeMealPlan, setActiveMealPlan] = React.useState(null);
   const [loadingMealPlan, setLoadingMealPlan] = React.useState(true);
-  const [searchText, setSearchText] = React.useState('');
-  const [searchResults, setSearchResults] = React.useState([]);
-  const [searchLoading, setSearchLoading] = React.useState(false);
 
   const loadActiveMealPlan = React.useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -436,29 +435,6 @@ const Dashboard = () => {
 
     fetchShoppingLists();
   }, []);
-
-  const handleRecipeSearch = React.useCallback(async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    const query = searchText.trim();
-    if (!query) {
-      toast.error('Please enter a search query');
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      const resp = await axios.post('/api/recipes/search', {
-        query,
-        filters: {},
-        size: 10
-      });
-      setSearchResults(resp.data?.results || []);
-    } catch (err) {
-      console.error('Recipe search failed', err);
-      toast.error('Search failed');
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [searchText]);
 
   const handleToggleMealCompletion = React.useCallback(async (dayIndex, mealId) => {
     // Get current meal using flexible ID matching
@@ -691,24 +667,41 @@ const Dashboard = () => {
   return (
     <DashboardContainer>
       <WelcomeSection>
-        <WelcomeTitle>Welcome back, {user?.username}! 👋</WelcomeTitle>
-        <WelcomeSubtitle>
-          Ready to continue your healthy eating journey? Let's check what's planned for today.
-        </WelcomeSubtitle>
-        <QuickActions>
-          <ActionButton onClick={() => navigate('/meal-plans')}>
-            <Calendar size={16} />
-            View Meal Plans
-          </ActionButton>
-          <ActionButton onClick={() => navigate('/chat')}>
-            <MessageCircle size={16} />
-            Chat with AI
-          </ActionButton>
-          <ActionButton onClick={() => navigate('/shopping-lists')}>
-            <ShoppingCart size={16} />
-            Shopping Lists
-          </ActionButton>
-        </QuickActions>
+        <WelcomeGrid>
+          <HeroContent>
+            <HeroBadge>
+              <Target size={16} />
+              Fresh fuel for training
+            </HeroBadge>
+            <WelcomeTitle>Welcome back, {user?.username}! 👋</WelcomeTitle>
+            <WelcomeSubtitle>
+              Keep nutrition synced with your workouts. Pick a meal, prep quickly, and stay on track with balanced plates.
+            </WelcomeSubtitle>
+            <QuickActions>
+              <ActionButton onClick={() => navigate('/meal-plans')}>
+                <ActionLabel>
+                  <Calendar size={18} />
+                  Plan meals
+                </ActionLabel>
+                <ArrowRight size={16} />
+              </ActionButton>
+              <ActionButton onClick={() => navigate('/chat')}>
+                <ActionLabel>
+                  <MessageCircle size={18} />
+                  Chat with AI coach
+                </ActionLabel>
+                <ArrowRight size={16} />
+              </ActionButton>
+              <ActionButton onClick={() => navigate('/shopping-lists')}>
+                <ActionLabel>
+                  <ShoppingCart size={18} />
+                  Prep shopping
+                </ActionLabel>
+                <ArrowRight size={16} />
+              </ActionButton>
+            </QuickActions>
+          </HeroContent>
+        </WelcomeGrid>
       </WelcomeSection>
 
       <StatsGrid>
@@ -821,43 +814,6 @@ const Dashboard = () => {
                 </button>
               </MealsContainer>
             )}
-          </CardContent>
-        </ContentCard>
-
-        <ContentCard
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <CardHeader>
-            <CardTitle>Find Recipes</CardTitle>
-            <Target size={20} color="#64748b" />
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleRecipeSearch}>
-              <SearchInput
-                placeholder="Type ingredients or a dish (e.g., 'quick vegetarian pasta')"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-              />
-              <SearchButton type="submit" disabled={searchLoading}>
-                {searchLoading ? 'Searching...' : 'Search'}
-              </SearchButton>
-            </form>
-            <SearchResults>
-              {searchResults.map((item) => (
-                <SearchResultItem key={item.id}>
-                  <ResultTitle>{item.title || 'Untitled recipe'}</ResultTitle>
-                  <ResultMeta>
-                    {item.cuisine || 'unknown cuisine'} · {item.meal_type?.join(', ') || 'any meal'} ·{' '}
-                    {item.total_time_minutes || item.total_time_min || '?'} min
-                  </ResultMeta>
-                </SearchResultItem>
-              ))}
-              {!searchLoading && searchResults.length === 0 && (
-                <ResultMeta>No results yet. Try a search above.</ResultMeta>
-              )}
-            </SearchResults>
           </CardContent>
         </ContentCard>
 

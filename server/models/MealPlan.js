@@ -33,6 +33,8 @@ const recipeSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
+  image: String,
+  imageUrl: String,
   ingredients: [ingredientSchema],
   instructions: [String],
   nutrition: {

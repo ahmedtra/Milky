@@ -109,6 +109,8 @@ router.post('/', auth, async (req, res) => {
       category: categoryMap[item.category?.toLowerCase()] || item.category || 'other'
     }));
 
+    const allPurchased = sanitizedItems.length > 0 && sanitizedItems.every((i) => i.purchased);
+
     const shoppingList = new ShoppingList({
       userId: req.user._id,
       mealPlanId: validMealPlanId,
@@ -117,7 +119,7 @@ router.post('/', auth, async (req, res) => {
       items: sanitizedItems,
       store,
       totalEstimatedCost,
-      status: 'draft'
+      status: allPurchased ? 'completed' : 'active'
     });
 
     await shoppingList.save();
@@ -207,6 +209,10 @@ router.put('/:id/items/:itemId', auth, async (req, res) => {
     if (purchased !== undefined) item.purchased = purchased;
     if (priority) item.priority = priority;
     if (notes) item.notes = notes;
+
+    // auto-update status based on completion
+    const allPurchased = shoppingList.items.length > 0 && shoppingList.items.every((i) => i.purchased);
+    shoppingList.status = allPurchased ? 'completed' : 'active';
 
     await shoppingList.save();
 
@@ -310,6 +316,9 @@ router.put('/:id/toggle-all', auth, async (req, res) => {
     shoppingList.items.forEach(item => {
       item.purchased = purchased;
     });
+    // auto-update status based on completion
+    const allPurchased = shoppingList.items.length > 0 && shoppingList.items.every((i) => i.purchased);
+    shoppingList.status = allPurchased ? 'completed' : 'active';
 
     await shoppingList.save();
 

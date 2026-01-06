@@ -546,7 +546,7 @@ class GeminiService {
     };
 
     try {
-      const text = await this.callTextModel(prompt, 0); // temperature 0 for deterministic filters
+      const text = await this.callTextModel(prompt, 0, 'json'); // deterministic, expect JSON
       const parsed = parseJsonLoose(text);
       if (!parsed || typeof parsed !== 'object') return null;
       if (!parsed.meal_type) parsed.meal_type = mealType;
@@ -565,8 +565,9 @@ class GeminiService {
 
   /**
    * Call either Gemini or local Ollama (if USE_OLLAMA_FOR_MEALPLAN=true) with configurable temperature.
+   * responseFormat: 'text' | 'json'
    */
-  async callTextModel(prompt, temperature = 0.6) {
+  async callTextModel(prompt, temperature = 0.6, responseFormat = 'text') {
     if (this.provider === 'gemini') {
       const result = await this.model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }]}],
@@ -581,9 +582,19 @@ class GeminiService {
         model: this.groqModel,
         temperature,
         maxTokens: 4096,
-        responseFormat: { type: 'json_object' },
+        responseFormat: responseFormat === 'json' ? { type: 'json_object' } : undefined,
         messages: [
-          { role: 'system', content: 'You are a helpful assistant that only returns the requested JSON or text. Do not add Markdown fences.' },
+          responseFormat === 'json'
+            ? {
+                role: 'system',
+                content:
+                  'You are a helpful assistant. Return only valid JSON with no markdown fences, no extra text.'
+              }
+            : {
+                role: 'system',
+                content:
+                  'You are a helpful nutrition assistant. Always respond in plain text, not JSON, not code fences. Use short paragraphs and bullet lists where appropriate.'
+              },
           { role: 'user', content: prompt }
         ]
       });
@@ -624,7 +635,7 @@ class GeminiService {
       Input ingredients:
       ${JSON.stringify(rawIngredients, null, 2)}
       `;
-      const text = await this.callTextModel(prompt, 0.2);
+      const text = await this.callTextModel(prompt, 0.2, 'json');
       const fence = text.match(/```json\s*([\s\S]*?)```/i);
       const cleaned = fence ? fence[1] : text.replace(/```/g, '');
       const parsed = JSON.parse(cleaned);
@@ -859,7 +870,7 @@ class GeminiService {
         try {
           const tLLMStart = Date.now();
           logMealplan(`🧠 Calling LLM for day ${dayIndex + 1}/${duration}...`);
-          const text = await this.callTextModel(dayPrompt, 0.8);
+          const text = await this.callTextModel(dayPrompt, 0.8, 'json');
           logMealplan(`🧠 LLM response for day ${dayIndex + 1} in ${Date.now() - tLLMStart} ms (length ${text?.length || 0})`);
 
           // Parse the day's JSON with a few tolerant repairs (handles trailing commas)
@@ -1166,7 +1177,7 @@ class GeminiService {
       }
       Use reasonable macro values (>0). Keep ingredients_parsed to 8-14 items.
       `;
-      const raw = await this.callTextModel(prompt, 0.4);
+      const raw = await this.callTextModel(prompt, 0.4, 'json');
       const cleaned = raw.replace(/```json|```/gi, '');
       const recipe = JSON.parse(cleaned);
       if (!recipe) return null;
@@ -1202,7 +1213,7 @@ class GeminiService {
       ]
       Use reasonable macro values (>0). Keep ingredients_parsed to 8-14 items.
       `;
-      const raw = await this.callTextModel(prompt, 0.4);
+      const raw = await this.callTextModel(prompt, 0.4, 'json');
       const parseLooseArray = (text) => {
         if (!text) return null;
         let body = text.replace(/```json|```/gi, '').trim();
@@ -1421,7 +1432,7 @@ class GeminiService {
       Meals: ${JSON.stringify(summary)}
       Candidates: ${JSON.stringify(candidatesByType)}
       `;
-      const raw = await this.callTextModel(prompt, 0.3);
+      const raw = await this.callTextModel(prompt, 0.3, 'json');
       const cleaned = raw.replace(/```json|```/gi, '').trim();
       const parsed = JSON.parse(cleaned);
       if (!parsed?.replacements) return;
@@ -1539,28 +1550,109 @@ class GeminiService {
     try {
       // Let the LLM classify intent; if it's a recipe search, route to ES results.
       const intent = await this.detectRecipeSearchIntent(message);
+      // Heuristic: if user references "first/second/third" without an id/title, try to pull from last assistant list
+      if (intent?.intent === 'recipe_detail' && !intent.recipeId && !intent.recipeTitle) {
+        const lastAssistant = [...conversationHistory].reverse().find((m) => m.role === 'assistant');
+        if (lastAssistant?.content) {
+          const titles = [];
+          lastAssistant.content.split('\n').forEach((line) => {
+            const mNum = line.match(/^\s*\d+\)\s*([^–-]+)/);
+            if (mNum && mNum[1]) titles.push(mNum[1].trim());
+          });
+          const ordinals = {
+            first: 0, 1: 0,
+            second: 1, 2: 1,
+            third: 2, 3: 2,
+            fourth: 3, 4: 3,
+            fifth: 4, 5: 4
+          };
+          const lowered = message.toLowerCase();
+          const idx = Object.keys(ordinals).find((k) => lowered.includes(k));
+          if (idx !== undefined && titles[ordinals[idx]] !== undefined) {
+            intent.recipeTitle = titles[ordinals[idx]];
+          }
+        }
+      }
       if (intent?.intent === 'recipe_search') {
+        const vectorInput = intent.recipeTitle || message;
+        const queryVector = await buildQueryVector(vectorInput);
+        const cleanVal = (v) => (v && String(v).toLowerCase() !== 'null' ? v : null);
+        const cleanList = (arr = []) =>
+          (Array.isArray(arr) ? arr : [arr])
+            .map((v) => (typeof v === 'string' ? v.toLowerCase().trim() : v))
+            .filter((v) => v && v !== 'null');
         const filters = {
-          diet_tags: intent.diet ? [intent.diet] : [],
-          include_ingredients: intent.includeIngredients || [],
-          exclude_ingredients: intent.excludeIngredients || [],
-          cuisine: intent.cuisine || null,
+          text: message,
+          diet_tags: cleanList(intent.diet ? [intent.diet] : []),
+          include_ingredients: cleanList(intent.includeIngredients || []),
+          exclude_ingredients: cleanList(intent.excludeIngredients || []),
+          cuisine: cleanVal(intent.cuisine),
           quick: intent.quick === true
         };
+        if (queryVector) {
+          filters.query_vector = queryVector;
+        }
         const { results } = await searchRecipes(filters, { size: 5, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-        if (!results?.length) {
+        const keyword = (intent.recipeTitle || message || '').toLowerCase().trim();
+        const filtered = keyword
+          ? (results || []).filter((r) => (r.title || '').toLowerCase().includes(keyword))
+          : results || [];
+        let useResults = filtered.length ? filtered : results;
+
+        const shouldForceLLM = keyword && !filtered.length;
+        // If results are sparse or irrelevant, backfill with LLM-generated recipes
+        if (shouldForceLLM || !useResults?.length || useResults.length < 2) {
+          const inferredMealType =
+            intent.mealType ||
+            (keyword.includes('dessert') ? 'dessert' : intent.intent || 'dinner');
+          const fallback = await this.generateLLMFallbackRecipes(
+            inferredMealType,
+            { preferredCuisine: intent.cuisine || null, dietType: intent.diet || null, recipeTitle: keyword },
+            3
+          );
+          if (fallback?.length) {
+            useResults = (useResults || []).concat(fallback);
+          }
+        }
+        if (!useResults?.length) {
           return 'I could not find matching recipes right now. Try adjusting the ingredients or diet.';
         }
-        const summary = results.map((r, idx) => {
+        const summary = useResults.map((r, idx) => {
+          const title = r.title || r.name || `Recipe ${idx + 1}`;
           const calories = r.nutrition?.calories ?? r.calories ?? 'n/a';
           const protein = r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g ?? 'n/a';
           const time = r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes ?? 'n/a';
-          return `${idx + 1}. ${r.title} — ${calories} cal, protein ${protein}g, time ${time} min (id: ${r.id})`;
-        }).join('\n');
-        return `Here are some recipes I found based on your request:\n${summary}\n\nTell me which id you want more details about.`;
+          return `${idx + 1}) <recipe>${title}</recipe>\n   • ${calories} cal, ${protein}g protein, ${time} min`;
+        }).join('\n\n');
+
+        // Ask the LLM to validate/refresh the list to match the request (and invent if none match)
+        try {
+          const recPrompt = `
+          User asked: "${message}"
+          You have candidate recipes (JSON):
+          ${JSON.stringify(useResults.map((r) => ({
+            title: r.title || r.name,
+            calories: r.nutrition?.calories ?? r.calories,
+            protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
+            time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes
+          })), null, 2)}
+
+          Task: Return a concise plain-text reply with up to 3 recipes that truly match the request. Each line: "<recipe><title></recipe> – <cal> cal, <protein>g protein, <time> min".
+          If none of the candidates match, invent up to 3 reasonable recipes that do (and still wrap titles in <recipe> tags).
+          Do NOT include ids or JSON. Keep it readable with line breaks or bullet points.
+          `;
+          const llmAnswer = await this.callTextModel(recPrompt, 0.3, 'text');
+          const hasRecipeTag = /<recipe>.*<\/recipe>/i.test(llmAnswer || '');
+          return llmAnswer && hasRecipeTag ? llmAnswer : summary;
+        } catch (e) {
+          return summary;
+        }
       }
       if (intent?.intent === 'recipe_detail') {
         let recipe = null;
+        // Try to propagate previous assistant list into the search context
+        const lastAssistant = [...conversationHistory].reverse().find((m) => m.role === 'assistant')?.content || '';
+
         if (intent.recipeId) {
           recipe = await getRecipeById(intent.recipeId);
         }
@@ -1571,7 +1663,7 @@ class GeminiService {
           if (exact?.results?.length) {
             results = exact.results;
           } else {
-            const fuzzy = await searchRecipes({ text: intent.recipeTitle }, { size: 3, randomize: false });
+            const fuzzy = await searchRecipes({ text: `${intent.recipeTitle} ${lastAssistant}`.trim() }, { size: 3, randomize: false });
             results = fuzzy?.results || [];
           }
           recipe = results?.[0] || null;
@@ -1738,7 +1830,7 @@ ${instructions}`;
         
         ${JSON.stringify(consolidatedIngredients, null, 2)}
         
-        Please organize the shopping list by store sections and provide the following JSON format:
+        Please organize the shopping list by STORE SECTIONS and provide the following JSON format:
         {
           "title": "Shopping List Title",
           "description": "Brief description",
@@ -1748,6 +1840,7 @@ ${instructions}`;
               "amount": "total quantity needed",
               "unit": "unit of measurement",
               "category": "produce|meat|dairy|pantry|frozen|bakery|beverages|other",
+              "storeSection": "produce|meat|dairy|pantry|frozen|bakery|beverages|other",
               "priority": "low|medium|high",
               "estimatedPrice": number (in USD, realistic grocery store prices),
               "notes": "any special notes"
@@ -1758,19 +1851,19 @@ ${instructions}`;
         }
         
         Please:
-        1. Group similar items together
-        2. Calculate total quantities needed
-        3. Suggest appropriate store categories
-        4. Estimate REALISTIC prices in USD (e.g., produce: $2-5, meat: $6-12, dairy: $3-6, pantry: $2-5)
-        5. For each item, set estimatedPrice to a reasonable USD amount based on typical grocery prices
-        6. Calculate totalEstimatedCost as the sum of all item prices
-        7. Add helpful notes for shopping
+        1. Group similar items together and assign the correct storeSection from the allowed set above (matching category).
+        2. Calculate total quantities needed.
+        3. Suggest appropriate store categories/sections (produce, meat, dairy, pantry, frozen, bakery, beverages, other).
+        4. Estimate REALISTIC prices in USD (e.g., produce: $2-5, meat: $6-12, dairy: $3-6, pantry: $2-5).
+        5. For each item, set estimatedPrice to a reasonable USD amount based on typical grocery prices.
+        6. Calculate totalEstimatedCost as the sum of all item prices.
+        7. Add helpful notes for shopping.
         8. Use sensible units: whole produce (onion, garlic, tomato, potato, pepper, apple, banana, avocado, carrot, lemon, lime, orange) should be counted as pieces, not cups/oz/ml.
 
         IMPORTANT: Every item must have a valid estimatedPrice number greater than 0.
       `;
 
-        const text = await this.callTextModel(prompt, 0.3);
+        const text = await this.callTextModel(prompt, 0.3, 'json');
 
         // Try to parse JSON directly first
         try {
@@ -2625,7 +2718,7 @@ ${instructions}`;
         }
       `;
 
-      const text = await this.callTextModel(prompt, 0.4);
+      const text = await this.callTextModel(prompt, 0.4, 'json');
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

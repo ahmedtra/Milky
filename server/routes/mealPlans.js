@@ -3,8 +3,10 @@ const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const ShoppingList = require('../models/ShoppingList');
 const geminiService = require('../services/geminiService');
+const FavoriteRecipe = require('../models/FavoriteRecipe');
 const { findAlternatives, getRecipeById } = require('../services/recipeSearch/searchService');
 const auth = require('../middleware/auth');
+const { ensureMealImage } = require('../services/leonardoService');
 
 const parseListQuery = (value) => {
   if (Array.isArray(value)) return value;
@@ -15,6 +17,17 @@ const parseListQuery = (value) => {
     .filter(Boolean);
 };
 
+const allowedIngredientCategories = new Set([
+  'protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat',
+  'spice', 'nut', 'seed', 'broth', 'herb', 'other'
+]);
+
+const sanitizeCategory = (cat) => {
+  if (!cat || typeof cat !== 'string') return 'other';
+  const lower = cat.toLowerCase();
+  return allowedIngredientCategories.has(lower) ? lower : 'other';
+};
+
 const mapSearchHitToPlanRecipe = (hit) => {
   if (!hit) return null;
   const ingredients = Array.isArray(hit.ingredients_parsed) && hit.ingredients_parsed.length
@@ -22,10 +35,15 @@ const mapSearchHitToPlanRecipe = (hit) => {
         name: ing.name || '',
         amount: ing.amount || '1',
         unit: ing.unit || 'unit',
-        category: ing.category || 'other'
+        category: sanitizeCategory(ing.category)
       }))
     : Array.isArray(hit.ingredients)
-      ? hit.ingredients
+      ? hit.ingredients.map((ing) => ({
+          name: ing.name || ing,
+          amount: ing.amount || ing.quantity || '1',
+          unit: ing.unit || ing.measure || 'unit',
+          category: sanitizeCategory(ing.category)
+        }))
       : [];
 
   const instructions = hit.instructions
@@ -325,8 +343,8 @@ router.post('/generate', auth, async (req, res) => {
 // Update meal plan
 const updateMealPlan = async (req, res) => {
   try {
-    console.log('🔄 Updating meal plan:', req.params.id);
-    const { title, description, days, status } = req.body;
+    console.log('🔄 Updating meal plan:', req.params.id, 'payload keys:', Object.keys(req.body || {}));
+    const { title, description, days, status, startDate, endDate } = req.body || {};
 
     const mealPlan = await MealPlan.findOne({
       _id: req.params.id,
@@ -343,9 +361,45 @@ const updateMealPlan = async (req, res) => {
     if (days) mealPlan.days = days;
     if (status) mealPlan.status = status;
 
+    let parsedStart = startDate ? new Date(startDate) : null;
+    if (parsedStart && !Number.isNaN(parsedStart.getTime())) {
+      // normalize to midday to reduce TZ drift when serializing dates
+      parsedStart.setHours(12, 0, 0, 0);
+      mealPlan.startDate = parsedStart;
+    } else {
+      parsedStart = mealPlan.startDate ? new Date(mealPlan.startDate) : null;
+      if (parsedStart && !Number.isNaN(parsedStart.getTime())) {
+        parsedStart.setHours(12, 0, 0, 0);
+      }
+    }
+
+    let parsedEnd = endDate ? new Date(endDate) : null;
+    if (parsedEnd && !Number.isNaN(parsedEnd.getTime())) {
+      parsedEnd.setHours(12, 0, 0, 0);
+      mealPlan.endDate = parsedEnd;
+    }
+
+    // If we have a valid start date and days, rebase day.date sequentially
+    if (parsedStart && Array.isArray(mealPlan.days)) {
+      mealPlan.days = mealPlan.days.map((day, idx) => {
+        const d = new Date(parsedStart);
+        d.setDate(d.getDate() + idx);
+        d.setHours(12, 0, 0, 0);
+        return {
+          ...day,
+          date: d
+        };
+      });
+      // Update endDate to match the last day if not explicitly provided
+      const lastDay = mealPlan.days[mealPlan.days.length - 1];
+      if (lastDay?.date) {
+        mealPlan.endDate = new Date(lastDay.date);
+      }
+    }
+
     await mealPlan.save();
 
-    console.log('✅ Meal plan updated:', mealPlan.title, 'status:', mealPlan.status);
+    console.log('✅ Meal plan updated:', mealPlan.title, 'status:', mealPlan.status, 'start:', mealPlan.startDate, 'end:', mealPlan.endDate);
 
     res.json({
       message: 'Meal plan updated successfully',
@@ -472,6 +526,25 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
     };
 
     let alternatives = [];
+    // Pull recent favorites for this user to surface as quick picks
+    let favoriteAlts = [];
+    try {
+      const favorites = await FavoriteRecipe.find({ userId: req.user._id }).sort({ updatedAt: -1 }).limit(5);
+      favoriteAlts = favorites.map((fav) => ({
+        id: fav.externalId || fav._id,
+        title: fav.title,
+        description: fav.summary || 'Favorite recipe',
+        calories: fav.calories,
+        protein_grams: fav.protein,
+        prep_time_minutes: fav.totalTime,
+        tags: fav.tags || [],
+        source: 'favorite',
+        recipe: fav.planRecipe
+      }));
+    } catch (err) {
+      console.warn('⚠️ Could not load favorites', err.message);
+    }
+
     try {
       console.log(`🔍 Fetching alternatives for ${meal.type} (day ${dayIndex}) with prefs:`, mergedPrefs);
       const candidates = await geminiService.fetchCandidatesForMeal(meal.type, mergedPrefs, limit * 2);
@@ -505,7 +578,9 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
       tags: hit.tags || hit.dietary_tags || hit.diet_tags || []
     }));
 
-    res.json({ alternatives: summarized, count: summarized.length });
+    const merged = [...favoriteAlts, ...summarized];
+
+    res.json({ alternatives: merged, count: merged.length });
   } catch (error) {
     console.error('❌ Fetch alternatives error:', error);
     res.status(500).json({ message: 'Server error fetching alternatives' });
@@ -547,6 +622,7 @@ router.patch('/:id/days/:dayIndex/meals/:mealIndex', auth, async (req, res) => {
     }
 
     meal.recipes = [mappedRecipe];
+    await ensureMealImage(meal);
     meal.totalNutrition = nutritionTotalsFromRecipe(mappedRecipe);
     meal.isCompleted = false;
     meal.completedAt = undefined;
@@ -561,6 +637,60 @@ router.patch('/:id/days/:dayIndex/meals/:mealIndex', auth, async (req, res) => {
   } catch (error) {
     console.error('❌ Replace meal error:', error);
     res.status(500).json({ message: 'Server error replacing meal' });
+  }
+});
+
+// Ensure/generate an image for a meal (Leonardo)
+router.post('/:id/days/:dayIndex/meals/:mealIndex/image', auth, async (req, res) => {
+  try {
+    const { id, dayIndex, mealIndex } = req.params;
+    const mealPlan = await MealPlan.findOne({
+      _id: id,
+      userId: req.user._id
+    });
+
+    if (!mealPlan) return res.status(404).json({ message: 'Meal plan not found' });
+    const day = mealPlan.days?.[dayIndex];
+    const meal = day?.meals?.[mealIndex];
+    if (!day || !meal) return res.status(404).json({ message: 'Meal not found' });
+
+    const before = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
+    await ensureMealImage(meal);
+    const after = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
+
+    if (after) {
+      // Persist the image fields on the first recipe to avoid version conflicts
+      const base = `days.${dayIndex}.meals.${mealIndex}.recipes.0`;
+      await MealPlan.updateOne(
+        { _id: id, userId: req.user._id },
+        {
+          $set: {
+            [`${base}.image`]: after,
+            [`${base}.imageUrl`]: after,
+          },
+        }
+      );
+    }
+
+    // Return the updated image info without requiring a full refetch
+    return res.json({
+      message: after ? 'Image ensured' : 'No image generated',
+      image: after || before || null,
+      meal: {
+        ...meal.toObject?.() || meal,
+        recipes: [
+          {
+            ...(meal.recipes?.[0]?.toObject?.() || meal.recipes?.[0] || {}),
+            image: after || before || null,
+            imageUrl: after || before || null,
+          },
+          ...(meal.recipes || []).slice(1),
+        ],
+      },
+    });
+  } catch (error) {
+    console.error('❌ Ensure meal image error:', error);
+    res.status(500).json({ message: 'Server error ensuring meal image' });
   }
 });
 

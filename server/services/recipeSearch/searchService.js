@@ -49,6 +49,7 @@ const normalizeNutrition = (src = {}) => {
 
 const normalizeCuisine = (value) => {
   if (!value) return null;
+  if (String(value).toLowerCase() === 'null') return null;
   return String(value).toLowerCase().replace(/\s+/g, '_');
 };
 
@@ -67,6 +68,10 @@ const macroFilters = (macro) => {
 
 const buildQuery = (filters = {}) => {
   const bool = { must: [], filter: [], must_not: [], should: [] };
+  const cleanList = (arr = []) =>
+    (Array.isArray(arr) ? arr : [arr])
+      .map((v) => (typeof v === 'string' ? v.toLowerCase().trim() : v))
+      .filter((v) => v && v !== 'null');
 
   const addRangeFilter = (fields = [], range = {}) => {
     if (!fields.length || !Object.keys(range).length) return;
@@ -93,7 +98,7 @@ const buildQuery = (filters = {}) => {
   }
 
   // Support both legacy dietary_tags and canonical diet_tags stored in the index
-  const dietTags = filters.dietary_tags || filters.diet_tags;
+  const dietTags = cleanList(filters.dietary_tags || filters.diet_tags);
   if (dietTags?.length) {
     bool.filter.push({
       bool: {
@@ -106,14 +111,16 @@ const buildQuery = (filters = {}) => {
     });
   }
 
-  if (filters.include_ingredients?.length) {
-    bool.filter.push({ terms: { ingredients_norm: filters.include_ingredients } });
+  const includeIngredients = cleanList(filters.include_ingredients);
+  if (includeIngredients.length) {
+    bool.filter.push({ terms: { ingredients_norm: includeIngredients } });
   }
 
-  if (filters.exclude_ingredients?.length) {
-    bool.must_not.push({ terms: { ingredients_norm: filters.exclude_ingredients } });
-    bool.must_not.push({ terms: { allergens: filters.exclude_ingredients } });
-    filters.exclude_ingredients.forEach((term) => {
+  const excludeIngredients = cleanList(filters.exclude_ingredients);
+  if (excludeIngredients.length) {
+    bool.must_not.push({ terms: { ingredients_norm: excludeIngredients } });
+    bool.must_not.push({ terms: { allergens: excludeIngredients } });
+    excludeIngredients.forEach((term) => {
       if (!term) return;
       bool.must_not.push({
         multi_match: {
@@ -130,7 +137,8 @@ const buildQuery = (filters = {}) => {
   }
 
   if (filters.cuisine) {
-    bool.filter.push({ term: { cuisine: filters.cuisine } });
+    const normCuisine = normalizeCuisine(filters.cuisine);
+    if (normCuisine) bool.filter.push({ term: { cuisine: normCuisine } });
   }
 
   if (filters.quick === true) {

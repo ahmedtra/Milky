@@ -32,6 +32,21 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Relaxed CSP to allow external images (e.g., Leonardo CDN) and APIs
+app.use((req, res, next) => {
+  const csp = [
+    "default-src 'self'",
+    "img-src 'self' data: https: https://cdn.leonardo.ai https://*.leonardo.ai",
+    "style-src 'self' 'unsafe-inline' https:",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+    "connect-src 'self' https: http:",
+    "font-src 'self' data: https:",
+    "frame-ancestors 'self'",
+  ].join("; ");
+  res.setHeader("Content-Security-Policy", csp);
+  next();
+});
+
 // CORS configuration
 const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
 const allowedOrigins = (process.env.CLIENT_URLS || process.env.CLIENT_URL || 'http://localhost:3000')

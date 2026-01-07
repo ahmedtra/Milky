@@ -538,6 +538,8 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
         protein_grams: fav.protein,
         prep_time_minutes: fav.totalTime,
         tags: fav.tags || [],
+        image: fav.planRecipe?.image || fav.planRecipe?.imageUrl || fav.image || fav.imageUrl,
+        imageUrl: fav.planRecipe?.image || fav.planRecipe?.imageUrl || fav.image || fav.imageUrl,
         source: 'favorite',
         recipe: fav.planRecipe
       }));
@@ -578,9 +580,7 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
       tags: hit.tags || hit.dietary_tags || hit.diet_tags || []
     }));
 
-    const merged = [...favoriteAlts, ...summarized];
-
-    res.json({ alternatives: merged, count: merged.length });
+    res.json({ alternatives: summarized, favorites: favoriteAlts, count: summarized.length });
   } catch (error) {
     console.error('❌ Fetch alternatives error:', error);
     res.status(500).json({ message: 'Server error fetching alternatives' });

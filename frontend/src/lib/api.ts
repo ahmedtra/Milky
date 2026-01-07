@@ -118,10 +118,13 @@ export async function getMealAlternatives(params: {
   dayIndex: number;
   mealIndex: number;
   limit?: number;
-}): Promise<any[]> {
+}): Promise<{ alternatives: any[]; favorites?: any[] }> {
   const { planId, dayIndex, mealIndex, limit = 3 } = params;
   const data = await fetchJson<any>(`/api/meal-plans/${planId}/days/${dayIndex}/meals/${mealIndex}/alternatives?limit=${limit}`);
-  return data?.alternatives || [];
+  return {
+    alternatives: data?.alternatives || [],
+    favorites: data?.favorites || [],
+  };
 }
 
 export async function applyMealAlternative(params: {

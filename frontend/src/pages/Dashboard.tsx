@@ -12,7 +12,7 @@ import { useShoppingLists } from "@/hooks/use-shopping-lists";
 import { getMealCalories, getPlanId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getMealAlternatives, applyMealAlternative, ensureMealImage } from "@/lib/api";
+import { getMealAlternatives, applyMealAlternative, ensureMealImage, getFavoriteRecipes } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
 const quickLinks = [
@@ -44,6 +44,7 @@ export default function Dashboard() {
     loading: false,
     applying: false,
   });
+  const [favorites, setFavorites] = useState<{ items: any[]; loading: boolean }>({ items: [], loading: false });
 
   // Get today's meals from the plan whose date range covers today
   const today = new Date();
@@ -267,8 +268,20 @@ export default function Dashboard() {
     }
     setSwapState({ key, options: [], loading: true, applying: false });
     try {
-      const options = await getMealAlternatives({ planId, dayIndex, mealIndex, limit: 3 });
-      setSwapState({ key, options, loading: false, applying: false });
+      const { alternatives } = await getMealAlternatives({ planId, dayIndex, mealIndex, limit: 3 });
+      const limited = Array.isArray(alternatives) ? alternatives.slice(0, 3) : [];
+      setSwapState({ key, options: limited, loading: false, applying: false });
+      if (!limited.length) toast("No alternatives found right now.");
+      if (!favorites.items.length) {
+        setFavorites({ items: [], loading: true });
+        try {
+          const favs = await getFavoriteRecipes();
+          setFavorites({ items: favs, loading: false });
+        } catch (err) {
+          console.error("Error loading favorites", err);
+          setFavorites({ items: [], loading: false });
+        }
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to load alternatives");
@@ -675,8 +688,10 @@ export default function Dashboard() {
                         <div
                           key={entry.key}
                           className={cn(
-                            "glass-card p-4 md:p-5 rounded-2xl shrink-0 w-[90%] md:w-[80%] transition-all duration-300",
-                            isActive ? "shadow-lg ring-1 ring-primary/30 scale-[1.02]" : "opacity-70"
+                            "glass-card p-4 md:p-5 rounded-2xl shrink-0 w-[90%] md:w-[80%] transition-all duration-300 border border-border/80",
+                            isActive
+                              ? "shadow-xl ring-1 ring-primary/30 scale-[1.02]"
+                              : "opacity-70 shadow-inner"
                           )}
                         >
                           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
@@ -738,39 +753,93 @@ export default function Dashboard() {
                                         </Button>
                                       </div>
                                     </div>
-                                    {isSwapOpen && (
-                                      <div className="rounded-lg bg-secondary p-3 space-y-2">
+                                      {isSwapOpen && (
+                                      <div className="rounded-lg bg-secondary p-3 space-y-3">
                                         {swapState.loading ? (
                                           <p className="text-sm text-muted-foreground">Loading alternatives...</p>
                                         ) : swapState.options.length ? (
-                                          swapState.options.map((opt: any, altIdx: number) => (
-                                            <div key={altIdx} className="flex items-center justify-between gap-2">
-                                              <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-foreground truncate">
-                                                  {opt?.title || opt?.name || "Recipe"}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground truncate">
-                                                  {opt?.description || opt?.summary || "Alternative recipe"}
-                                                </p>
+                                          <div className="space-y-2">
+                                            {swapState.options.map((opt: any, altIdx: number) => (
+                                              <div key={altIdx} className="flex items-center justify-between gap-2">
+                                                <div className="min-w-0">
+                                                  <p className="text-sm font-semibold text-foreground truncate">
+                                                    {opt?.title || opt?.name || "Recipe"}
+                                                  </p>
+                                                  <p className="text-xs text-muted-foreground truncate">
+                                                    {opt?.description || opt?.summary || "Alternative recipe"}
+                                                  </p>
+                                                </div>
+                                                <Button
+                                                  variant="default"
+                                                  size="sm"
+                                                  className="shrink-0"
+                                                  disabled={swapState.applying}
+                                                  onClick={() =>
+                                                    handleApplyAlternative(
+                                                      entry.planId,
+                                                      entry.dayIndex,
+                                                      mealIdx,
+                                                      opt?.recipeId || opt?._id || opt?.id
+                                                    )
+                                                  }
+                                                >
+                                                  {swapState.applying ? "..." : "Use"}
+                                                </Button>
                                               </div>
-                                              <Button
-                                                variant="default"
-                                                size="sm"
-                                                className="shrink-0"
-                                                disabled={swapState.applying}
-                                                onClick={() =>
-                                                  handleApplyAlternative(
-                                                    entry.planId,
-                                                    entry.dayIndex,
-                                                    mealIdx,
-                                                    opt?.recipeId || opt?._id || opt?.id
-                                                  )
-                                                }
-                                              >
-                                                {swapState.applying ? "..." : "Use"}
-                                              </Button>
+                                            ))}
+                                          </div>
+                                        ) : null}
+
+                                        {favorites.items.length > 0 ? (
+                                          <div className="pt-2 border-t border-border/60">
+                                            <p className="text-xs font-semibold text-muted-foreground mb-2">Favorites</p>
+                                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                              {favorites.items.map((fav, idx) => {
+                                                const img =
+                                                  fav?.planRecipe?.image ||
+                                                  fav?.planRecipe?.imageUrl ||
+                                                  fav?.image ||
+                                                  fav?.imageUrl ||
+                                                  fav?.recipe?.image ||
+                                                  fav?.recipe?.imageUrl;
+                                                return (
+                                                  <button
+                                                    key={idx}
+                                                    className="flex flex-col items-start gap-2 px-3 py-2 rounded-lg border bg-white text-left min-w-[200px] max-w-[240px] hover:border-primary/50"
+                                                    onClick={() =>
+                                                      handleApplyAlternative(
+                                                        entry.planId,
+                                                        entry.dayIndex,
+                                                        mealIdx,
+                                                        undefined,
+                                                        fav?.planRecipe || fav?.recipe || fav
+                                                      )
+                                                    }
+                                                  >
+                                                    {img ? (
+                                                      <img
+                                                        src={img}
+                                                        alt={fav?.title || fav?.name || fav?.planRecipe?.title || "Favorite"}
+                                                        className="w-full h-24 rounded-md object-cover border border-border/50"
+                                                      />
+                                                    ) : (
+                                                      <div className="w-full h-24 rounded-md bg-secondary flex items-center justify-center text-[11px] text-muted-foreground border border-border/50">
+                                                        No image
+                                                      </div>
+                                                    )}
+                                                    <div className="min-w-0 w-full">
+                                                      <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                                                        {fav?.title || fav?.name || fav?.planRecipe?.title || fav?.planRecipe?.name || "Favorite"}
+                                                      </p>
+                                                      <p className="text-xs text-muted-foreground line-clamp-2">
+                                                        {fav?.planRecipe?.description || fav?.description || ""}
+                                                      </p>
+                                                    </div>
+                                                  </button>
+                                                );
+                                              })}
                                             </div>
-                                          ))
+                                          </div>
                                         ) : (
                                           <p className="text-sm text-muted-foreground">No alternatives found.</p>
                                         )}
@@ -778,7 +847,7 @@ export default function Dashboard() {
                                     )}
                                   </div>
                                 );
-                              })}
+                             })}
                             </div>
                           )}
                         </div>

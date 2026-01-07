@@ -30,6 +30,7 @@ interface DayDetailDialogProps {
   startDate?: string;
   onUpdateStartDate?: (date: string) => void;
   highlightDates?: Array<string | Date>;
+  favorites?: any[];
 }
 
 export function DayDetailDialog({
@@ -51,6 +52,7 @@ export function DayDetailDialog({
   startDate,
   onUpdateStartDate,
   highlightDates = [],
+  favorites = [],
 }: DayDetailDialogProps) {
   const safeIndex = Math.max(0, Math.min(selectedDayIndex, Math.max(0, days.length - 1)));
   const currentDay = days[safeIndex];
@@ -65,6 +67,13 @@ export function DayDetailDialog({
   const normalize = (d: Date | null) => (d ? format(d, "yyyy-MM-dd") : "");
   const selectedDateStr = normalize(dayDates[safeIndex] || null);
   const bookedDates = [...dayDates.filter(Boolean), ...highlightDates.map((d) => new Date(d as any))] as Date[];
+  const altOptions = React.useMemo(() => {
+    const nonFavorite = swapState.options.filter(
+      (opt: any) => !(opt?.planRecipe || opt?.isFavorite)
+    );
+    const base = nonFavorite.length ? nonFavorite : swapState.options;
+    return Array.isArray(base) ? base.slice(0, 3) : [];
+  }, [swapState.options]);
 
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
@@ -217,35 +226,88 @@ export function DayDetailDialog({
                           <div className="mt-3 p-3 rounded-lg bg-secondary max-h-48 overflow-y-auto">
                             {swapState.loading ? (
                               <p className="text-sm text-muted-foreground">Loading alternatives...</p>
-                            ) : swapState.options.length ? (
-                              <div className="space-y-2">
-                                {swapState.options.map((opt, altIdx) => (
-                                  <div key={altIdx} className="flex items-center justify-between gap-2">
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-semibold text-foreground truncate">
-                                        {opt?.title || opt?.name || "Recipe"}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground truncate">
-                                        {opt?.description || opt?.summary || "Alternative recipe"}
-                                      </p>
+                            ) : altOptions.length ? (
+                              <div className="space-y-3">
+                                <div className="space-y-2">
+                                  {altOptions.map((opt, altIdx) => (
+                                    <div key={altIdx} className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground truncate">
+                                          {opt?.title || opt?.name || "Recipe"}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {opt?.description || opt?.summary || "Alternative recipe"}
+                                        </p>
+                                      </div>
+                                      <Button
+                                        variant="primary"
+                                        size="sm"
+                                        disabled={swapState.applying}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onApplyAlternative(
+                                            safeIndex,
+                                            mIdx,
+                                            opt?.recipeId || opt?._id || opt?.id
+                                          );
+                                        }}
+                                      >
+                                        {swapState.applying ? "Applying..." : "Use"}
+                                      </Button>
                                     </div>
-                                    <Button
-                                      variant="primary"
-                                      size="sm"
-                                      disabled={swapState.applying}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onApplyAlternative(
-                                          safeIndex,
-                                          mIdx,
-                                          opt?.recipeId || opt?._id || opt?.id
-                                        );
-                                      }}
-                                    >
-                                      {swapState.applying ? "Applying..." : "Use"}
-                                    </Button>
+                                  ))}
+                                </div>
+                                {favorites.length > 0 && (
+                                  <div className="pt-2 border-t border-border/60">
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">Favorites</p>
+                                    <div className="flex gap-2 overflow-x-auto pb-2">
+                                      {favorites.map((fav, idx) => (
+                                        <button
+                                          key={idx}
+                                          className="group flex flex-col items-start gap-2 px-3 py-3 rounded-lg border border-border/60 border-dashed bg-white text-left min-w-[220px] max-w-[260px] hover:border-primary/60"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onApplyAlternative(
+                                              safeIndex,
+                                              mIdx,
+                                              undefined,
+                                              fav?.planRecipe || fav?.recipe || fav
+                                            );
+                                          }}
+                                        >
+                                          {(() => {
+                                            const img =
+                                              fav?.planRecipe?.image ||
+                                              fav?.planRecipe?.imageUrl ||
+                                              fav?.image ||
+                                              fav?.imageUrl ||
+                                              fav?.recipe?.image ||
+                                              fav?.recipe?.imageUrl;
+                                            return img ? (
+                                              <img
+                                                src={img}
+                                                alt={fav?.title || fav?.name || fav?.planRecipe?.title || "Favorite"}
+                                                className="w-full h-28 rounded-lg object-cover border border-border/50"
+                                              />
+                                            ) : (
+                                              <div className="w-full h-28 rounded-lg bg-secondary flex items-center justify-center text-xs text-muted-foreground border border-border/50">
+                                                No image
+                                              </div>
+                                            );
+                                          })()}
+                                          <div className="min-w-0 w-full">
+                                            <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                                              {fav?.title || fav?.name || fav?.planRecipe?.title || fav?.planRecipe?.name || "Favorite"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground line-clamp-2">
+                                              {fav?.planRecipe?.description || fav?.description || ""}
+                                            </p>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
                                   </div>
-                                ))}
+                                )}
                               </div>
                             ) : (
                               <p className="text-sm text-muted-foreground">No alternatives found.</p>

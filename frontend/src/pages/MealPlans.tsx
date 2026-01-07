@@ -315,11 +315,14 @@ export default function MealPlans() {
     const key = swapKeyFor(planId, dayIndex, mealIndex);
     setSwapState({ key, options: [], loading: true, applying: false });
     try {
-      const options = await getMealAlternatives({ planId, dayIndex, mealIndex, limit: 3 });
-      const limited = Array.isArray(options) ? options.slice(0, 3) : [];
+      const { alternatives, favorites: favsFromApi } = await getMealAlternatives({ planId, dayIndex, mealIndex, limit: 3 });
+      const limited = Array.isArray(alternatives) ? alternatives.slice(0, 3) : [];
       setSwapState({ key, options: limited, loading: false, applying: false });
-      if (!options.length) toast("No alternatives found right now.");
-      if (!favorites.items.length) {
+      if (!limited.length) toast("No alternatives found right now.");
+      // hydrate favorites either from API or fallback endpoint
+      if (favsFromApi?.length) {
+        setFavorites({ items: favsFromApi, loading: false });
+      } else if (!favorites.items.length) {
         setFavorites({ items: [], loading: true });
         try {
           const favs = await getFavoriteRecipes();
@@ -616,6 +619,7 @@ export default function MealPlans() {
         onWheel={handleDayWheel}
         swapState={swapState}
         swapKeyFor={swapKeyFor}
+        favorites={favorites.items}
         onSwapOpen={(dayIdx, mealIdx) => selectedDay && handleSwapOpen(selectedDay.planId, dayIdx, mealIdx)}
         onApplyAlternative={(dayIdx, mealIdx, recipeId) =>
           selectedDay && handleApplyAlternative(selectedDay.planId, dayIdx, mealIdx, recipeId)

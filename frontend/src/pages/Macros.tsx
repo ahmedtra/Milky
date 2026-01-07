@@ -130,7 +130,7 @@ export default function Macros() {
     colorForecast: string,
     suffix = ""
   ) => (
-    <Card className="glass-card">
+    <Card className="glass-card overflow-hidden">
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -138,37 +138,41 @@ export default function Macros() {
             <p className="text-xs text-muted-foreground">Solid: completed | Dashed: planned</p>
           </div>
         </div>
-        <ChartContainer
-          className="h-64"
-          config={{
-            actual: { label: "Actual", color: colorActual },
-            forecast: { label: "Planned", color: colorForecast },
-          }}
-        >
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-            <Line
-              type="monotone"
-              dataKey={actualKey as string}
-              stroke={colorActual}
-              dot={false}
-              strokeWidth={2}
-              connectNulls
-            />
-            <Line
-              type="monotone"
-              dataKey={forecastKey as string}
-              stroke={colorForecast}
-              dot={false}
-              strokeWidth={2}
-              strokeDasharray="6 6"
-              connectNulls
-            />
-          </LineChart>
-        </ChartContainer>
+        <div className="w-full overflow-x-auto md:overflow-visible pb-2">
+          <div className="min-w-[560px] md:min-w-0 md:w-full pr-2 md:pr-0">
+            <ChartContainer
+              className="h-64 sm:h-72"
+              config={{
+                actual: { label: "Actual", color: colorActual },
+                forecast: { label: "Planned", color: colorForecast },
+              }}
+            >
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+                <Line
+                  type="monotone"
+                  dataKey={actualKey as string}
+                  stroke={colorActual}
+                  dot={false}
+                  strokeWidth={2}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey={forecastKey as string}
+                  stroke={colorForecast}
+                  dot={false}
+                  strokeWidth={2}
+                  strokeDasharray="6 6"
+                  connectNulls
+                />
+              </LineChart>
+            </ChartContainer>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -177,12 +181,12 @@ export default function Macros() {
     <div className="min-h-screen bg-background">
       <Navigation />
       <main className="pt-32 md:pt-36 pb-12 px-4 md:px-8 max-w-6xl mx-auto w-full space-y-6">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10">
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-xs font-semibold text-primary">Macros Overview</span>
           </div>
-          <div className="text-muted-foreground text-sm">
+          <div className="text-muted-foreground text-xs sm:text-sm">
             Summing all active meal plans; solid = completed meals, dashed = planned.
           </div>
         </div>

@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "nodemon server/index.js",
-    "client": "cd client && npm start",
-    "build": "cd client && npm run build",
+    "client": "cd milky-ai-diet-planner && npm run dev",
+    "build": "cd milky-ai-diet-planner && npm run build",
     "start": "node server/index.js",
-    "install-all": "npm install && cd client && npm install"
+    "install-all": "npm install && cd milky-ai-diet-planner && npm install"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",

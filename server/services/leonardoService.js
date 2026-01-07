@@ -4,6 +4,7 @@ const LEONARDO_API_KEY = process.env.LEONARDO_API_KEY || process.env.LEONARDO_KE
 const LEONARDO_API_BASE = "https://cloud.leonardo.ai/api/rest/v1";
 // Default to Leonardo Vision XL; override via env if needed
 const LEONARDO_MODEL_ID = process.env.LEONARDO_MODEL_ID || "5c232a9e-9061-4777-980a-ddc8e65647c6";
+const { client: esClient, recipeIndex } = require("./recipeSearch/elasticsearchClient");
 
 const hasKey = () => Boolean(LEONARDO_API_KEY);
 
@@ -129,6 +130,23 @@ async function ensureMealImage(meal) {
     if (url) {
       recipe.image = url;
       recipe.imageUrl = url;
+      // If this recipe is already in Elasticsearch, persist the image URL there too
+      const esId = recipe.recipeId || recipe._id;
+      if (esId) {
+        try {
+          await esClient.update({
+            index: recipeIndex,
+            id: esId,
+            doc: { image: url, imageUrl: url },
+            doc_as_upsert: false,
+          });
+        } catch (err) {
+          // Ignore missing docs; we still keep the Mongo copy
+          if (err?.meta?.statusCode !== 404) {
+            console.warn("⚠️ Failed to persist image to Elasticsearch", err.message);
+          }
+        }
+      }
     }
     return meal;
   } catch (err) {

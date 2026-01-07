@@ -88,7 +88,7 @@ app.get('/api/health', (req, res) => {
 
 // Serve React build
 const path = require('path');
-const buildPath = path.resolve(__dirname, '../client/build');
+const buildPath = path.resolve(__dirname, '../frontend/dist');
 
 app.use(express.static(buildPath));
 

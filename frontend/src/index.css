@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Milky Soft Minimalism Theme */
+    --background: 240 10% 98%;
+    --foreground: 220 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    /* Botanical Green Primary */
+    --primary: 145 28% 39%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Cream Secondary */
+    --secondary: 40 30% 96%;
+    --secondary-foreground: 220 20% 10%;
+
+    --muted: 240 10% 94%;
+    --muted-foreground: 220 10% 45%;
+
+    /* Soft Cream Accent */
+    --accent: 35 40% 95%;
+    --accent-foreground: 220 20% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 10% 90%;
+    --input: 240 10% 90%;
+    --ring: 145 28% 39%;
+
+    --radius: 1.5rem;
+
+    /* Custom Milky Variables */
+    --milky-cream: 40 35% 97%;
+    --milky-shadow: 220 15% 85%;
+    --milky-glass: 0 0% 100% / 0.7;
+    --milky-glass-border: 0 0% 100% / 0.3;
+    --milky-glow: 145 40% 60%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(145 28% 39%), hsl(145 35% 45%));
+    --gradient-glass: linear-gradient(135deg, hsl(0 0% 100% / 0.8), hsl(0 0% 100% / 0.4));
+    --gradient-hero: linear-gradient(180deg, hsl(240 10% 98%) 0%, hsl(40 30% 96%) 100%);
+    
+    /* Shadows */
+    --shadow-soft: 0 4px 24px -4px hsl(220 15% 85% / 0.4);
+    --shadow-medium: 0 8px 32px -8px hsl(220 15% 80% / 0.5);
+    --shadow-glow: 0 8px 40px -8px hsl(145 40% 50% / 0.3);
+    --shadow-neomorphic: 8px 8px 24px hsl(220 15% 88% / 0.6), -8px -8px 24px hsl(0 0% 100% / 0.8);
+    --shadow-inset: inset 2px 2px 6px hsl(220 15% 90% / 0.5), inset -2px -2px 6px hsl(0 0% 100% / 0.7);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 145 28% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 40 30% 96%;
+    --sidebar-accent-foreground: 220 20% 10%;
+    --sidebar-border: 240 10% 92%;
+    --sidebar-ring: 145 28% 39%;
+  }
+
+  .dark {
+    --background: 220 20% 8%;
+    --foreground: 240 10% 95%;
+
+    --card: 220 18% 12%;
+    --card-foreground: 240 10% 95%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 240 10% 95%;
+
+    --primary: 145 35% 50%;
+    --primary-foreground: 220 20% 8%;
+
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 240 10% 95%;
+
+    --muted: 220 15% 18%;
+    --muted-foreground: 240 10% 60%;
+
+    --accent: 220 15% 20%;
+    --accent-foreground: 240 10% 95%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 145 35% 50%;
+
+    --sidebar-background: 220 18% 10%;
+    --sidebar-foreground: 240 10% 90%;
+    --sidebar-primary: 145 35% 50%;
+    --sidebar-primary-foreground: 220 20% 8%;
+    --sidebar-accent: 220 15% 18%;
+    --sidebar-accent-foreground: 240 10% 95%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 145 35% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/70 backdrop-blur-xl border border-white/30 rounded-3xl;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .glass-card-elevated {
+    @apply bg-card/80 backdrop-blur-xl border border-white/40 rounded-3xl;
+    box-shadow: var(--shadow-medium);
+  }
+
+  .neomorphic {
+    @apply bg-secondary rounded-3xl;
+    box-shadow: var(--shadow-neomorphic);
+  }
+
+  .neomorphic-inset {
+    @apply bg-secondary rounded-2xl;
+    box-shadow: var(--shadow-inset);
+  }
+
+  .glow-primary {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-glass {
+    background: var(--gradient-glass);
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background: var(--gradient-primary);
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

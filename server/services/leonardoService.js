@@ -126,6 +126,33 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
     const recipe = meal.recipes[0];
     if (recipe.image || recipe.imageUrl) return meal;
     if (!hasKey()) return meal;
+    const title = recipe.title || recipe.name;
+
+    // Try to reuse an image from Elasticsearch if it exists for this recipe title
+    if (title) {
+      try {
+        const search = await esClient.search({
+          index: recipeIndex,
+          size: 1,
+          query: { match_phrase: { title } },
+          _source: ["image", "imageUrl", "recipes.image", "recipes.imageUrl"],
+        });
+        const hitSrc = search?.hits?.hits?.[0]?._source;
+        const esImg =
+          hitSrc?.image ||
+          hitSrc?.imageUrl ||
+          (Array.isArray(hitSrc?.recipes) && (hitSrc.recipes[0]?.image || hitSrc.recipes[0]?.imageUrl));
+        if (esImg) {
+          recipe.image = esImg;
+          recipe.imageUrl = esImg;
+          console.log("✅ Reused image from ES", { title, index: recipeIndex });
+          return meal;
+        }
+      } catch (err) {
+        console.warn("ℹ️ ES lookup for existing image failed", err.message);
+      }
+    }
+
     console.log("🖼️ Generating image via Leonardo for recipe:", {
       id: recipe.recipeId || recipe._id || recipe.id,
       title: recipe.title || recipe.name,
@@ -136,7 +163,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
       recipe.imageUrl = url;
       // If this recipe is already in Elasticsearch, persist the image URL there too
       const esIds = [recipe.recipeId, recipe._id, recipe.id].filter(Boolean);
-      const title = recipe.title || recipe.name;
       let persisted = false;
       for (const esId of esIds) {
         try {

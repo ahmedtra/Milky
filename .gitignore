@@ -19,6 +19,6 @@ client/.env
 
 # data
 Data.csv
-milky-ai-diet-planner/
+milky-ai-diet-planner/node_modules/
 EOF
 Data.csv # already added in working tree

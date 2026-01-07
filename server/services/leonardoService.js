@@ -75,6 +75,12 @@ function buildPrompt(recipe) {
   ].join(" ").trim();
 }
 
+function truncatePrompt(prompt, maxLen = 1400) {
+  if (typeof prompt !== "string") return "";
+  if (prompt.length <= maxLen) return prompt;
+  return prompt.slice(0, maxLen - 3).trimEnd() + "...";
+}
+
 async function waitForGeneration(id, { timeoutMs = 300000, pollMs = 2000 } = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -98,7 +104,7 @@ async function generateMealImage(recipe) {
   if (!hasKey()) {
     throw new Error("Leonardo API key not configured");
   }
-  const prompt = buildPrompt(recipe);
+  const prompt = truncatePrompt(buildPrompt(recipe));
   const body = {
     prompt,
     modelId: LEONARDO_MODEL_ID,

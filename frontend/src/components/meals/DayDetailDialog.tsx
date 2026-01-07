@@ -169,16 +169,16 @@ export function DayDetailDialog({
                         className="w-full p-4 rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md transition-shadow"
                         onClick={() => onSelectMeal(safeIndex, mIdx)}
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-foreground truncate">
+                            <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
                               {meal.recipes?.[0]?.name || meal.type || "Meal"}
                             </p>
-                            <p className="text-sm text-muted-foreground truncate">
+                            <p className="text-xs sm:text-sm text-muted-foreground truncate">
                               {meal.type || "Meal"}
                             </p>
                           </div>
-                          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+                          <div className="flex gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto sm:ml-auto sm:justify-end">
                             <Button
                               variant="secondary"
                               size="sm"

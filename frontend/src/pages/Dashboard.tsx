@@ -28,6 +28,7 @@ export default function Dashboard() {
   const toggleMealMutation = useToggleMealCompletion();
   const updateDaysMutation = useUpdateMealPlanDays();
   const queryClient = useQueryClient();
+  const [historyCardPct, setHistoryCardPct] = useState(90);
 
   // Stats
   const planList = Array.isArray(plans) ? plans : [];
@@ -166,6 +167,16 @@ export default function Dashboard() {
 
     return { entries, hasOverlap: overlaps.length > 0 };
   }, [activePlans]);
+
+  useEffect(() => {
+    const updateCardPct = () => {
+      if (typeof window === "undefined") return;
+      setHistoryCardPct(window.innerWidth >= 768 ? 80 : 90);
+    };
+    updateCardPct();
+    window.addEventListener("resize", updateCardPct);
+    return () => window.removeEventListener("resize", updateCardPct);
+  }, []);
 
   useEffect(() => {
     if (historyData.entries.length === 0) {
@@ -601,7 +612,7 @@ export default function Dashboard() {
             className="space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-xl md:text-2xl font-semibold text-foreground">
+              <h2 className="text-lg md:text-2xl font-semibold text-foreground">
                 Active Meal Plan History
               </h2>
             </div>
@@ -620,7 +631,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between text-xs md:text-sm">
                   <div className="text-sm text-muted-foreground">
                     {historyData.entries.length ? `${historyIndex + 1} / ${historyData.entries.length}` : "0 / 0"}
                   </div>
@@ -651,7 +662,7 @@ export default function Dashboard() {
                     style={{
                       // Center the active card while allowing neighbors to peek.
                       transform: (() => {
-                        const CARD_PCT = 80; // card width percent (match width class below)
+                        const CARD_PCT = historyCardPct; // card width percent (match width class below)
                         const GAP_PX = 16;   // gap-4
                         const centerOffset = (100 - CARD_PCT) / 2;
                         return `translateX(calc(-${historyIndex * CARD_PCT}% - ${historyIndex * GAP_PX}px + ${centerOffset}%))`;
@@ -664,14 +675,14 @@ export default function Dashboard() {
                         <div
                           key={entry.key}
                           className={cn(
-                            "glass-card p-5 rounded-2xl shrink-0 w-[80%] transition-all duration-300",
+                            "glass-card p-4 md:p-5 rounded-2xl shrink-0 w-[90%] md:w-[80%] transition-all duration-300",
                             isActive ? "shadow-lg ring-1 ring-primary/30 scale-[1.02]" : "opacity-70"
                           )}
                         >
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <p className="text-sm text-muted-foreground">{entry.dayLabel}</p>
-                              <h3 className="font-semibold text-foreground">{entry.planTitle}</h3>
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                            <div className="min-w-0">
+                              <p className="text-xs md:text-sm text-muted-foreground">{entry.dayLabel}</p>
+                              <h3 className="font-semibold text-foreground text-sm md:text-base truncate">{entry.planTitle}</h3>
                             </div>
                             {entry.overlap && (
                               <span className="px-3 py-1 rounded-full bg-destructive/10 text-destructive text-xs font-semibold">
@@ -688,14 +699,14 @@ export default function Dashboard() {
                                 const isSwapOpen = validId(entry.planId) && swapState.key === swapKeyFor(entry.planId, entry.dayIndex, mealIdx);
                                 return (
                                   <div key={mealKey} className="space-y-2 rounded-lg border p-3 bg-white/60">
-                                    <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                       <div className="min-w-0">
-                                        <p className="font-semibold text-foreground truncate">
+                                        <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
                                           {meal.recipes?.[0]?.name || meal.type || "Meal"}
                                         </p>
                                         <p className="text-xs text-muted-foreground truncate">{meal.type || "Meal"}</p>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0">
+                                      <div className="flex gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto sm:ml-auto sm:justify-end">
                                         <Button
                                           variant="secondary"
                                           size="sm"

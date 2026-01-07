@@ -278,14 +278,16 @@ export default function ShoppingLists() {
                     className="glass-card p-5 cursor-pointer"
                     onClick={() => setExpandedId(isExpanded ? null : getListId(list))}
                   >
-                    <div className="flex items-start justify-between mb-3 gap-3">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-foreground text-lg">{list.title}</h3>
+                    <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground text-base sm:text-lg leading-snug">
+                          {list.title}
+                        </h3>
                         {list.description && (
-                          <p className="text-sm text-muted-foreground">{list.description}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">{list.description}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap gap-2 sm:justify-end sm:min-w-[240px]">
                         <span className={cn(
                           "px-3 py-1 rounded-lg text-xs font-medium",
                           list.status === 'active' 

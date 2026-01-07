@@ -457,28 +457,28 @@ export default function MealPlans() {
               );
               return (
                 <div key={planId} className="glass-card p-5">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1 cursor-pointer" onClick={() => {
                       setExpandedPlanId(planId);
                       setSelectedDay({ planId, dayIndex: 0 });
                       setSelectedMeal(null);
                     }}>
-                      <p className="text-lg font-semibold text-foreground">{plan.title}</p>
-                      {plan.description && <p className="text-sm text-muted-foreground">{plan.description}</p>}
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                      <p className="text-base sm:text-lg font-semibold text-foreground">{plan.title}</p>
+                      {plan.description && <p className="text-xs sm:text-sm text-muted-foreground">{plan.description}</p>}
+                      <div className="flex gap-2 mt-2 flex-wrap text-xs">
+                        <span className="px-3 py-1 rounded-full bg-primary/10 text-primary font-semibold">
                           {plan.status || "draft"}
                         </span>
-                        <span className="px-3 py-1 rounded-full bg-secondary text-muted-foreground text-xs">
+                        <span className="px-3 py-1 rounded-full bg-secondary text-muted-foreground">
                           {plan.days?.length || 0} days
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-muted-foreground">Start date</span>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+                      <span className="text-muted-foreground">Start date</span>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" className="rounded-full bg-background">
+                          <Button variant="outline" className="rounded-full bg-background text-xs sm:text-sm">
                             <Calendar className="h-4 w-4 mr-2" />
                             {plan.startDate ? format(new Date(normalizeDate(plan.startDate)), "PP") : "Set start date"}
                           </Button>
@@ -506,7 +506,7 @@ export default function MealPlans() {
                           />
                         </PopoverContent>
                       </Popover>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <Button
                           variant="secondary"
                           size="sm"
@@ -549,12 +549,12 @@ export default function MealPlans() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
+        className="fixed bottom-6 md:bottom-8 inset-x-0 z-40 flex justify-center w-full px-4 md:px-0 pointer-events-none"
       >
         <Button
           variant="primary"
           size="lg"
-          className="rounded-full px-8 py-6 text-base shadow-lg glow-primary"
+          className="pointer-events-auto rounded-full px-6 md:px-8 py-4 md:py-6 text-base shadow-lg glow-primary"
           onClick={() => setShowModal(true)}
         >
           <Sparkles className="h-5 w-5 mr-2" />

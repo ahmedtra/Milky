@@ -98,7 +98,7 @@ router.post('/:id/image', auth, async (req, res) => {
     }
 
     const meal = { recipes: [fav.planRecipe || {}] };
-    await ensureMealImage(meal);
+    await ensureMealImage(meal, { throwOnFail: true });
     const updatedImage = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
     if (updatedImage) {
       fav.image = updatedImage;
@@ -110,7 +110,7 @@ router.post('/:id/image', auth, async (req, res) => {
     res.json({ image: updatedImage || null, favorite: fav });
   } catch (err) {
     console.error('❌ Error ensuring favorite image', err);
-    res.status(500).json({ message: 'Failed to ensure image' });
+    res.status(500).json({ message: 'Failed to ensure image', error: err?.message });
   }
 });
 

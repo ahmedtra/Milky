@@ -120,19 +120,25 @@ async function generateMealImage(recipe) {
  * Ensures the first recipe on a meal has an image.
  * Mutates the passed meal object if an image is added.
  */
-async function ensureMealImage(meal) {
+async function ensureMealImage(meal, { throwOnFail = false } = {}) {
   try {
     if (!meal?.recipes?.length) return meal;
     const recipe = meal.recipes[0];
     if (recipe.image || recipe.imageUrl) return meal;
     if (!hasKey()) return meal;
+    console.log("🖼️ Generating image via Leonardo for recipe:", {
+      id: recipe.recipeId || recipe._id || recipe.id,
+      title: recipe.title || recipe.name,
+    });
     const url = await generateMealImage(recipe);
     if (url) {
       recipe.image = url;
       recipe.imageUrl = url;
       // If this recipe is already in Elasticsearch, persist the image URL there too
-      const esId = recipe.recipeId || recipe._id;
-      if (esId) {
+      const esIds = [recipe.recipeId, recipe._id, recipe.id].filter(Boolean);
+      const title = recipe.title || recipe.name;
+      let persisted = false;
+      for (const esId of esIds) {
         try {
           await esClient.update({
             index: recipeIndex,
@@ -140,12 +146,43 @@ async function ensureMealImage(meal) {
             doc: { image: url, imageUrl: url },
             doc_as_upsert: false,
           });
+          console.log("✅ Persisted image to ES", { id: esId, index: recipeIndex });
+          persisted = true;
+          break; // success
         } catch (err) {
-          // Ignore missing docs; we still keep the Mongo copy
           if (err?.meta?.statusCode !== 404) {
             console.warn("⚠️ Failed to persist image to Elasticsearch", err.message);
           }
         }
+      }
+      // If no id match OR we have no ids, try a search by title
+      if (!persisted && title) {
+        try {
+          const search = await esClient.search({
+            index: recipeIndex,
+            size: 1,
+            query: { match_phrase: { title } },
+          });
+          const hitId = search?.hits?.hits?.[0]?._id;
+          if (hitId) {
+            await esClient.update({
+              index: recipeIndex,
+              id: hitId,
+              doc: { image: url, imageUrl: url },
+              doc_as_upsert: false,
+            });
+            console.log("✅ Persisted image to ES via title lookup", { title, id: hitId, index: recipeIndex });
+            persisted = true;
+          } else {
+            console.log("ℹ️ No ES hit found by title for image persistence", { title });
+          }
+        } catch (err) {
+          if (err?.meta?.statusCode !== 404) {
+            console.warn("⚠️ Failed to persist image to Elasticsearch via search", err.message);
+          }
+        }
+      } else if (!esIds.length && !title) {
+        console.log("ℹ️ Skipped ES persistence: no recipe IDs and no title found on recipe");
       }
     }
     return meal;
@@ -154,6 +191,7 @@ async function ensureMealImage(meal) {
     if (process.env.NODE_ENV !== "production") {
       console.error(err);
     }
+    if (throwOnFail) throw err;
     return meal;
   }
 }

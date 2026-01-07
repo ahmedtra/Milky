@@ -655,7 +655,7 @@ router.post('/:id/days/:dayIndex/meals/:mealIndex/image', auth, async (req, res)
     if (!day || !meal) return res.status(404).json({ message: 'Meal not found' });
 
     const before = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
-    await ensureMealImage(meal);
+    await ensureMealImage(meal, { throwOnFail: true });
     const after = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
 
     if (after) {
@@ -690,7 +690,7 @@ router.post('/:id/days/:dayIndex/meals/:mealIndex/image', auth, async (req, res)
     });
   } catch (error) {
     console.error('❌ Ensure meal image error:', error);
-    res.status(500).json({ message: 'Server error ensuring meal image' });
+    res.status(500).json({ message: 'Server error ensuring meal image', error: error?.message });
   }
 });
 

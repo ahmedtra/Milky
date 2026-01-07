@@ -1,9 +1,11 @@
 node_modules/
 client/node_modules/
+frontend/node_modules/
 
 # builds
 build/
 client/build/
+frontend/dist/
 dist/
 
 # logs
@@ -15,6 +17,7 @@ yarn-error.log*
 .env
 .env.local
 client/.env
+frontend/.env
 .envprod
 
 # data

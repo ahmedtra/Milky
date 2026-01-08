@@ -80,8 +80,10 @@ app.use(requestLogger);
 // Connect to database
 connectDB();
 
-// Initialize Telegram bot
-initializeTelegramBot();
+// Initialize Telegram bot (can be disabled via DISABLE_TELEGRAM_BOT=true)
+if (process.env.DISABLE_TELEGRAM_BOT !== 'true') {
+  initializeTelegramBot();
+}
 
 // Initialize notification scheduler
 initializeNotificationScheduler();

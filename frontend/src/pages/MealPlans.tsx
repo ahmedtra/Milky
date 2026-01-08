@@ -552,7 +552,7 @@ export default function MealPlans() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="fixed bottom-6 md:bottom-8 inset-x-0 z-40 flex justify-center w-full px-4 md:px-0 pointer-events-none"
+        className="fixed bottom-24 md:bottom-28 inset-x-0 z-40 flex justify-center w-full px-4 md:px-0 pointer-events-none"
       >
         <Button
           variant="primary"

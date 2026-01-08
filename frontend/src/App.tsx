@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner"; // Using sonner for easy feedback
 
 // Pages & Components
@@ -18,6 +18,7 @@ import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { useAuth } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
@@ -89,27 +90,47 @@ const App = () => {
     };
   }, [wakeLockEnabled, requestWakeLock]);
 
+  const WakeLockBar: React.FC = () => {
+    const { logout } = useAuth();
+    const navigate = useNavigate();
+
+    const handleDisconnect = async () => {
+      await handleToggleWakeLock(false);
+      logout();
+      navigate("/login");
+    };
+
+    return (
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[340px] max-w-[92vw] flex items-center justify-between gap-3 rounded-full bg-white/90 backdrop-blur border border-slate-200 shadow-lg px-4 py-2 transition-all hover:bg-white pointer-events-auto">
+        <label className="text-sm font-semibold text-slate-700 flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
+          <input
+            type="checkbox"
+            className="accent-green-500 h-5 w-5 rounded-md cursor-pointer"
+            checked={wakeLockEnabled}
+            onChange={(e) => handleToggleWakeLock(e.target.checked)}
+          />
+          Keep Screen On
+        </label>
+        <button
+          type="button"
+          className="text-xs font-semibold px-3 py-1 rounded-full border border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          onClick={handleDisconnect}
+        >
+          Disconnect
+        </button>
+      </div>
+    );
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner position="top-center" />
-        
-        {/* Floating UI Toggle for Milky */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 rounded-full bg-white/80 backdrop-blur-md border border-slate-200 shadow-lg px-4 py-2 transition-all hover:bg-white">
-          <label className="text-sm font-semibold text-slate-700 flex items-center gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="accent-green-500 h-5 w-5 rounded-md cursor-pointer"
-              checked={wakeLockEnabled}
-              onChange={(e) => handleToggleWakeLock(e.target.checked)}
-            />
-            Keep Screen On
-          </label>
-        </div>
 
         <BrowserRouter>
           <AuthProvider>
+            <WakeLockBar />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />

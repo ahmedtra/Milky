@@ -35,9 +35,12 @@ const quickActions = [
 ];
 
 export default function Chat() {
-  const { messages, isLoading, sendMessage } = useChat();
+  const { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe } = useChat();
   const [input, setInput] = useState("");
   const [savingRecipe, setSavingRecipe] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editIngredients, setEditIngredients] = useState("");
+  const [editInstructions, setEditInstructions] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -58,12 +61,63 @@ export default function Chat() {
     setInput(action);
   };
 
+  useEffect(() => {
+    if (latestRecipe) {
+      setEditTitle(latestRecipe.title || "");
+      setEditIngredients((latestRecipe.ingredients || []).join("\n"));
+      setEditInstructions((latestRecipe.instructions || []).join("\n"));
+    }
+  }, [latestRecipe]);
+
+  const handleSaveEditedRecipe = async () => {
+    if (!editTitle.trim()) {
+      toast.error("Please add a recipe title.");
+      return;
+    }
+    const ingredients = editIngredients
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const instructions = editInstructions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    try {
+      setSavingRecipe("editing");
+      await saveFavoriteRecipe({
+        recipe: {
+          title: editTitle.trim(),
+          name: editTitle.trim(),
+          ingredients,
+          instructions,
+          imageUrl: latestRecipe?.imageUrl || null,
+          source: latestRecipe?.source || "chat",
+        },
+      });
+      toast.success("Saved edited recipe to favorites");
+      // reset latest recipe to reflect saved
+      setLatestRecipe({
+        title: editTitle.trim(),
+        ingredients,
+        instructions,
+        source: latestRecipe?.source || "chat",
+        id: undefined,
+        imageUrl: latestRecipe?.imageUrl || null,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not save the recipe");
+    } finally {
+      setSavingRecipe(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navigation />
 
       {/* Chat Container */}
-      <main className="flex-1 pt-28 md:pt-32 pb-4 px-4 md:px-8 flex flex-col max-w-3xl mx-auto w-full">
+      <main className="flex-1 pt-28 md:pt-32 pb-28 px-4 md:px-8 flex flex-col max-w-3xl mx-auto w-full">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -189,6 +243,54 @@ export default function Chat() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Latest Recipe Editor (below chat) */}
+        {latestRecipe && (
+          <div className="mb-4 rounded-2xl border border-primary/30 bg-primary/5 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-primary flex items-center gap-2">
+                <Sparkles className="h-4 w-4" /> Latest Recipe
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {latestRecipe.source === "db" ? "From database" : "AI generated"}
+              </div>
+            </div>
+            <input
+              className="w-full rounded-lg border border-primary/30 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Recipe title"
+            />
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-muted-foreground">Ingredients (one per line)</label>
+                <textarea
+                  className="min-h-[120px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
+                  value={editIngredients}
+                  onChange={(e) => setEditIngredients(e.target.value)}
+                  placeholder="- 1 cup oats"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-muted-foreground">Instructions (one step per line)</label>
+                <textarea
+                  className="min-h-[120px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
+                  value={editInstructions}
+                  onChange={(e) => setEditInstructions(e.target.value)}
+                  placeholder="1. Preheat oven..."
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setLatestRecipe(null)}>
+                Clear
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSaveEditedRecipe} disabled={savingRecipe === "editing"}>
+                {savingRecipe === "editing" ? "Saving..." : "Save to Favorites"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <motion.div

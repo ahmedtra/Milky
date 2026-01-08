@@ -1659,14 +1659,28 @@ class GeminiService {
         if (!recipe && intent.recipeTitle) {
           // Prefer exact title match, then fall back to fuzzy text search
           let results = [];
-          const exact = await searchRecipes({ title_exact: intent.recipeTitle }, { size: 1 });
+          const exact = await searchRecipes({ title_exact: intent.recipeTitle }, { size: 1, logSearch: LOG_SEARCH || LOG_MEALPLAN });
           if (exact?.results?.length) {
             results = exact.results;
           } else {
-            const fuzzy = await searchRecipes({ text: `${intent.recipeTitle} ${lastAssistant}`.trim() }, { size: 3, randomize: false });
+            const fuzzy = await searchRecipes({ text: `${intent.recipeTitle} ${lastAssistant}`.trim() }, { size: 3, randomize: false, logSearch: LOG_SEARCH || LOG_MEALPLAN });
             results = fuzzy?.results || [];
           }
           recipe = results?.[0] || null;
+        }
+        if (!recipe && intent.recipeTitle) {
+          // If still nothing, try a strict match_phrase on title
+          const strict = await searchRecipes({ text: `"${intent.recipeTitle}"` }, { size: 1, randomize: false, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+          recipe = strict?.results?.[0] || null;
+        }
+        if (!recipe && intent.recipeTitle) {
+          // As a last resort, invent a recipe via LLM
+          const fallback = await this.generateLLMFallbackRecipes(intent.mealType || 'dinner', { recipeTitle: intent.recipeTitle }, 1);
+          recipe = fallback?.[0] || null;
+          if (recipe) {
+            recipe._id = null;
+            recipe.source = 'ai';
+          }
         }
         if (!recipe) {
           return 'I could not find that recipe. Please provide a recipe id or exact name.';
@@ -1675,20 +1689,28 @@ class GeminiService {
         const protein = recipe.nutrition?.protein ?? recipe.protein ?? recipe.protein_grams ?? recipe.protein_g ?? 'n/a';
         const carbs = recipe.nutrition?.carbs ?? recipe.carbs ?? recipe.carbs_g ?? recipe.carbs_grams ?? 'n/a';
         const fat = recipe.nutrition?.fat ?? recipe.fat ?? recipe.fat_g ?? recipe.fat_grams ?? 'n/a';
-        const time = recipe.total_time_min ?? recipe.total_time_minutes ?? recipe.prep_time_minutes ?? 'n/a';
-        const ing = Array.isArray(recipe.ingredients_parsed)
-          ? recipe.ingredients_parsed.map((i) => `${i.amount || ''} ${i.unit || ''} ${i.name || ''}`.trim()).join('\n- ')
-          : (recipe.ingredients_raw || 'Not provided');
-        const instructions = Array.isArray(recipe.instructions)
-          ? recipe.instructions.join('\n')
-          : (recipe.instructions || 'Not provided');
-        return `Here are the details for "${recipe.title || recipe.name}":
-Calories: ${calories}, Protein: ${protein}g, Carbs: ${carbs}g, Fat: ${fat}g, Time: ${time} min
-Ingredients:
-- ${ing}
+        const time = recipe.total_time_min ?? recipe.total_time_minutes ?? recipe.prep_time_minutes ?? recipe.cook_time ?? 'n/a';
+        const ingList = Array.isArray(recipe.ingredients_parsed)
+          ? recipe.ingredients_parsed.map((i) => `${i.amount || ''} ${i.unit || ''} ${i.name || ''}`.trim()).filter(Boolean)
+          : Array.isArray(recipe.ingredients)
+            ? recipe.ingredients.map((i) => (typeof i === 'string' ? i : `${i.amount || ''} ${i.unit || ''} ${i.name || ''}`.trim())).filter(Boolean)
+            : (typeof recipe.ingredients_raw === 'string' ? recipe.ingredients_raw.split('\n').filter(Boolean) : []);
+        const instructionsList = Array.isArray(recipe.instructions)
+          ? recipe.instructions
+          : (typeof recipe.instructions === 'string' ? recipe.instructions.split('\n').filter(Boolean) : []);
 
-Instructions:
-${instructions}`;
+        const detail = {
+          type: 'recipe_detail',
+          title: recipe.title || recipe.name || intent.recipeTitle || 'Recipe',
+          source: recipe._id ? 'db' : (recipe.source || 'ai'),
+          id: recipe._id || recipe.id || null,
+          imageUrl: recipe.imageUrl || recipe.image || recipe.photo || null,
+          ingredients: ingList,
+          instructions: instructionsList,
+          nutrition: { calories, protein, carbs, fat, time }
+        };
+
+        return JSON.stringify(detail);
       }
 
       // Build meal plan context if available

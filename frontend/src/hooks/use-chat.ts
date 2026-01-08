@@ -13,6 +13,14 @@ const initialMessage: ChatMessage = {
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
   const [isLoading, setIsLoading] = useState(false);
+  const [latestRecipe, setLatestRecipe] = useState<{
+    title: string;
+    ingredients: string[];
+    instructions: string[];
+    source?: string;
+    id?: string | null;
+    imageUrl?: string | null;
+  } | null>(null);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return;
@@ -79,12 +87,16 @@ export function useChat() {
       };
 
       let botText = '';
+      let recipePayload: any = null;
       if (typeof raw === 'string') {
         const trimmed = raw.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
           try {
             const parsed = JSON.parse(trimmed);
-            if (Array.isArray(parsed)) {
+            if (parsed?.type === 'recipe_detail') {
+              recipePayload = parsed;
+              botText = `Here are the details for <recipe>${parsed.title}</recipe>:\nIngredients:\n- ${(parsed.ingredients || []).join('\n- ')}\n\nInstructions:\n${(parsed.instructions || []).map((step: string, i: number) => `${i + 1}. ${step}`).join('\n')}`;
+            } else if (Array.isArray(parsed)) {
               botText = parsed
                 .map((item) => {
                   if (typeof item === 'string') return item;
@@ -104,7 +116,12 @@ export function useChat() {
           botText = raw;
         }
       } else if (raw && typeof raw === 'object') {
-        botText = flattenObject(raw);
+        if ((raw as any).type === 'recipe_detail') {
+          recipePayload = raw;
+          botText = `Here are the details for <recipe>${(raw as any).title}</recipe>:\nIngredients:\n- ${((raw as any).ingredients || []).join('\n- ')}\n\nInstructions:\n${((raw as any).instructions || []).map((step: string, i: number) => `${i + 1}. ${step}`).join('\n')}`;
+        } else {
+          botText = flattenObject(raw);
+        }
       }
       if (!botText) {
         botText = "I'm here to help with your meal plans and nutrition questions!";
@@ -118,6 +135,16 @@ export function useChat() {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      if (recipePayload?.type === 'recipe_detail') {
+        setLatestRecipe({
+          title: recipePayload.title || 'Recipe',
+          ingredients: Array.isArray(recipePayload.ingredients) ? recipePayload.ingredients : [],
+          instructions: Array.isArray(recipePayload.instructions) ? recipePayload.instructions : [],
+          source: recipePayload.source,
+          id: recipePayload.id,
+          imageUrl: recipePayload.imageUrl || null,
+        });
+      }
     } catch (error) {
       console.error('Chat error:', error);
       const reason = error instanceof Error ? error.message : 'Unknown error';
@@ -134,5 +161,5 @@ export function useChat() {
     }
   }, [messages, isLoading]);
 
-  return { messages, isLoading, sendMessage };
+  return { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe };
 }

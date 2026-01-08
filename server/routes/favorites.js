@@ -167,25 +167,39 @@ router.post('/', auth, async (req, res) => {
     const totalTime = planRecipe?.prepTime || planRecipe?.cookTime;
     const image = planRecipe?.image || planRecipe?.imageUrl;
 
-    const saved = await FavoriteRecipe.findOneAndUpdate(
-      { userId: req.user._id, title: planRecipe.name },
-      {
-        userId: req.user._id,
-        title: planRecipe.name,
-        externalId: planRecipe.externalId,
-        summary: planRecipe.description,
-        image,
-        imageUrl: image,
-        calories,
-        protein,
-        totalTime,
-        tags: planRecipe.tags || [],
-        planRecipe
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    // Always create a new favorite (no overwrite)
+    const favorite = await FavoriteRecipe.create({
+      userId: req.user._id,
+      title: planRecipe.name,
+      externalId: planRecipe.externalId,
+      summary: planRecipe.description,
+      image,
+      imageUrl: image,
+      calories,
+      protein,
+      totalTime,
+      tags: planRecipe.tags || [],
+      planRecipe
+    });
 
-    res.json({ favorite: saved });
+    // If no image, try to generate one
+    if (!favorite.image && !favorite.imageUrl) {
+      try {
+        const meal = { recipes: [favorite.planRecipe || {}] };
+        await ensureMealImage(meal, { throwOnFail: false });
+        const updatedImage = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
+        if (updatedImage) {
+          favorite.image = updatedImage;
+          favorite.imageUrl = updatedImage;
+          favorite.planRecipe = { ...(favorite.planRecipe || {}), image: updatedImage, imageUrl: updatedImage };
+          await favorite.save();
+        }
+      } catch (imgErr) {
+        console.warn('⚠️ Could not generate image for favorite:', imgErr?.message);
+      }
+    }
+
+    res.json({ favorite });
   } catch (err) {
     console.error('❌ Error saving favorite', err);
     res.status(500).json({ message: 'Failed to save favorite' });

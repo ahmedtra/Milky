@@ -185,6 +185,7 @@ router.post('/', auth, async (req, res) => {
     // If no image, try to generate one
     if (!favorite.image && !favorite.imageUrl) {
       try {
+        console.log("🎨 Generating image for favorite", { id: favorite._id.toString(), title: favorite.title });
         const meal = { recipes: [favorite.planRecipe || {}] };
         await ensureMealImage(meal, { throwOnFail: false });
         const updatedImage = meal.recipes?.[0]?.image || meal.recipes?.[0]?.imageUrl;
@@ -193,10 +194,15 @@ router.post('/', auth, async (req, res) => {
           favorite.imageUrl = updatedImage;
           favorite.planRecipe = { ...(favorite.planRecipe || {}), image: updatedImage, imageUrl: updatedImage };
           await favorite.save();
+          console.log("✅ Favorite image set", { id: favorite._id.toString() });
+        } else {
+          console.log("ℹ️ Favorite image generation returned no URL", { id: favorite._id.toString() });
         }
       } catch (imgErr) {
         console.warn('⚠️ Could not generate image for favorite:', imgErr?.message);
       }
+    } else {
+      console.log("ℹ️ Favorite already has image", { id: favorite._id.toString() });
     }
 
     res.json({ favorite });

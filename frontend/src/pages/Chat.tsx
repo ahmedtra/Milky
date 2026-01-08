@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useChat } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { saveFavoriteRecipe } from "@/lib/api";
+import { saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { toast } from "sonner";
 
 const parseMessageSegments = (text: string) => {
@@ -84,7 +84,7 @@ export default function Chat() {
       .filter(Boolean);
     try {
       setSavingRecipe("editing");
-      await saveFavoriteRecipe({
+      const saved = await saveFavoriteRecipe({
         recipe: {
           title: editTitle.trim(),
           name: editTitle.trim(),
@@ -94,6 +94,16 @@ export default function Chat() {
           source: latestRecipe?.source || "chat",
         },
       });
+      let imageUrl = latestRecipe?.imageUrl || null;
+      const favId = saved?.favorite?._id || saved?.favorite?.id;
+      if (favId) {
+        try {
+          const ensured = await ensureFavoriteImage(favId);
+          imageUrl = ensured?.image || ensured?.favorite?.imageUrl || imageUrl;
+        } catch (imgErr) {
+          console.warn("Could not ensure favorite image", imgErr);
+        }
+      }
       toast.success("Saved edited recipe to favorites");
       // reset latest recipe to reflect saved
       setLatestRecipe({
@@ -101,8 +111,8 @@ export default function Chat() {
         ingredients,
         instructions,
         source: latestRecipe?.source || "chat",
-        id: undefined,
-        imageUrl: latestRecipe?.imageUrl || null,
+        id: favId,
+        imageUrl,
       });
     } catch (err) {
       console.error(err);
@@ -265,7 +275,7 @@ export default function Chat() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-muted-foreground">Ingredients (one per line)</label>
                 <textarea
-                  className="min-h-[120px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
+                  className="min-h-[180px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
                   value={editIngredients}
                   onChange={(e) => setEditIngredients(e.target.value)}
                   placeholder="- 1 cup oats"
@@ -274,7 +284,7 @@ export default function Chat() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-muted-foreground">Instructions (one step per line)</label>
                 <textarea
-                  className="min-h-[120px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
+                  className="min-h-[180px] rounded-lg border border-primary/20 bg-white/80 px-3 py-2 text-sm focus-visible:ring-primary"
                   value={editInstructions}
                   onChange={(e) => setEditInstructions(e.target.value)}
                   placeholder="1. Preheat oven..."

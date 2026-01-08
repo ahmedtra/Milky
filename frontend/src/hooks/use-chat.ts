@@ -95,7 +95,7 @@ export function useChat() {
             const parsed = JSON.parse(trimmed);
             if (parsed?.type === 'recipe_detail') {
               recipePayload = parsed;
-              botText = `Here are the details for <recipe>${parsed.title}</recipe>:\nIngredients:\n- ${(parsed.ingredients || []).join('\n- ')}\n\nInstructions:\n${(parsed.instructions || []).map((step: string, i: number) => `${i + 1}. ${step}`).join('\n')}`;
+              botText = `Loaded recipe: <recipe>${parsed.title}</recipe>`;
             } else if (Array.isArray(parsed)) {
               botText = parsed
                 .map((item) => {
@@ -118,7 +118,7 @@ export function useChat() {
       } else if (raw && typeof raw === 'object') {
         if ((raw as any).type === 'recipe_detail') {
           recipePayload = raw;
-          botText = `Here are the details for <recipe>${(raw as any).title}</recipe>:\nIngredients:\n- ${((raw as any).ingredients || []).join('\n- ')}\n\nInstructions:\n${((raw as any).instructions || []).map((step: string, i: number) => `${i + 1}. ${step}`).join('\n')}`;
+          botText = `Loaded recipe: <recipe>${(raw as any).title}</recipe>`;
         } else {
           botText = flattenObject(raw);
         }

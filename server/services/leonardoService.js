@@ -5,6 +5,7 @@ const LEONARDO_API_BASE = "https://cloud.leonardo.ai/api/rest/v1";
 // Default to Leonardo Vision XL; override via env if needed
 const LEONARDO_MODEL_ID = process.env.LEONARDO_MODEL_ID || "5c232a9e-9061-4777-980a-ddc8e65647c6";
 const { client: esClient, recipeIndex } = require("./recipeSearch/elasticsearchClient");
+const { groqChat } = require("./groqClient");
 
 const hasKey = () => Boolean(LEONARDO_API_KEY);
 
@@ -46,10 +47,19 @@ async function getJSON(path) {
   return res.json();
 }
 
+function sanitizePromptText(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/skimpy/gi, "simple")
+    .replace(/\bcutting\b/gi, "slicing")
+    .replace(/\bcut\b/gi, "slice");
+}
+
 function buildPrompt(recipe) {
   const name = recipe?.name || "meal";
-  const ingList = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
-  const instructionsList = Array.isArray(recipe?.instructions) ? recipe.instructions : [];
+  const ingList = Array.isArray(recipe?.ingredients) ? recipe.ingredients.slice(0, 6) : [];
+  // Keep prompt tight to avoid moderation and length issues
+  const instructionsList = Array.isArray(recipe?.instructions) ? recipe.instructions.slice(0, 2) : [];
 
   const ingredients = ingList
     .map((ing) => (typeof ing === "string" ? ing : ing?.name))
@@ -66,19 +76,55 @@ function buildPrompt(recipe) {
   if (ingredients) details.push(`Key ingredients: ${ingredients}.`);
   if (instructions) details.push(`Cooking steps: ${instructions}.`);
 
-  return [
-    "Premium food photography of the final plated dish (fully cooked, no raw prep or loose ingredients).",
+  const prompt = [
+    "Premium food photography of the finished dish, family-friendly and modest presentation.",
     "Soft minimalism, clean plating, natural light, botanical green accent.",
     `Dish: ${name}.`,
     details.join(" "),
-    "Show a ready-to-eat presentation on a plate or bowl. No raw meat or cutting boards."
+    "Show a ready-to-eat plated meal."
   ].join(" ").trim();
+
+  return sanitizePromptText(prompt);
 }
 
 function truncatePrompt(prompt, maxLen = 1400) {
   if (typeof prompt !== "string") return "";
   if (prompt.length <= maxLen) return prompt;
   return prompt.slice(0, maxLen - 3).trimEnd() + "...";
+}
+
+async function summarizePromptWithGroq(recipe) {
+  if (!groqChat || !process.env.GROQ_API_KEY) return null;
+  const name = recipe?.name || "meal";
+  const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients.slice(0, 8) : [];
+  const instructions = Array.isArray(recipe?.instructions) ? recipe.instructions.slice(0, 6) : [];
+  const userPayload = {
+    name,
+    ingredients,
+    instructions,
+  };
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are crafting a concise prompt (<=1400 characters) for a food photo generator. Describe a ready-to-eat plated dish. Avoid raw/skimpy terms. Keep it simple, appetizing, and photogenic.",
+    },
+    {
+      role: "user",
+      content: `Build a single prompt for a plated food photo. Use this recipe data: ${JSON.stringify(userPayload)}. Keep it short and safe.`,
+    },
+  ];
+  try {
+    const { content } = await groqChat({
+      messages,
+      maxTokens: 400,
+      temperature: 0.3,
+    });
+    return truncatePrompt(sanitizePromptText(content || ""));
+  } catch (err) {
+    console.warn("ℹ️ Groq prompt summarize failed, falling back to local prompt", err.message);
+    return null;
+  }
 }
 
 async function waitForGeneration(id, { timeoutMs = 300000, pollMs = 2000 } = {}) {
@@ -104,7 +150,8 @@ async function generateMealImage(recipe) {
   if (!hasKey()) {
     throw new Error("Leonardo API key not configured");
   }
-  const prompt = truncatePrompt(buildPrompt(recipe));
+  const groqPrompt = await summarizePromptWithGroq(recipe);
+  const prompt = truncatePrompt(groqPrompt || buildPrompt(recipe));
   const body = {
     prompt,
     modelId: LEONARDO_MODEL_ID,

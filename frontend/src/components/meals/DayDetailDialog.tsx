@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getDayLabel } from "@/lib/types";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Star, RefreshCw } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 
@@ -31,6 +31,7 @@ interface DayDetailDialogProps {
   onUpdateStartDate?: (date: string) => void;
   highlightDates?: Array<string | Date>;
   favorites?: any[];
+  onFavorite?: (dayIdx: number, mealIdx: number) => void;
 }
 
 export function DayDetailDialog({
@@ -53,6 +54,7 @@ export function DayDetailDialog({
   onUpdateStartDate,
   highlightDates = [],
   favorites = [],
+  onFavorite,
 }: DayDetailDialogProps) {
   const safeIndex = Math.max(0, Math.min(selectedDayIndex, Math.max(0, days.length - 1)));
   const currentDay = days[safeIndex];
@@ -88,15 +90,31 @@ export function DayDetailDialog({
     }
   };
 
+  // Swipe to change day
+  const touchStartX = React.useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    const threshold = 40;
+    if (Math.abs(deltaX) > threshold) {
+      onChangeDay(deltaX < 0 ? 1 : -1);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent
-        className="max-w-[1100px] w-[min(96vw,1100px)] p-0 bg-transparent border-0 shadow-none overflow-visible"
+        className="max-w-[1100px] w-[min(96vw,1100px)] p-0 bg-transparent border-0 shadow-none overflow-visible flex flex-col"
+        hideClose
         onWheel={onWheel}
         aria-describedby={undefined}
       >
         {/* Rounded container */}
-        <div className="relative bg-white rounded-[28px] border border-border/60 shadow-2xl max-h-[90vh] overflow-hidden">
+        <div className="relative bg-white rounded-[28px] border border-border/60 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <Button
             variant="ghost"
             onClick={onClose}
@@ -130,10 +148,15 @@ export function DayDetailDialog({
           </div>
 
           {/* Single day view */}
-          <div className="flex-1 w-full min-w-0 overflow-hidden px-4 pb-4 pt-5" style={{ touchAction: "pan-y" }}>
+          <div
+            className="flex-1 w-full min-w-0 overflow-y-auto px-4 pb-4 pt-5"
+            style={{ touchAction: "pan-y" }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             {currentDay && (
               <div className="relative h-full overflow-visible">
-                <div className="h-full overflow-y-auto space-y-4 bg-white rounded-2xl p-4 box-border">
+                <div className="h-full space-y-4 bg-white rounded-2xl p-4 box-border">
                   {/* Day header */}
                   <div className="flex items-start justify-between gap-3 pr-10">
                     <div>
@@ -195,18 +218,34 @@ export function DayDetailDialog({
                                 e.stopPropagation();
                                 onSwapOpen(safeIndex, mIdx);
                               }}
+                              className="flex items-center gap-1"
                             >
-                              Swap
+                              <RefreshCw className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="secondary"
+                              variant={meal.isCompleted ? "outline" : "secondary"}
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onToggleMeal(safeIndex, mIdx, !meal.isCompleted);
                               }}
+                              className={cn(
+                                "flex items-center gap-1",
+                                meal.isCompleted ? "border-green-500 text-green-600" : ""
+                              )}
                             >
-                              {meal.isCompleted ? "✓" : "Done"}
+                              ✓
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onFavorite?.(safeIndex, mIdx);
+                              }}
+                              className="text-amber-500 hover:text-amber-600"
+                            >
+                              <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
                             </Button>
                             <Button
                               variant="destructive"

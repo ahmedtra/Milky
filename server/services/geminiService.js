@@ -1190,6 +1190,58 @@ class GeminiService {
     }
   }
 
+  /**
+   * Generate a single recipe with an exact title using user-provided context.
+   */
+  async generateExactTitleRecipe(title, mealType = 'dinner', userMessage = '', historyContext = '') {
+    const prompt = `
+    You are a recipe generator. Create ONE recipe in JSON (no markdown fences) with EXACT title "${title}".
+    If the user provided ingredients or steps, respect them. Keep it coherent for a ${mealType}.
+    User message/context:
+    "${userMessage}"
+    Previous assistant context:
+    "${historyContext}"
+
+    JSON shape:
+    {
+      "id": "string",
+      "title": "${title}",
+      "cuisine": "string",
+      "meal_type": ["${mealType}"],
+      "nutrition": { "calories": number, "protein": number, "carbs": number, "fat": number },
+      "ingredients_parsed": [ { "name": "string", "amount": "string", "unit": "string", "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|other" } ],
+      "instructions": ["Step 1", "Step 2", "..."]
+    }
+    Keep ingredients 8-14 items max. Provide reasonable macros (>0).
+    `;
+    try {
+      const raw = await this.callTextModel(prompt, 0.35, 'json');
+      let body = (raw || '').replace(/```json|```/gi, '').trim();
+      const objMatch = body.match(/\{[\s\S]*\}/);
+      if (objMatch) body = objMatch[0];
+      let parsed = null;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        logMealplan('⚠️ Exact title recipe parse failed', { title, preview: body.slice(0, 200) });
+        return null;
+      }
+      parsed.id = parsed.id || `llm-${Date.now()}`;
+      parsed.title = title;
+      parsed.meal_type = Array.isArray(parsed.meal_type) ? parsed.meal_type : [mealType];
+      parsed.nutrition = this.hasNutritionData(parsed.nutrition)
+        ? parsed.nutrition
+        : this.ensureNutrition(parsed.nutrition || {}, mealType);
+      return parsed;
+    } catch (err) {
+      logMealplan('⚠️ Exact title recipe generation failed:', err.message);
+      return null;
+    }
+  }
+
   async generateLLMFallbackRecipes(mealType, preferences = {}, count = 3) {
     try {
       const prompt = `
@@ -1228,10 +1280,31 @@ class GeminiService {
         }
         return null;
       };
-      const arr = parseLooseArray(raw);
+      let arr = parseLooseArray(raw);
+      if (!Array.isArray(arr)) {
+        // Try to salvage a single object from braces
+        const objMatch = (raw || '').match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          try {
+            const parsedObj = JSON.parse(objMatch[0]);
+            arr = [parsedObj];
+          } catch {
+            arr = null;
+          }
+        }
+      }
       if (!Array.isArray(arr)) {
         logMealplan('⚠️ LLM batch returned non-array', { mealType, preview: raw?.slice(0, 200) });
-        return [];
+        // Fallback: craft a minimal recipe so callers always get something
+        return [{
+          id: `llm-${Date.now()}`,
+          title: preferences.recipeTitle || `Custom ${mealType} recipe`,
+          cuisine: preferences.cuisine || preferences.preferredCuisine || 'any',
+          meal_type: [mealType],
+          nutrition: this.ensureNutrition({}, mealType),
+          ingredients_parsed: [{ name: 'Ingredient 1', amount: '1', unit: 'unit', category: 'other' }],
+          instructions: ['Combine ingredients and cook to taste.']
+        }];
       }
       const calorieFloors = { breakfast: 0, lunch: 0, dinner: 0, snack: 0 };
       const mealCalFloor = calorieFloors[mealType] || 0;
@@ -1657,33 +1730,40 @@ class GeminiService {
           recipe = await getRecipeById(intent.recipeId);
         }
         if (!recipe && intent.recipeTitle) {
-          // Prefer exact title match, then fall back to fuzzy text search
-          let results = [];
+          // Prefer exact title match only (no fuzzy)
           const exact = await searchRecipes({ title_exact: intent.recipeTitle }, { size: 1, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-          if (exact?.results?.length) {
-            results = exact.results;
-          } else {
-            const fuzzy = await searchRecipes({ text: `${intent.recipeTitle} ${lastAssistant}`.trim() }, { size: 3, randomize: false, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-            results = fuzzy?.results || [];
-          }
-          recipe = results?.[0] || null;
-        }
-        if (!recipe && intent.recipeTitle) {
-          // If still nothing, try a strict match_phrase on title
-          const strict = await searchRecipes({ text: `"${intent.recipeTitle}"` }, { size: 1, randomize: false, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-          recipe = strict?.results?.[0] || null;
-        }
-        if (!recipe && intent.recipeTitle) {
-          // As a last resort, invent a recipe via LLM
-          const fallback = await this.generateLLMFallbackRecipes(intent.mealType || 'dinner', { recipeTitle: intent.recipeTitle }, 1);
-          recipe = fallback?.[0] || null;
-          if (recipe) {
-            recipe._id = null;
-            recipe.source = 'ai';
-          }
+          recipe = exact?.results?.[0] || null;
         }
         if (!recipe) {
-          return 'I could not find that recipe. Please provide a recipe id or exact name.';
+          // Invent a recipe via dedicated exact-title generator using user context
+          const fallbackTitle = intent.recipeTitle || message || 'Custom Recipe';
+          let fallback = null;
+          try {
+            fallback = await this.generateExactTitleRecipe(
+              fallbackTitle,
+              intent.mealType || 'dinner',
+              message,
+              lastAssistant
+            );
+            if (fallback) {
+              console.log("ℹ️ Exact-title recipe generated", { title: fallbackTitle });
+            }
+          } catch (genErr) {
+            console.warn("⚠️ Exact-title recipe generation failed", genErr?.message || genErr);
+          }
+          if (fallback) {
+            recipe = { ...fallback, _id: null, source: 'ai' };
+          } else {
+            console.log("ℹ️ Using minimal placeholder recipe", { title: fallbackTitle });
+            // as a last resort, construct a minimal recipe to avoid empty reply
+            recipe = {
+              _id: null,
+              source: 'ai',
+              title: fallbackTitle,
+              ingredients: ['1 item of your choice'],
+              instructions: ['Combine ingredients and cook to taste.']
+            };
+          }
         }
         const calories = recipe.nutrition?.calories ?? recipe.calories ?? 'n/a';
         const protein = recipe.nutrition?.protein ?? recipe.protein ?? recipe.protein_grams ?? recipe.protein_g ?? 'n/a';

@@ -39,7 +39,7 @@ export function MealDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden" aria-describedby={undefined}>
+      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden" hideClose aria-describedby={undefined}>
         <div className="relative px-6 py-4 max-h-[90vh]">
           <Button
             variant="ghost"

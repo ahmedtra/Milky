@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { getPlanId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { getMealAlternatives, applyMealAlternative, getFavoriteRecipes } from "@/lib/api";
+import { getMealAlternatives, applyMealAlternative, getFavoriteRecipes, saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -305,6 +305,37 @@ export default function MealPlans() {
         : 0;
     const next = Math.min(meals.length - 1, Math.max(0, current + step));
     if (next !== current) setSelectedMeal({ planId, dayIndex, mealIndex: next });
+  };
+
+  const handleFavoriteMeal = async (dayIdx: number, mealIdx: number) => {
+    const plan = selectedDay ? getPlanById(selectedDay.planId) : null;
+    const meal = plan?.days?.[dayIdx]?.meals?.[mealIdx];
+    const recipe = meal?.recipes?.[0];
+    if (!meal || !recipe) return;
+    try {
+      const saved = await saveFavoriteRecipe({
+        recipe: {
+          title: recipe.name || recipe.title || meal.type || "Recipe",
+          name: recipe.name || recipe.title || meal.type || "Recipe",
+          ingredients: recipe.ingredients || recipe.ingredients_parsed || [],
+          instructions: recipe.instructions || [],
+          imageUrl: recipe.imageUrl || recipe.image || null,
+          source: "meal",
+        },
+      });
+      const favId = saved?.favorite?._id || saved?.favorite?.id;
+      if (favId) {
+        try {
+          await ensureFavoriteImage(favId);
+        } catch (err) {
+          console.warn("Could not ensure favorite image", err);
+        }
+      }
+      toast.success("Saved to favorites");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not save favorite");
+    }
   };
 
   const handleSwapOpen = async (planId: string, dayIndex: number, mealIndex: number) => {
@@ -620,6 +651,7 @@ export default function MealPlans() {
         swapState={swapState}
         swapKeyFor={swapKeyFor}
         favorites={favorites.items}
+        onFavorite={handleFavoriteMeal}
         onSwapOpen={(dayIdx, mealIdx) => selectedDay && handleSwapOpen(selectedDay.planId, dayIdx, mealIdx)}
         onApplyAlternative={(dayIdx, mealIdx, recipeId) =>
           selectedDay && handleApplyAlternative(selectedDay.planId, dayIdx, mealIdx, recipeId)

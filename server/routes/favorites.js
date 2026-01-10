@@ -11,6 +11,21 @@ const allowedIngredientCategories = new Set([
   'spice', 'nut', 'seed', 'broth', 'herb', 'other'
 ]);
 
+const ensureNutritionDefaults = (nut = {}) => {
+  const num = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    calories: num(nut.calories, 320),
+    protein: num(nut.protein, 25),
+    carbs: num(nut.carbs, 28),
+    fat: num(nut.fat, 12),
+    fiber: num(nut.fiber, 4),
+    sugar: num(nut.sugar, 6),
+  };
+};
+
 const sanitizeCategory = (cat) => {
   if (!cat || typeof cat !== 'string') return 'other';
   const lower = cat.toLowerCase();
@@ -161,6 +176,46 @@ router.post('/', auth, async (req, res) => {
     if (!planRecipe) {
       return res.status(400).json({ message: 'Unable to save recipe' });
     }
+
+    // Fill missing description and nutrition, prefer LLM-generated metadata
+    const needsDescription = !planRecipe.description && !planRecipe.summary;
+    const hasNutrition =
+      planRecipe.nutrition &&
+      Number(planRecipe.nutrition.calories) > 0 &&
+      Number(planRecipe.nutrition.protein) > 0;
+    const needsNutrition = !hasNutrition;
+
+    if (needsDescription || needsNutrition) {
+      try {
+        const llmMeta = await geminiService.generateLLMFallbackRecipe('dinner', { recipeTitle: planRecipe.name });
+        if (llmMeta) {
+          if (needsDescription) {
+            const descr =
+              llmMeta.description ||
+              llmMeta.summary ||
+              (Array.isArray(llmMeta.instructions) ? llmMeta.instructions.slice(0, 2).join(' ') : null);
+            if (descr) {
+              planRecipe.description = descr;
+              planRecipe.summary = descr;
+            }
+          }
+          if (needsNutrition) {
+            planRecipe.nutrition = ensureNutritionDefaults(llmMeta.nutrition);
+          }
+        }
+      } catch (metaErr) {
+        console.warn('⚠️ LLM metadata generation for favorite failed:', metaErr?.message || metaErr);
+      }
+    }
+
+    if (!planRecipe.description && !planRecipe.summary) {
+      const instr = Array.isArray(planRecipe.instructions) ? planRecipe.instructions : [];
+      const ing = Array.isArray(planRecipe.ingredients) ? planRecipe.ingredients : [];
+      const snippet = instr.length ? instr.slice(0, 2).join(' ') : ing.slice(0, 3).map((i) => (i.name || i).toString()).join(', ');
+      planRecipe.description = planRecipe.description || snippet || `Favorite recipe: ${planRecipe.name}`;
+      planRecipe.summary = planRecipe.summary || planRecipe.description;
+    }
+    planRecipe.nutrition = ensureNutritionDefaults(planRecipe.nutrition);
 
     const calories = planRecipe?.nutrition?.calories;
     const protein = planRecipe?.nutrition?.protein;

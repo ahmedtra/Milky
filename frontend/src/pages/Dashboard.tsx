@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { 
   ChefHat, ShoppingCart, MessageCircle, 
-  Calendar, CheckCircle, Clock, Flame, Sparkles, AlertTriangle, ChevronLeft, ChevronRight 
+  Calendar, CheckCircle, Clock, Flame, Sparkles, AlertTriangle, ChevronLeft, ChevronRight, Star, RefreshCw 
 } from "lucide-react";
 import { Navigation } from "@/components/layout/Navigation";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { useShoppingLists } from "@/hooks/use-shopping-lists";
 import { getMealCalories, getPlanId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getMealAlternatives, applyMealAlternative, ensureMealImage, getFavoriteRecipes } from "@/lib/api";
+import { getMealAlternatives, applyMealAlternative, ensureMealImage, getFavoriteRecipes, saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
 const quickLinks = [
@@ -29,6 +29,7 @@ export default function Dashboard() {
   const updateDaysMutation = useUpdateMealPlanDays();
   const queryClient = useQueryClient();
   const [historyCardPct, setHistoryCardPct] = useState(90);
+  const historyInitialized = useRef(false);
 
   // Stats
   const planList = Array.isArray(plans) ? plans : [];
@@ -45,6 +46,7 @@ export default function Dashboard() {
     applying: false,
   });
   const [favorites, setFavorites] = useState<{ items: any[]; loading: boolean }>({ items: [], loading: false });
+  const historyTouchStart = useRef<number | null>(null);
 
   // Get today's meals from the plan whose date range covers today
   const today = new Date();
@@ -182,10 +184,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (historyData.entries.length === 0) {
       setHistoryIndex(0);
+      historyInitialized.current = false;
       return;
     }
-    setHistoryIndex((prev) => Math.min(prev, historyData.entries.length - 1));
-  }, [historyData.entries.length]);
+    // Only set on initial load or when entries change from empty to non-empty
+    if (historyInitialized.current) return;
+    const todayIdx = historyData.entries.findIndex((e) => e.key === todayStr);
+    if (todayIdx >= 0) {
+      setHistoryIndex(todayIdx);
+    } else {
+      setHistoryIndex((prev) => Math.min(prev, historyData.entries.length - 1));
+    }
+    historyInitialized.current = true;
+  }, [historyData.entries, todayStr]);
 
   // Ensure today's meals have images (Leonardo) without spamming requests
   useEffect(() => {
@@ -332,6 +343,54 @@ export default function Dashboard() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meal-plans'] }),
       }
     );
+  };
+
+  const handleFavoriteMeal = async (planId: string, dayIndex: number, mealIndex: number) => {
+    const plan = getPlanById(planId);
+    const meal = plan?.days?.[dayIndex]?.meals?.[mealIndex];
+    const recipe = meal?.recipes?.[0];
+    if (!meal || !recipe) return;
+    try {
+      const saved = await saveFavoriteRecipe({
+        recipe: {
+          title: recipe.name || recipe.title || meal.type || "Recipe",
+          name: recipe.name || recipe.title || meal.type || "Recipe",
+          ingredients: recipe.ingredients || recipe.ingredients_parsed || [],
+          instructions: recipe.instructions || [],
+          imageUrl: recipe.imageUrl || recipe.image || null,
+          source: "meal",
+        },
+      });
+      const favId = saved?.favorite?._id || saved?.favorite?.id;
+      if (favId) {
+        try {
+          await ensureFavoriteImage(favId);
+        } catch (err) {
+          console.warn("Could not ensure favorite image", err);
+        }
+      }
+      toast.success("Saved to favorites");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not save favorite");
+    }
+  };
+
+  const handleHistoryTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    historyTouchStart.current = e.touches[0].clientX;
+  };
+  const handleHistoryTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (historyTouchStart.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - historyTouchStart.current;
+    historyTouchStart.current = null;
+    const threshold = 40;
+    if (Math.abs(deltaX) > threshold) {
+      if (deltaX < 0 && historyIndex < historyData.entries.length - 1) {
+        setHistoryIndex((idx) => Math.min(historyData.entries.length - 1, idx + 1));
+      } else if (deltaX > 0 && historyIndex > 0) {
+        setHistoryIndex((idx) => Math.max(0, idx - 1));
+      }
+    }
   };
 
   return (
@@ -669,7 +728,11 @@ export default function Dashboard() {
                     </Button>
                   </div>
                 </div>
-                <div className="overflow-hidden">
+                <div
+                  className="overflow-hidden"
+                  onTouchStart={handleHistoryTouchStart}
+                  onTouchEnd={handleHistoryTouchEnd}
+                >
                   <div
                     className="flex gap-4 transition-transform duration-300 ease-out"
                     style={{
@@ -688,10 +751,8 @@ export default function Dashboard() {
                         <div
                           key={entry.key}
                           className={cn(
-                            "glass-card p-4 md:p-5 rounded-2xl shrink-0 w-[90%] md:w-[80%] transition-all duration-300 border border-border/80",
-                            isActive
-                              ? "shadow-xl ring-1 ring-primary/30 scale-[1.02]"
-                              : "opacity-70 shadow-inner"
+                            "p-4 md:p-5 rounded-2xl shrink-0 w-[90%] md:w-[80%] transition-all duration-300 bg-white/95 shadow-[0_30px_70px_-40px_rgba(0,0,0,0.55)]",
+                            isActive ? "scale-[1.01]" : "opacity-80"
                           )}
                         >
                           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
@@ -713,7 +774,10 @@ export default function Dashboard() {
                                 const mealKey = meal.mealId || meal._id || mealIdx;
                                 const isSwapOpen = validId(entry.planId) && swapState.key === swapKeyFor(entry.planId, entry.dayIndex, mealIdx);
                                 return (
-                                  <div key={mealKey} className="space-y-2 rounded-lg border p-3 bg-white/60">
+                                  <div
+                                    key={mealKey}
+                                    className="space-y-2 rounded-lg p-3 bg-white/85 shadow-[0_12px_30px_-25px_rgba(0,0,0,0.6)]"
+                                  >
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                       <div className="min-w-0">
                                         <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
@@ -727,11 +791,12 @@ export default function Dashboard() {
                                           size="sm"
                                           disabled={!validId(entry.planId)}
                                           onClick={() => handleSwapOpen(entry.planId, entry.dayIndex, mealIdx)}
+                                          className="flex items-center gap-1"
                                         >
-                                          Swap
+                                          <RefreshCw className="h-4 w-4" />
                                         </Button>
                                         <Button
-                                          variant="secondary"
+                                          variant={meal.isCompleted ? "outline" : "secondary"}
                                           size="sm"
                                           onClick={() =>
                                             handleToggleMeal(
@@ -741,8 +806,20 @@ export default function Dashboard() {
                                               !meal.isCompleted
                                             )
                                           }
+                                          className={cn(
+                                            "flex items-center gap-1",
+                                            meal.isCompleted ? "border-green-500 text-green-600" : ""
+                                          )}
                                         >
-                                          {meal.isCompleted ? "✓" : "Done"}
+                                          ✓
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleFavoriteMeal(entry.planId, entry.dayIndex, mealIdx)}
+                                          className="text-amber-500 hover:text-amber-600"
+                                        >
+                                          <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
                                         </Button>
                                         <Button
                                           variant="destructive"

@@ -345,6 +345,54 @@ class GeminiService {
         relaxedHits: results?.results?.length || 0
       });
     }
+
+    // LLM pass to discard candidates that violate user constraints
+    if (results?.results?.length) {
+      try {
+        const candidateData = results.results.map((r, idx) => ({
+          id: r.id || r._id || `cand-${idx}`,
+          title: r.title || r.name,
+          calories: r.nutrition?.calories ?? r.calories,
+          protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
+          time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes,
+          tags: r.diet_tags || r.tags || []
+        }));
+        const filterPrompt = `
+        Meal type: ${mealType}
+        User preferences: ${JSON.stringify(preferences)}
+        Candidates:
+        ${JSON.stringify(candidateData, null, 2)}
+
+        Decide which candidates respect the user's constraints (diet, allergies, dislikes, meal type).
+        Respond with ONLY JSON: {"keepIds":["id1","id2",...]} using the ids above.
+        If unsure, keep all. Do NOT invent recipes or ids.
+        `;
+        const filterResp = await this.callTextModel(filterPrompt, 0.15, 'json');
+        const parsedFilter = (() => {
+          try {
+            const cleaned = (filterResp || '').replace(/```json|```/gi, '').trim();
+            return JSON.parse(cleaned);
+          } catch {
+            return null;
+          }
+        })();
+        const keepIds = Array.isArray(parsedFilter?.keepIds)
+          ? parsedFilter.keepIds.map((v) => String(v))
+          : null;
+        if (keepIds && keepIds.length) {
+          const filtered = results.results.filter((r, idx) => {
+            const id = r.id || r._id || `cand-${idx}`;
+            return keepIds.includes(String(id));
+          });
+          if (filtered.length) {
+            results.results = filtered;
+          }
+        }
+      } catch (filterErr) {
+        logMealplan("⚠️ LLM candidate filter failed", filterErr?.message || filterErr);
+      }
+    }
+
     // If ES still returns nothing, synthesize multiple fallback recipes via LLM to avoid empty candidates
     if (!results.results || results.results.length === 0) {
       const fallbackRecipes = await this.generateLLMFallbackRecipes(mealType, preferences, 10);
@@ -1689,6 +1737,49 @@ class GeminiService {
         }
         if (!useResults?.length) {
           return 'I could not find matching recipes right now. Try adjusting the ingredients or diet.';
+        }
+
+        // Ask LLM to discard irrelevant candidates based on user intent
+        try {
+          const candidateData = useResults.map((r, idx) => ({
+            id: r.id || r._id || `c${idx}`,
+            title: r.title || r.name,
+            calories: r.nutrition?.calories ?? r.calories,
+            protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
+            time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes
+          }));
+          const filterPrompt = `
+          User asked: "${message}"
+          You have candidate recipes (JSON):
+          ${JSON.stringify(candidateData, null, 2)}
+
+          Decide which candidates respect the user request (ingredients, meal type, etc.).
+          Respond with ONLY JSON: {"keepIds":["id1","id2"...]} using the ids provided above.
+          If unsure, keep all. Do NOT invent new ids or recipes.
+          `;
+          const filterResp = await this.callTextModel(filterPrompt, 0.2, 'json');
+          const parsedFilter = (() => {
+            try {
+              const cleaned = (filterResp || '').replace(/```json|```/gi, '').trim();
+              return JSON.parse(cleaned);
+            } catch {
+              return null;
+            }
+          })();
+          const keepIds = Array.isArray(parsedFilter?.keepIds)
+            ? parsedFilter.keepIds.map((v) => String(v))
+            : null;
+          if (keepIds && keepIds.length) {
+            useResults = useResults.filter((r, idx) => {
+              const id = r.id || r._id || `c${idx}`;
+              return keepIds.includes(String(id));
+            });
+          }
+          if (!useResults.length) {
+            useResults = candidateData.map((c, idx) => useResults[idx]).filter(Boolean); // fallback to original
+          }
+        } catch (filterErr) {
+          console.warn("⚠️ LLM candidate filter failed", filterErr?.message || filterErr);
         }
         const summary = useResults.map((r, idx) => {
           const title = r.title || r.name || `Recipe ${idx + 1}`;

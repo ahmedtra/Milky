@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner"; // Using sonner for easy feedback
+import NoSleep from "nosleep.js";
 
 // Pages & Components
 import Dashboard from "./pages/Dashboard";
@@ -24,71 +25,45 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const [wakeLockEnabled, setWakeLockEnabled] = useState(false);
-  const wakeLockRef = useRef<any>(null);
-
-  // Core function to request the lock
-  const requestWakeLock = useCallback(async (silent = false) => {
-    if (!("wakeLock" in navigator)) {
-      if (!silent) toast.error("Wake Lock not supported on this browser.");
-      return false;
-    }
-    
-    // Safety check for HTTPS
-    if (!window.isSecureContext) {
-      if (!silent) toast.error("Wake Lock requires HTTPS.");
-      return false;
-    }
-
-    try {
-      // @ts-ignore
-      const sentinel = await navigator.wakeLock.request("screen");
-      wakeLockRef.current = sentinel;
-
-      sentinel.onrelease = () => {
-        console.log("Wake Lock released");
-        wakeLockRef.current = null;
-        // We don't necessarily setWakeLockEnabled(false) here because 
-        // the user might just have minimized the app temporarily.
-      };
-
-      if (!silent) toast.success("Screen will stay awake!");
-      return true;
-    } catch (err: any) {
-      console.error(`Wake Lock Error: ${err.name}, ${err.message}`);
-      return false;
-    }
-  }, []);
+  const noSleepRef = useRef<NoSleep | null>(null);
 
   // Handler for the checkbox toggle
   const handleToggleWakeLock = async (checked: boolean) => {
     if (checked) {
-      const success = await requestWakeLock();
-      setWakeLockEnabled(success);
-    } else {
-      if (wakeLockRef.current) {
-        await wakeLockRef.current.release();
-        wakeLockRef.current = null;
+      try {
+        if (!noSleepRef.current) {
+          noSleepRef.current = new NoSleep();
+        }
+        await noSleepRef.current.enable(); // must be triggered from user gesture
+        setWakeLockEnabled(true);
+        toast.success("Screen will stay awake!");
+      } catch (err: any) {
+        console.error("NoSleep enable failed:", err?.message || err);
+        setWakeLockEnabled(false);
+        toast.error("Could not keep the screen awake on this device.");
       }
+    } else {
+      try {
+        await noSleepRef.current?.disable?.();
+      } catch {
+        /* ignore */
+      }
+      noSleepRef.current = null;
       setWakeLockEnabled(false);
       toast.info("Screen wake lock disabled.");
     }
   };
 
-  // Re-acquire lock when user returns to the tab
   useEffect(() => {
-    const handleVisibility = async () => {
-      if (wakeLockEnabled && document.visibilityState === "visible" && !wakeLockRef.current) {
-        // Re-requesting silently on return
-        await requestWakeLock(true);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      wakeLockRef.current?.release?.();
+      try {
+        noSleepRef.current?.disable?.();
+      } catch {
+        /* ignore */
+      }
+      noSleepRef.current = null;
     };
-  }, [wakeLockEnabled, requestWakeLock]);
+  }, []);
 
   const WakeLockBar: React.FC = () => {
     const { logout } = useAuth();

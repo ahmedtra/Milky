@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import React from "react";
 import { Check } from "lucide-react";
+import { CookMode } from "./CookMode";
 
 interface MealDetailDialogProps {
   open: boolean;
@@ -36,10 +37,36 @@ export function MealDetailDialog({
   if (!meal) return null;
 
   const { instructions, ingredients, time, macros } = normalizeMealDetails(meal);
+  const [cookMode, setCookMode] = React.useState(false);
+  const instructionsArray = React.useMemo(() => {
+    if (Array.isArray(instructions)) {
+      // If the array contains a single blob, split that blob by newlines
+      if (instructions.length === 1 && typeof instructions[0] === "string") {
+        return instructions[0]
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      return instructions.filter(Boolean);
+    }
+    if (typeof instructions === "string") {
+      return instructions
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, [instructions]);
+
+  const handleOpenChange = (val: boolean) => {
+    if (cookMode) return;
+    onOpenChange(val);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden" hideClose aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Meal details</DialogTitle>
         <div className="relative px-6 py-4 max-h-[90vh]">
           <Button
             variant="ghost"
@@ -77,9 +104,19 @@ export function MealDetailDialog({
             <div className="grid md:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl border bg-white/70 space-y-2 w-full max-w-full md:max-w-[34rem]">
                 <h4 className="font-semibold text-foreground mb-2">Instructions</h4>
-                {instructions.length ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!instructionsArray.length}
+                    onClick={() => setCookMode(true)}
+                  >
+                    Start Cook Mode
+                  </Button>
+                </div>
+                {instructionsArray.length ? (
                   <div className="space-y-1 text-sm text-muted-foreground break-words max-w-full overflow-hidden">
-                    {instructions.map((step, stepIdx) => (
+                    {instructionsArray.map((step, stepIdx) => (
                       <div key={stepIdx} className="flex items-start gap-2 text-left">
                         <span className="text-primary font-semibold flex-shrink-0">{stepIdx + 1}.</span>
                         <span className="flex-1 min-w-0 break-words break-all whitespace-pre-wrap">{step}</span>
@@ -143,6 +180,13 @@ export function MealDetailDialog({
           </div>
         </div>
       </DialogContent>
+      {cookMode && (
+        <CookMode
+          title={meal.recipes?.[0]?.name || meal.type || "Recipe"}
+          steps={instructionsArray}
+          onExit={() => setCookMode(false)}
+        />
+      )}
     </Dialog>
   );
 }

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getMealAlternatives, applyMealAlternative, ensureMealImage, getFavoriteRecipes, saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { CookMode } from "@/components/meals/CookMode";
 
 const quickLinks = [
   { path: "/meal-plans", label: "Meal Plans", icon: ChefHat, description: "View & generate plans" },
@@ -105,7 +106,9 @@ export default function Dashboard() {
     recipe: any;
     ingredients: string[];
     instructions: string[];
+    instructionsArray: string[];
   } | null>(null);
+  const [cookMode, setCookMode] = useState<{ title: string; steps: string[] } | null>(null);
 
   const historyData = useMemo(() => {
     const groups: Record<string, { planId: string; dayIndex: number; planTitle: string; dayLabel: string; meals: any[]; createdAt: number; overlap: boolean }> = {};
@@ -512,6 +515,11 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {todayDay.meals.map((meal, index) => {
                   const { recipe, ingredientsList, instructionsList } = buildMealDetails(meal);
+                  const instructionsArray = Array.isArray(instructionsList)
+                    ? instructionsList
+                    : typeof instructionsList === "string"
+                      ? instructionsList.split(/\r?\n/).filter(Boolean)
+                      : [];
                   const calories = getMealCalories(meal);
 
                   return (
@@ -561,6 +569,7 @@ export default function Dashboard() {
                               recipe,
                               ingredients: ingredientsList,
                               instructions: instructionsList,
+                              instructionsArray,
                             })
                           }
                         >
@@ -590,6 +599,7 @@ export default function Dashboard() {
                               recipe,
                               ingredients: ingredientsList,
                               instructions: instructionsList,
+                              instructionsArray,
                             })
                           }
                         >
@@ -658,7 +668,16 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground mb-1">Instructions</p>
-                  {expandedMeal.instructions.length ? (
+                  {expandedMeal.instructionsArray?.length ? (
+                    <div className="space-y-1 text-sm text-foreground break-words">
+                      {expandedMeal.instructionsArray.map((step: string, i) => (
+                        <div key={i} className="flex gap-2 text-left">
+                          <span className="font-semibold text-primary">{i + 1}.</span>
+                          <span className="flex-1 whitespace-pre-wrap">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : expandedMeal.instructions.length ? (
                     <ol className="list-decimal list-inside text-sm text-foreground space-y-1">
                       {expandedMeal.instructions.map((step, i) => (
                         <li key={i}>{step}</li>
@@ -669,9 +688,31 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+              {expandedMeal.instructionsArray?.length > 0 && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="primary"
+                    onClick={() =>
+                      setCookMode({
+                        title: expandedMeal.recipe?.name || expandedMeal.meal?.type || "Recipe",
+                        steps: expandedMeal.instructionsArray,
+                      })
+                    }
+                  >
+                    Start Cook Mode
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
+      )}
+      {cookMode && (
+        <CookMode
+          title={cookMode.title}
+          steps={cookMode.steps}
+          onExit={() => setCookMode(null)}
+        />
       )}
 
       {/* Active Meal Plans history */}

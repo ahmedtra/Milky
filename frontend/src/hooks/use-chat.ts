@@ -1,13 +1,20 @@
-import { useState, useCallback } from 'react';
-import { sendChatMessage } from '@/lib/api';
-import type { ChatMessage } from '@/lib/types';
-import { toast } from 'sonner';
+import { useState, useCallback } from "react";
+import { sendChatMessage } from "@/lib/api";
+import type { ChatMessage } from "@/lib/types";
+import { toast } from "sonner";
 
 const initialMessage: ChatMessage = {
   id: 'initial',
   role: 'assistant',
-  content: "Hi! I'm your AI nutritionist. 🥗 I can help you plan meals, swap ingredients, explain nutritional info, or answer any diet-related questions. What would you like to know?",
+  content:
+    "Hi! I'm your AI nutritionist. 🥗 I can help you plan meals, swap ingredients, explain nutritional info, or answer any diet-related questions. What would you like to know?",
   timestamp: new Date(),
+};
+
+const hasEmoji = (text: string) => /\p{Emoji}/u.test(text);
+const ensureEmoji = (text: string) => {
+  if (!text) return "🙂";
+  return hasEmoji(text) ? text : `${text} 🙂`;
 };
 
 export function useChat() {
@@ -130,7 +137,7 @@ export function useChat() {
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: botText || "I'm here to help with your meal plans and nutrition questions!",
+        content: ensureEmoji(botText || "I'm here to help with your meal plans and nutrition questions!"),
         timestamp: new Date(),
       };
 

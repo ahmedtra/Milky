@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const parseMessageSegments = (text: string) => {
   const segments: Array<{ type: "text" | "recipe"; value: string }> = [];
@@ -33,6 +35,11 @@ const quickActions = [
   { label: "Add to shopping list", icon: ShoppingCart },
   { label: "Explain macros", icon: Info },
 ];
+
+const addEmojiIfMissing = (txt: string) => {
+  if (!txt) return "🙂";
+  return /\p{Emoji}/u.test(txt) ? txt : `${txt} 🙂`;
+};
 
 export default function Chat() {
   const { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe } = useChat();
@@ -182,7 +189,7 @@ export default function Chat() {
                               }
                               disabled={isLoading}
                             >
-                              {seg.value}
+                              {message.role === "assistant" ? addEmojiIfMissing(seg.value) : seg.value}
                             </button>
                             <button
                               className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
@@ -207,7 +214,21 @@ export default function Chat() {
                           </span>
                         );
                       }
-                      return <span key={`${message.id}-seg-${idx}`}>{seg.value}</span>;
+                      const textContent =
+                        message.role === "assistant" ? addEmojiIfMissing(seg.value.trim()) : seg.value;
+                      return (
+                        <ReactMarkdown
+                          key={`${message.id}-seg-${idx}`}
+                          remarkPlugins={[remarkGfm]}
+                          className="prose prose-sm max-w-none text-[15px] leading-relaxed text-foreground prose-p:my-0 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-li:ml-4 prose-ul:list-disc prose-ol:list-decimal"
+                          components={{
+                            ul: ({ node, ...props }) => <ul {...props} className="list-disc ml-5" />,
+                            ol: ({ node, ...props }) => <ol {...props} className="list-decimal ml-5" />,
+                          }}
+                        >
+                          {textContent}
+                        </ReactMarkdown>
+                      );
                     })}
                   </div>
                 </div>

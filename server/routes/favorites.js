@@ -50,12 +50,22 @@ const mapSearchHitToPlanRecipe = (hit) => {
         }))
       : [];
 
-  const instructions = hit.instructions
-    ? String(hit.instructions)
+  const instructions = (() => {
+    if (!hit.instructions) return [];
+    if (Array.isArray(hit.instructions)) {
+      return hit.instructions
+        .flatMap((line) => (typeof line === 'string' ? line.split(/\r?\n/) : []))
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+    if (typeof hit.instructions === 'string') {
+      return hit.instructions
         .split(/\r?\n/)
         .map((line) => line.trim())
-        .filter(Boolean)
-    : [];
+        .filter(Boolean);
+    }
+    return [];
+  })();
 
   const nutrition = {};
   const addNumber = (key, ...candidates) => {

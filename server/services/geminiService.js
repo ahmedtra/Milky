@@ -1951,6 +1951,7 @@ class GeminiService {
         - Use \`code formatting\` for specific measurements or technical terms
         - Use > blockquotes for important notes or warnings
         - Always format your response for easy reading with proper spacing
+        - Include at least one friendly emoji in each reply to keep the tone warm
       `;
 
       const fullPrompt = `${systemPrompt}\n\nConversation History:\n${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\nUser: ${message}\n\nAssistant:`;

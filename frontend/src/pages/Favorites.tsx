@@ -10,11 +10,13 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
+import { CookMode } from "@/components/meals/CookMode";
 
 export default function Favorites() {
   const queryClient = useQueryClient();
 
   const [selected, setSelected] = useState<any | null>(null);
+  const [cookMode, setCookMode] = useState(false);
   const { data: favorites = [], isLoading, refetch } = useQuery({
     queryKey: ["favorites"],
     queryFn: getFavoriteRecipes,
@@ -150,8 +152,23 @@ export default function Favorites() {
         )}
       </main>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+      <Dialog
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (cookMode) return;
+          if (!open) {
+            setCookMode(false);
+            setSelected(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-lg max-h-[80vh] overflow-y-auto"
+          hideClose
+          onInteractOutside={(e) => {
+            if (cookMode) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">{selected?.title}</DialogTitle>
           </DialogHeader>
@@ -207,9 +224,32 @@ export default function Favorites() {
                   );
                 })()}
               </div>
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!selected?.planRecipe?.instructions?.length}
+                  onClick={() => setCookMode(true)}
+                >
+                  Start Cook Mode
+                </Button>
+              </div>
             </div>
           ) : null}
         </DialogContent>
+        {cookMode && selected?.planRecipe?.instructions && (
+          <CookMode
+            title={selected?.title || "Recipe"}
+            steps={
+              Array.isArray(selected.planRecipe.instructions)
+                ? selected.planRecipe.instructions
+                : typeof selected.planRecipe.instructions === "string"
+                  ? selected.planRecipe.instructions.split(/\r?\n/).map((s: string) => s.trim()).filter(Boolean)
+                  : []
+            }
+            onExit={() => setCookMode(false)}
+          />
+        )}
       </Dialog>
     </div>
   );

@@ -16,6 +16,7 @@ router.post('/chat', auth, async (req, res) => {
 
     // Try to fetch the user's active meal plan
     let activeMealPlan = null;
+    let mealPlanHistory = [];
     try {
       // First try to find an explicitly active meal plan
       activeMealPlan = await MealPlan.findOne({
@@ -30,6 +31,12 @@ router.post('/chat', auth, async (req, res) => {
         }).sort({ createdAt: -1 });
       }
 
+      // Fetch a short history of recent meal plans for extra context
+      mealPlanHistory = await MealPlan.find({ userId: req.user._id })
+        .sort({ startDate: -1 })
+        .limit(12)
+        .lean();
+
       if (activeMealPlan) {
         console.log(`📋 Found meal plan for chat context: "${activeMealPlan.title}" (Status: ${activeMealPlan.status})`);
       } else {
@@ -43,7 +50,8 @@ router.post('/chat', auth, async (req, res) => {
       message, 
       conversationHistory,
       activeMealPlan,
-      req.user
+      req.user,
+      mealPlanHistory
     );
     
     res.json({

@@ -984,8 +984,39 @@ class GeminiService {
 
       // Generation complete
       logMealplan(`✅ Meal plan generation complete: ${days.length} days`);
+      // Ask the LLM for a concise, user-friendly title that reflects meals and preferences
+      const sampleMeals = days
+        .flatMap((d) => d?.meals || [])
+        .slice(0, 8)
+        .map((m) => m?.recipes?.[0]?.name || m?.recipes?.[0]?.title || m?.type)
+        .filter(Boolean);
+      let generatedTitle = `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`;
+      try {
+        const namePrompt = `
+        Create a concise, human-friendly title for a ${duration}-day meal plan.
+        Consider user preferences and a few meal examples.
+        Preferences: ${JSON.stringify(userPreferences || {}, null, 2)}
+        Meals: ${sampleMeals.join(' | ')}
+        Title rules:
+        - Max ~8 words
+        - No quotes, no emojis, no numbering
+        - Reflect cuisine/diet if possible
+        Respond with ONLY the title text.`;
+        const nameText = await this.callTextModel(namePrompt, 0.4, 'text');
+        if (nameText && typeof nameText === 'string') {
+          generatedTitle = nameText
+            .replace(/[\r\n]/g, ' ')
+            .replace(/^["']|["']$/g, '')
+            .trim()
+            .slice(0, 120);
+          if (!generatedTitle.length) generatedTitle = `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`;
+        }
+      } catch (err) {
+        console.warn('⚠️ Meal plan title generation failed, using fallback', err?.message || err);
+      }
+
       return {
-        title: `${duration}-Day ${userPreferences.dietType || 'Balanced'} Meal Plan`,
+        title: generatedTitle,
         description: `A ${duration}-day meal plan tailored to your preferences`,
         days
       };
@@ -1667,8 +1698,9 @@ class GeminiService {
     }
   }
 
-  async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null) {
+  async chatWithDietitian(message, conversationHistory = [], activeMealPlan = null, user = null, mealPlanHistory = []) {
     try {
+      const msgLower = (message || '').toLowerCase();
       // Let the LLM classify intent; if it's a recipe search, route to ES results.
       const intent = await this.detectRecipeSearchIntent(message);
       // Heuristic: if user references "first/second/third" without an id/title, try to pull from last assistant list
@@ -1694,6 +1726,60 @@ class GeminiService {
           }
         }
       }
+      // Quick path: user explicitly asks for today's meals
+      const wantsTodayMeals = /today('s)? meal|meals today|what.*today.*meal/i.test(msgLower);
+      if (wantsTodayMeals) {
+        const today = new Date();
+        // Prefer active plans only; if none, fall back to most recent plan
+        const historyArr = Array.isArray(mealPlanHistory) ? mealPlanHistory : [];
+        const activePlans = [
+          ...(activeMealPlan ? [activeMealPlan] : []),
+          ...historyArr.filter((p) => p && p.status === 'active')
+        ].filter(Boolean);
+        const allPlans = activePlans.length ? activePlans : [...(activeMealPlan ? [activeMealPlan] : []), ...historyArr].filter(Boolean);
+        const allDays = allPlans.flatMap((p) =>
+          (p.days || []).map((d) => ({ ...d, planTitle: p.title || 'Meal Plan' }))
+        );
+        const withDate = allDays
+          .map((d) => ({ ...d, dateObj: d.date ? new Date(d.date) : null }))
+          .filter((d) => d.dateObj && !isNaN(d.dateObj.getTime()));
+
+        // Helper to detect "today" within a small tolerance to avoid TZ off-by-one
+        const isToday = (d) => {
+          const diff = Math.abs(d.dateObj.getTime() - today.getTime());
+          if (diff < 12 * 60 * 60 * 1000) return true; // within 12h
+          return d.dateObj.toDateString() === today.toDateString();
+        };
+
+        let targetDay = withDate.find(isToday);
+        if (!targetDay && withDate.length) {
+          // Pick the closest date overall (future or past)
+          targetDay = withDate
+            .map((d) => ({ ...d, diff: Math.abs(d.dateObj.getTime() - today.getTime()) }))
+            .sort((a, b) => a.diff - b.diff)[0];
+        }
+        if (targetDay) {
+          const lines = (targetDay.meals || []).map((meal, idx) => {
+            const recipe = meal.recipes?.[0] || {};
+            const title = recipe.name || recipe.title || meal.type || `Meal ${idx + 1}`;
+            const type = meal.type || recipe.meal_type || '';
+            const cal = recipe.nutrition?.calories ?? recipe.calories ?? recipe.total_calories;
+            const time = meal.scheduledTime || recipe.time || '';
+            const macro = cal ? `${cal} cal` : '';
+            const when = type ? type : '';
+            const meta = [when, macro, time].filter(Boolean).join(' • ');
+            return `- <recipe>${title}</recipe>${meta ? ` — ${meta}` : ''}`;
+          });
+          const dayLabel = targetDay.dateObj.toLocaleDateString();
+          if (!lines.length) {
+            lines.push('- No meals found for this day.');
+          }
+          return [`Here are your meals for ${dayLabel} 🍽️`, ...lines].join('\n');
+        }
+        // No matching day found
+        return `I couldn't find meals scheduled for today (${today.toLocaleDateString()}). If you have another active plan, please activate it first.`;
+      }
+
       if (intent?.intent === 'recipe_search') {
         const vectorInput = intent.recipeTitle || message;
         const queryVector = await buildQueryVector(vectorInput);
@@ -1884,10 +1970,16 @@ class GeminiService {
         return JSON.stringify(detail);
       }
 
-      // Build meal plan context if available
+      // Decide if we should inject meal plan context (only when user intent seems plan/recipe related)
+      const includePlanContext =
+        (intent && ['recipe_search', 'recipe_detail'].includes(intent.intent)) ||
+        /(meal plan|today's meal|today meal|day\s+\d|swap|breakfast|lunch|dinner|snack)/i.test(msgLower);
+
+      // Build meal plan context if available and desired
       let mealPlanContext = '';
-      if (activeMealPlan && activeMealPlan.days && activeMealPlan.days.length > 0) {
-        mealPlanContext = `\n\n**USER'S ACTIVE MEAL PLAN CONTEXT:**
+      const todayStr = new Date().toLocaleDateString();
+      if (includePlanContext && activeMealPlan && activeMealPlan.days && activeMealPlan.days.length > 0) {
+        mealPlanContext = `\n\n**USER'S ACTIVE MEAL PLAN CONTEXT (today: ${todayStr}):**
         
         Title: ${activeMealPlan.title}
         Description: ${activeMealPlan.description || 'No description'}
@@ -1907,8 +1999,123 @@ class GeminiService {
         }).join('\n\n')}
         
         Use this meal plan context to provide personalized advice. Reference specific meals, recipes, or days when relevant to the user's question.`;
-      } else {
-        // no meal plan context
+      }
+
+      // Add a compact history of recent meal plans (active + past) for reference
+      if (includePlanContext && Array.isArray(mealPlanHistory) && mealPlanHistory.length) {
+        const historyLines = mealPlanHistory.slice(0, 12).map((mp) => {
+          const start = mp.startDate ? new Date(mp.startDate).toLocaleDateString() : 'N/A';
+          const end = mp.endDate ? new Date(mp.endDate).toLocaleDateString() : 'N/A';
+          return `- ${mp.title || 'Meal Plan'} (${mp.status || 'unknown'}) • ${start} → ${end}`;
+        }).join('\n');
+        mealPlanContext += `\n\n**RECENT MEAL PLANS:**\n${historyLines}`;
+      }
+
+      // Add a brief snapshot of recent meals across active/history plans (helps answer "today" even between plans)
+      if (includePlanContext) {
+        const allPlans = [
+          ...(activeMealPlan ? [activeMealPlan] : []),
+          ...(Array.isArray(mealPlanHistory) ? mealPlanHistory : [])
+        ].filter(Boolean);
+        const daysWithMeals = allPlans.flatMap((p) =>
+          (p.days || []).map((d) => ({
+            planTitle: p.title || 'Meal Plan',
+            dateObj: d.date ? new Date(d.date) : null,
+            meals: d.meals || []
+          }))
+        );
+        const datedDays = daysWithMeals
+          .filter((d) => d.dateObj && !isNaN(d.dateObj.getTime()))
+          .sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime())
+          .slice(0, 14);
+        if (datedDays.length) {
+          const mealLines = datedDays
+            .map((d) => {
+              const mealsLine = (d.meals || [])
+                .map((meal) => {
+                  const recipe = meal.recipes?.[0] || {};
+                  const title = recipe.name || recipe.title || meal.type || 'Meal';
+                  const type = meal.type || recipe.meal_type || '';
+                  return `${type ? `${type}: ` : ''}${title}`;
+                })
+                .join(' | ');
+              return `${d.dateObj.toLocaleDateString()} • ${d.planTitle} — ${mealsLine || 'No meals'}`;
+            })
+            .join('\n');
+          mealPlanContext += `\n\n**RECENT MEALS SNAPSHOT (last 14 days):**\n${mealLines}`;
+        }
+      }
+
+      // Add a compact "today" context with macros (closest dated day, preferring active plans)
+      if (includePlanContext) {
+        const allPlans = [
+          ...(activeMealPlan ? [activeMealPlan] : []),
+          ...(Array.isArray(mealPlanHistory) ? mealPlanHistory : [])
+        ].filter(Boolean);
+        const daysWithDate = allPlans.flatMap((p) =>
+          (p.days || []).map((d) => ({
+            planTitle: p.title || 'Meal Plan',
+            dateObj: d.date ? new Date(d.date) : null,
+            meals: d.meals || []
+          }))
+        ).filter((d) => d.dateObj && !isNaN(d.dateObj.getTime()));
+
+        if (daysWithDate.length) {
+          const today = new Date();
+          const isToday = (d) => {
+            const diff = Math.abs(d.dateObj.getTime() - today.getTime());
+            if (diff < 12 * 60 * 60 * 1000) return true;
+            return d.dateObj.toDateString() === today.toDateString();
+          };
+          let targetDay = daysWithDate.find(isToday);
+          if (!targetDay) {
+            targetDay = daysWithDate
+              .map((d) => ({ ...d, diff: Math.abs(d.dateObj.getTime() - today.getTime()) }))
+              .sort((a, b) => a.diff - b.diff)[0];
+          }
+          if (targetDay) {
+            const mealLines = (targetDay.meals || []).map((meal, idx) => {
+              const recipe = meal.recipes?.[0] || {};
+              const title = recipe.name || recipe.title || meal.type || `Meal ${idx + 1}`;
+              const type = meal.type || recipe.meal_type || '';
+              const cal = recipe.nutrition?.calories ?? meal.totalNutrition?.calories ?? recipe.calories ?? meal.calories;
+              const protein = recipe.nutrition?.protein ?? meal.totalNutrition?.protein ?? recipe.protein;
+              const carbs = recipe.nutrition?.carbs ?? meal.totalNutrition?.carbs ?? recipe.carbs;
+              const fat = recipe.nutrition?.fat ?? meal.totalNutrition?.fat ?? recipe.fat;
+              const time = meal.scheduledTime || recipe.time || '';
+              const metaParts = [];
+              if (type) metaParts.push(type);
+              if (cal) metaParts.push(`${cal} cal`);
+              if (protein) metaParts.push(`${protein}g protein`);
+              if (carbs) metaParts.push(`${carbs}g carbs`);
+              if (fat) metaParts.push(`${fat}g fat`);
+              if (time) metaParts.push(time);
+              return `- <recipe>${title}</recipe>${metaParts.length ? ` — ${metaParts.join(' • ')}` : ''}`;
+            });
+
+            const totals = targetDay.meals.reduce(
+              (acc, meal) => {
+                const n = meal.totalNutrition || meal.recipes?.[0]?.nutrition || {};
+                const add = (k) => {
+                  const v = Number(n[k]);
+                  if (Number.isFinite(v)) acc[k] += v;
+                };
+                add('calories'); add('protein'); add('carbs'); add('fat');
+                return acc;
+              },
+              { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            );
+
+            const totalsLine =
+              totals.calories || totals.protein || totals.carbs || totals.fat
+                ? `Total: ${totals.calories || 0} cal • ${totals.protein || 0}g protein • ${totals.carbs || 0}g carbs • ${totals.fat || 0}g fat`
+                : '';
+
+            if (mealLines.length || totalsLine) {
+              mealPlanContext += `\n\n**TODAY'S MEALS (closest dated plan): ${targetDay.dateObj.toLocaleDateString()}**\n${mealLines.join('\n')}${totalsLine ? `\n${totalsLine}` : ''}`;
+            }
+          }
+        }
       }
 
       // Build user profile context if available
@@ -1951,7 +2158,8 @@ class GeminiService {
         - Use \`code formatting\` for specific measurements or technical terms
         - Use > blockquotes for important notes or warnings
         - Always format your response for easy reading with proper spacing
-        - Include at least one friendly emoji in each reply to keep the tone warm
+        - Include at least one friendly emoji in each reply to keep the tone warm, BUT never place emojis inside recipe titles or recipe list lines. Prefer adding the emoji at the end of the overall reply or in a short closing sentence.
+        - When listing recipes, keep each item on its own line, starting with a dash (-) or a number (1., 2., 3.) followed by the title wrapped in <recipe> tags, then a dash and the macros/time.
       `;
 
       const fullPrompt = `${systemPrompt}\n\nConversation History:\n${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\nUser: ${message}\n\nAssistant:`;

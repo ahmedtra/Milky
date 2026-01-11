@@ -43,9 +43,14 @@ const mapSearchHitToPlanRecipe = (hit) => {
       }))
     : Array.isArray(hit.ingredients)
       ? hit.ingredients.map((ing) => ({
-          name: ing.name || ing,
-          amount: ing.amount || ing.quantity || '1',
-          unit: ing.unit || ing.measure || 'unit',
+          // If the ingredient is a plain string, keep it as the name only to avoid "1 unit" prefixes
+          ...(typeof ing === 'string'
+            ? { name: ing, amount: '', unit: '' }
+            : {
+                name: ing.name || ing,
+                amount: ing.amount || ing.quantity || '',
+                unit: ing.unit || ing.measure || '',
+              }),
           category: sanitizeCategory(ing.category)
         }))
       : [];

@@ -46,7 +46,7 @@ export default function Launch() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
-            {heroMeals.map((meal) => (
+            {heroMeals.slice(0, 2).map((meal) => (
               <div
                 key={meal.title}
                 className="rounded-3xl overflow-hidden shadow-soft bg-white/80 border border-emerald-100"

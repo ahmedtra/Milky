@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" role="img" aria-label="Milky logo">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop stop-color="#3c915c" offset="0%"/>
+      <stop stop-color="#1f6f45" offset="100%"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M46 20c-10 12-18 27-18 42 0 19 14 34 32 34s32-15 32-34c0-14-8-29-18-42l-8 10-20-10z" fill="url(#g)" stroke="none" opacity="0.92"/>
+    <path d="M52 46c-6 9-10 18-10 26 0 10 7 18 16 18s16-8 16-18c0-8-4-17-10-26" opacity="0.35"/>
+    <path d="M54 36c10 7 16 16 16 23" opacity="0.6"/>
+  </g>
+  <text x="105" y="75" font-family="Inter, 'Segoe UI', system-ui, -apple-system" font-size="46" font-weight="700" fill="#1f6f45" letter-spacing="1">
+    Milky
+  </text>
+  <text x="108" y="100" font-family="Inter, 'Segoe UI', system-ui, -apple-system" font-size="16" font-weight="500" fill="#2b8a5d" letter-spacing="0.5">
+    AI Diet Assistant
+  </text>
+</svg>

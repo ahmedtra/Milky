@@ -4,9 +4,10 @@ import { motion } from "framer-motion";
 import { ChefHat, ShoppingCart, MessageCircle, Menu, X, LayoutDashboard, Soup, Heart, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import Logo from "@/assets/logo-milky.svg";
 
 const navItems = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/app", label: "Dashboard", icon: LayoutDashboard },
   { path: "/meal-plans", label: "Meal Plans", icon: Soup },
   { path: "/shopping", label: "Shopping", icon: ShoppingCart },
   { path: "/favorites", label: "Favorites", icon: Heart },
@@ -25,10 +26,7 @@ export function Navigation({ showLinks = true }: { showLinks?: boolean }) {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary shadow-soft">
-                <span className="text-lg font-bold text-primary-foreground">M</span>
-              </div>
-              <span className="text-xl font-semibold text-foreground">Milky</span>
+              <img src={Logo} alt="Milky logo" className="h-10 w-auto" />
             </Link>
 
             {/* Desktop Navigation */}

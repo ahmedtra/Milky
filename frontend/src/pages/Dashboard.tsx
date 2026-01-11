@@ -303,12 +303,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleApplyAlternative = async (planId: string, dayIndex: number, mealIndex: number, recipeId: string) => {
+  const handleApplyAlternative = async (planId: string, dayIndex: number, mealIndex: number, recipeId?: string, recipe?: any) => {
     if (!validId(planId)) return;
     const key = swapKeyFor(planId, dayIndex, mealIndex);
     setSwapState(prev => ({ ...prev, applying: true }));
     try {
-      await applyMealAlternative({ planId, dayIndex, mealIndex, recipeId });
+      await applyMealAlternative({ planId, dayIndex, mealIndex, recipeId, recipe });
       toast.success("Meal swapped");
       setSwapState({ key: null, options: [], loading: false, applying: false });
       queryClient.invalidateQueries({ queryKey: ['meal-plans'] });
@@ -897,7 +897,8 @@ export default function Dashboard() {
                                                       entry.planId,
                                                       entry.dayIndex,
                                                       mealIdx,
-                                                      opt?.recipeId || opt?._id || opt?.id
+                                                      opt?.recipeId || opt?._id || opt?.id,
+                                                      opt?.recipe
                                                     )
                                                   }
                                                 >
@@ -929,7 +930,7 @@ export default function Dashboard() {
                                                         entry.planId,
                                                         entry.dayIndex,
                                                         mealIdx,
-                                                        undefined,
+                                                        fav?.externalId || fav?.recipeId || fav?.id || undefined,
                                                         fav?.planRecipe || fav?.recipe || fav
                                                       )
                                                     }

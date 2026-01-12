@@ -4,10 +4,20 @@ import { Send, RefreshCw, ShoppingCart, Info, Sparkles, Bot, User, BookmarkPlus 
 import { Navigation } from "@/components/layout/Navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useChat } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
+import { saveFavoriteRecipe, ensureFavoriteImage, createShoppingList, updateShoppingList } from "@/lib/api";
+import { useShoppingLists } from "@/hooks/use-shopping-lists";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -30,24 +40,25 @@ const parseMessageSegments = (text: string) => {
   return segments;
 };
 
-const quickActions = [
-  { label: "Swap this meal", icon: RefreshCw },
-  { label: "Add to shopping list", icon: ShoppingCart },
-  { label: "Explain macros", icon: Info },
-];
-
 const addEmojiIfMissing = (txt: string) => {
   if (!txt) return "🙂";
   return /\p{Emoji}/u.test(txt) ? txt : `${txt} 🙂`;
 };
 
 export default function Chat() {
-  const { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe } = useChat();
+  const { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe, latestListIntent, setLatestListIntent } = useChat();
+  const { data: shoppingLists } = useShoppingLists();
+  const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [savingRecipe, setSavingRecipe] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editIngredients, setEditIngredients] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
+  const [showListModal, setShowListModal] = useState(false);
+  const [selectedListId, setSelectedListId] = useState<string>("new");
+  const [listTitle, setListTitle] = useState<string>("");
+  const [listItems, setListItems] = useState<Array<{ name: string; quantity: string }>>([]);
+  const [savingList, setSavingList] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -64,10 +75,6 @@ export default function Chat() {
     setInput("");
   };
 
-  const handleQuickAction = (action: string) => {
-    setInput(action);
-  };
-
   useEffect(() => {
     if (latestRecipe) {
       setEditTitle(latestRecipe.title || "");
@@ -75,6 +82,109 @@ export default function Chat() {
       setEditInstructions((latestRecipe.instructions || []).join("\n"));
     }
   }, [latestRecipe]);
+
+  const openListModal = () => {
+    const itemsFromRecipe = (latestRecipe?.ingredients || []).map((ing: any) => ({
+      name: typeof ing === "string" ? ing : ing?.name || "",
+      quantity: ing?.amount || ing?.quantity || "",
+    })).filter((i) => i.name);
+    setListItems(itemsFromRecipe.length ? itemsFromRecipe : [{ name: "", quantity: "" }]);
+    setListTitle(latestRecipe?.title || "Shopping List");
+    setSelectedListId("new");
+    setShowListModal(true);
+  };
+
+  const parseQtyUnit = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return { amount: "1", unit: "unit" };
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+    if (!match) return { amount: "1", unit: trimmed || "unit" };
+    const amount = match[1] || "1";
+    const unit = match[2]?.trim() || "unit";
+    return { amount, unit };
+  };
+
+  const categorizeItem = (name: string) => {
+    const lower = name.toLowerCase();
+    if (/(chicken|beef|turkey|pork|salmon|fish|shrimp|meat)/.test(lower)) return "meat";
+    if (/(milk|yogurt|cheese|butter|cream)/.test(lower)) return "dairy";
+    if (/(apple|banana|berry|orange|fruit|grape)/.test(lower)) return "produce";
+    if (/(lettuce|spinach|kale|broccoli|carrot|pepper|onion|garlic|tomato|potato)/.test(lower)) return "produce";
+    if (/(bread|baguette|bun|bagel)/.test(lower)) return "bakery";
+    if (/(rice|pasta|flour|sugar|salt|oil|spice|canned|grain)/.test(lower)) return "pantry";
+    if (/(frozen|ice cream)/.test(lower)) return "frozen";
+    return "other";
+  };
+
+  const updateItem = (idx: number, field: "name" | "quantity", value: string) => {
+    setListItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const addRow = () => setListItems((prev) => [...prev, { name: "", quantity: "" }]);
+  const removeRow = (idx: number) =>
+    setListItems((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleSaveList = async () => {
+    const items = listItems
+      .map((i) => {
+        const name = i.name.trim();
+        const qty = i.quantity.trim();
+        const { amount, unit } = parseQtyUnit(qty);
+        return {
+          name,
+          quantity: qty,
+          amount: amount || "1",
+          unit: unit || "unit",
+          category: categorizeItem(name),
+          purchased: false,
+          price: 0,
+        };
+      })
+      .filter((i) => i.name);
+    if (!items.length) {
+      toast.error("Please add at least one item");
+      return;
+    }
+    setSavingList(true);
+    try {
+      if (selectedListId && selectedListId !== "new") {
+        const list = (shoppingLists || []).find((l: any) => l._id === selectedListId || l.id === selectedListId);
+        const existingItems = Array.isArray(list?.items) ? list.items : [];
+        await updateShoppingList(selectedListId, { items: [...existingItems, ...items] });
+        toast.success("Items added to shopping list");
+      } else {
+        await createShoppingList({
+          title: listTitle || "Shopping List",
+          description: "",
+          items,
+          status: "active",
+        });
+        toast.success("Shopping list created");
+      }
+      queryClient.invalidateQueries({ queryKey: ["shopping-lists"] });
+      setShowListModal(false);
+    } catch (err) {
+      console.error("Save list error", err);
+      toast.error("Could not save shopping list");
+    } finally {
+      setSavingList(false);
+    }
+  };
+
+  useEffect(() => {
+    if (latestListIntent) {
+      const items = Array.isArray(latestListIntent.items) && latestListIntent.items.length
+        ? latestListIntent.items
+        : [{ name: "", quantity: "" }];
+      setListItems(items);
+      setListTitle(latestListIntent.title || "Shopping List");
+      setSelectedListId("new");
+      setShowListModal(true);
+      setLatestListIntent(null);
+    }
+  }, [latestListIntent, setLatestListIntent]);
 
   const handleSaveEditedRecipe = async () => {
     if (!editTitle.trim()) {
@@ -323,27 +433,6 @@ export default function Chat() {
           </div>
         )}
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-2"
-        >
-          {quickActions.map((action) => (
-            <Button
-              key={action.label}
-              variant="glass"
-              size="sm"
-              className="shrink-0"
-              onClick={() => handleQuickAction(action.label)}
-            >
-              <action.icon className="h-4 w-4 mr-2" />
-              {action.label}
-            </Button>
-          ))}
-        </motion.div>
-
         {/* Input */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -372,6 +461,89 @@ export default function Chat() {
           </div>
         </motion.div>
       </main>
+
+      <Dialog open={showListModal} onOpenChange={setShowListModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add items to shopping list</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <span className="text-sm font-medium">Target list</span>
+              <Select value={selectedListId} onValueChange={setSelectedListId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select list" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Create new list</SelectItem>
+                  {(shoppingLists || []).map((list: any) => (
+                    <SelectItem key={list._id || list.id} value={list._id || list.id}>
+                      {list.title || "Untitled"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedListId === "new" && (
+              <div className="space-y-2">
+                <span className="text-sm font-medium">New list name</span>
+                <Input
+                  value={listTitle}
+                  onChange={(e) => setListTitle(e.target.value)}
+                  placeholder="Shopping List"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Items</span>
+                <Button variant="ghost" size="sm" onClick={addRow}>
+                  + Add row
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {listItems.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      className="flex-1"
+                      placeholder="Ingredient name"
+                      value={item.name}
+                      onChange={(e) => updateItem(idx, "name", e.target.value)}
+                    />
+                    <Input
+                      className="w-32"
+                      placeholder="Qty"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => removeRow(idx)}>
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowListModal(false)} disabled={savingList}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveList} disabled={savingList}>
+                {savingList ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

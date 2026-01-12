@@ -1684,16 +1684,20 @@ ${mealSchemas}
   async detectRecipeSearchIntent(message) {
     try {
       const prompt = `
-      Decide if this user message is asking to FIND RECIPES or to GET RECIPE DETAILS. Return ONLY JSON with:
+      Decide the user's intent. Return ONLY JSON with:
       {
-        "intent": "recipe_search" | "recipe_detail" | "chat",
+        "intent": "recipe_search" | "recipe_detail" | "shopping_list" | "chat",
         "diet": "<diet tag like vegetarian|vegan|keto|balanced|null>",
         "includeIngredients": [strings],
         "excludeIngredients": [strings],
         "cuisine": "<string|null>",
         "quick": true|false,
         "recipeId": "<id if user mentions a specific recipe id or code, else null>",
-        "recipeTitle": "<title if user asks about a specific recipe by name, else null>"
+        "recipeTitle": "<title if user asks about a specific recipe by name, else null>",
+        "listTitle": "<shopping list title if intent=shopping_list, else null>",
+        "items": [
+          { "name": "string", "quantity": "string" }
+        ]
       }
       If unsure, set intent to "chat".
       Message: """${message}"""
@@ -1735,6 +1739,16 @@ ${mealSchemas}
           }
         }
       }
+      // Shopping list intent: return structured payload to frontend
+      if (intent?.intent === 'shopping_list') {
+        return {
+          type: 'shopping_list',
+          title: intent.listTitle || 'Shopping List',
+          items: Array.isArray(intent.items) ? intent.items : [],
+          message: 'Got it, let\'s add these items to your shopping list.'
+        };
+      }
+
       // Quick path: user explicitly asks for today's meals
       const wantsTodayMeals = /today('s)? meal|meals today|what.*today.*meal/i.test(msgLower);
       if (wantsTodayMeals) {

@@ -28,6 +28,10 @@ export function useChat() {
     id?: string | null;
     imageUrl?: string | null;
   } | null>(null);
+  const [latestListIntent, setLatestListIntent] = useState<{
+    title: string;
+    items: { name: string; quantity: string }[];
+  } | null>(null);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return;
@@ -95,6 +99,7 @@ export function useChat() {
 
       let botText = '';
       let recipePayload: any = null;
+      let shoppingPayload: any = null;
       if (typeof raw === 'string') {
         const trimmed = raw.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
@@ -126,6 +131,9 @@ export function useChat() {
         if ((raw as any).type === 'recipe_detail') {
           recipePayload = raw;
           botText = `Loaded recipe: <recipe>${(raw as any).title}</recipe>`;
+        } else if ((raw as any).type === 'shopping_list') {
+          shoppingPayload = raw;
+          botText = raw.message || 'Got it, let\'s add these items to your shopping list.';
         } else {
           botText = flattenObject(raw);
         }
@@ -152,6 +160,18 @@ export function useChat() {
           imageUrl: recipePayload.imageUrl || null,
         });
       }
+      if (shoppingPayload?.type === 'shopping_list') {
+        const items = Array.isArray(shoppingPayload.items)
+          ? shoppingPayload.items.map((i: any) => ({
+              name: i?.name || '',
+              quantity: i?.quantity || ''
+            })).filter((i: any) => i.name)
+          : [];
+        setLatestListIntent({
+          title: shoppingPayload.title || 'Shopping List',
+          items,
+        });
+      }
     } catch (error) {
       console.error('Chat error:', error);
       const reason = error instanceof Error ? error.message : 'Unknown error';
@@ -168,5 +188,5 @@ export function useChat() {
     }
   }, [messages, isLoading]);
 
-  return { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe };
+  return { messages, isLoading, sendMessage, latestRecipe, setLatestRecipe, latestListIntent, setLatestListIntent };
 }

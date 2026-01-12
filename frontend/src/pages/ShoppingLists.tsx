@@ -388,6 +388,7 @@ export default function ShoppingLists() {
                                       {sectionItems.map((item) => {
                                         const quantity = [item.amount ?? item.quantity, item.unit].filter(Boolean).join(" ");
                                         const price = computeItemPrice(item);
+                                        const hasPrice = price !== null && price !== undefined && !Number.isNaN(price);
                                         const purchased = !!item.purchased;
 
                                         return (
@@ -419,7 +420,7 @@ export default function ShoppingLists() {
                                               </p>
                                               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground justify-center">
                                                 {quantity && <span>{quantity}</span>}
-                                                {price ? <span className={cn(
+                                                {hasPrice ? <span className={cn(
                                                   "font-medium",
                                                   purchased ? "text-primary" : "text-foreground"
                                                 )}>${price.toFixed(2)}</span> : null}

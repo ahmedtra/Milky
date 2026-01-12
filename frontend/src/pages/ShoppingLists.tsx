@@ -35,6 +35,7 @@ export default function ShoppingLists() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const sectionLabels: Record<string, string> = {
     produce: "Produce",
     meat: "Meat & Seafood",
@@ -65,6 +66,7 @@ export default function ShoppingLists() {
       toast.error('Please select a meal plan first');
       return;
     }
+    setIsGenerating(true);
     try {
       await generateShoppingListFromPlan(plan);
       queryClient.invalidateQueries({ queryKey: ["shopping-lists"] });
@@ -74,6 +76,8 @@ export default function ShoppingLists() {
     } catch (error) {
       console.error('Create error:', error);
       toast.error('Failed to generate shopping list');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -185,10 +189,13 @@ export default function ShoppingLists() {
                         variant="primary"
                         className="flex-1"
                         onClick={handleGenerateFromPlan}
-                        disabled={createMutation.isPending || !plans?.length}
+                        disabled={isGenerating || createMutation.isPending || !plans?.length}
                       >
-                        {createMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                        {isGenerating || createMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Preparing list...
+                          </>
                         ) : (
                           'Generate List'
                         )}

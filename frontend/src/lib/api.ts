@@ -244,11 +244,12 @@ export async function generateShoppingListFromPlan(plan: any): Promise<ShoppingL
   });
 
   const shoppingList = generated?.shoppingList || {};
+  const planTitle = plan.title || 'Meal Plan';
   return fetchJson<ShoppingList>('/api/shopping-lists', {
     method: 'POST',
     body: JSON.stringify({
       mealPlanId: plan._id || plan.id,
-      title: shoppingList.title || `Shopping List for ${plan.title || 'Meal Plan'}`,
+      title: planTitle,
       description: shoppingList.description || '',
       items: shoppingList.items || [],
       store: shoppingList.store,

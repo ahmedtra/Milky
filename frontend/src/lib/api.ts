@@ -41,11 +41,41 @@ export async function getMealPlans(): Promise<MealPlan[]> {
 
 export async function generateMealPlan(request: GenerateMealPlanRequest): Promise<MealPlan> {
   // Map front-end fields to the legacy backend contract
+  const toArray = (input?: string | string[]) => {
+    if (Array.isArray(input)) return input.filter((item) => !!item && item.trim().length > 0);
+    if (typeof input === 'string' && input.trim().length > 0) {
+      return input
+        .split(',')
+        .map((val) => val.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const allergies = toArray(request.preferences?.allergies);
+  const dislikes = toArray(request.preferences?.dislikedFoods);
+  const includeIngredients = toArray(request.preferences?.includeIngredients);
+  const mealsToInclude = Array.isArray(request.preferences?.mealsToInclude)
+    ? request.preferences?.mealsToInclude.filter(Boolean)
+    : undefined;
+  const includeSnacks = typeof request.preferences?.includeSnacks === 'boolean'
+    ? request.preferences?.includeSnacks
+    : mealsToInclude
+      ? mealsToInclude.includes('snack')
+      : undefined;
+
   const preferences = {
     dietType: request.preferences?.dietType || 'balanced',
     goals: request.preferences?.goals || 'maintain_weight',
     activityLevel: request.preferences?.activityLevel || 'moderate',
     quick: request.preferences?.quickMeal ?? false,
+    includeIngredients,
+    allergies,
+    dislikedFoods: dislikes,
+    mealsToInclude,
+    includeSnacks,
+    enabledMeals: request.preferences?.enabledMeals,
+    mealTimes: request.preferences?.mealTimes || {},
     additionalNotes: request.preferences?.additionalNotes || '',
   };
 

@@ -31,6 +31,21 @@ export interface GeneratePlanFormData {
   goals: string;
   duration: number;
   quickMeal: boolean;
+  includeIngredients: string;
+  allergies: string;
+  dislikedFoods: string;
+  mealTimes: {
+    breakfast: string;
+    lunch: string;
+    dinner: string;
+    snack: string;
+  };
+  enabledMeals: {
+    breakfast: boolean;
+    lunch: boolean;
+    dinner: boolean;
+    snack: boolean;
+  };
   additionalNotes: string;
   startDate: string;
 }
@@ -41,27 +56,29 @@ const dietTypes = [
   { value: "vegan", label: "Vegan" },
   { value: "keto", label: "Keto" },
   { value: "paleo", label: "Paleo" },
-  { value: "mediterranean", label: "Mediterranean" },
-  { value: "low-carb", label: "Low Carb" },
+  { value: "low_carb", label: "Low Carb" },
+  { value: "high_protein", label: "High Protein" },
 ];
 
 const activityLevels = [
   { value: "sedentary", label: "Sedentary" },
   { value: "light", label: "Light Activity" },
   { value: "moderate", label: "Moderate Activity" },
-  { value: "active", label: "Very Active" },
-  { value: "athlete", label: "Athlete" },
+  { value: "active", label: "Active" },
+  { value: "very_active", label: "Very Active" },
 ];
 
 const goals = [
-  { value: "lose-weight", label: "Lose Weight" },
-  { value: "maintain", label: "Maintain Weight" },
-  { value: "gain-muscle", label: "Gain Muscle" },
-  { value: "improve-health", label: "Improve Health" },
-  { value: "increase-energy", label: "Increase Energy" },
+  { value: "lose_weight", label: "Lose Weight" },
+  { value: "gain_weight", label: "Gain Weight" },
+  { value: "maintain_weight", label: "Maintain Weight" },
+  { value: "build_muscle", label: "Build Muscle" },
+  { value: "improve_health", label: "Improve Health" },
 ];
 
 const durations = [
+  { value: 1, label: "1 Day" },
+  { value: 2, label: "2 Days" },
   { value: 3, label: "3 Days" },
   { value: 5, label: "5 Days" },
   { value: 7, label: "7 Days" },
@@ -69,12 +86,38 @@ const durations = [
 ];
 
 export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: GeneratePlanModalProps) {
+  const parseLocalDate = (value?: string) => {
+    if (!value) return undefined;
+    const parts = value.split('-').map(Number);
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      const dt = new Date(y, m - 1, d);
+      return Number.isNaN(dt.getTime()) ? undefined : dt;
+    }
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? undefined : dt;
+  };
   const [formData, setFormData] = useState<GeneratePlanFormData>({
     dietType: "balanced",
     activityLevel: "moderate",
-    goals: "maintain",
-    duration: 7,
+    goals: "maintain_weight",
+    duration: 5,
     quickMeal: false,
+    includeIngredients: "",
+    allergies: "",
+    dislikedFoods: "",
+    mealTimes: {
+      breakfast: "08:00",
+      lunch: "13:00",
+      dinner: "19:00",
+      snack: "15:30",
+    },
+    enabledMeals: {
+      breakfast: true,
+      lunch: true,
+      dinner: true,
+      snack: false,
+    },
     additionalNotes: "",
     startDate: new Date().toISOString().split("T")[0],
   });
@@ -179,26 +222,6 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                   </Select>
                 </div>
 
-                {/* Activity Level */}
-                <div className="space-y-2">
-                  <Label htmlFor="activityLevel">Activity Level</Label>
-                  <Select
-                    value={formData.activityLevel}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, activityLevel: value }))}
-                  >
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Select activity level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activityLevels.map(level => (
-                        <SelectItem key={level.value} value={level.value}>
-                          {level.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Goals */}
                 <div className="space-y-2">
                   <Label htmlFor="goals">Goals</Label>
@@ -213,6 +236,39 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                       {goals.map(goal => (
                         <SelectItem key={goal.value} value={goal.value}>
                           {goal.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Quick Meal */}
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <Label htmlFor="quickMeal">Prefer quick recipes</Label>
+                    <p className="text-sm text-muted-foreground">Aim for meals under ~30 minutes</p>
+                  </div>
+                  <Switch
+                    id="quickMeal"
+                    checked={formData.quickMeal}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quickMeal: checked }))}
+                  />
+                </div>
+
+                {/* Activity Level */}
+                <div className="space-y-2">
+                  <Label htmlFor="activityLevel">Activity Level</Label>
+                  <Select
+                    value={formData.activityLevel}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, activityLevel: value }))}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Select activity level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activityLevels.map(level => (
+                        <SelectItem key={level.value} value={level.value}>
+                          {level.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -239,17 +295,88 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                   </Select>
                 </div>
 
-                {/* Quick Meal */}
-                <div className="flex items-center justify-between py-2">
-                  <div>
-                    <Label htmlFor="quickMeal">Quick Meals Only</Label>
-                    <p className="text-sm text-muted-foreground">Prefer recipes under 30 minutes</p>
-                  </div>
-                  <Switch
-                    id="quickMeal"
-                    checked={formData.quickMeal}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quickMeal: checked }))}
+                {/* Allergies */}
+                <div className="space-y-2">
+                  <Label htmlFor="allergies">Allergies</Label>
+                  <Input
+                    id="allergies"
+                    placeholder="e.g., nuts, shellfish, dairy"
+                    value={formData.allergies}
+                    onChange={(e) => setFormData(prev => ({ ...prev, allergies: e.target.value }))}
+                    className="rounded-xl"
                   />
+                  <p className="text-sm text-muted-foreground">Comma-separated list to avoid problem ingredients</p>
+                </div>
+
+                {/* Use Ingredients */}
+                <div className="space-y-2">
+                  <Label htmlFor="includeIngredients">Use These Ingredients</Label>
+                  <Input
+                    id="includeIngredients"
+                    placeholder="e.g., chicken breast, broccoli, rice"
+                    value={formData.includeIngredients}
+                    onChange={(e) => setFormData(prev => ({ ...prev, includeIngredients: e.target.value }))}
+                    className="rounded-xl"
+                  />
+                  <p className="text-sm text-muted-foreground">Comma-separated ingredients to prioritize in ES recipe search</p>
+                </div>
+
+                {/* Disliked Foods */}
+                <div className="space-y-2">
+                  <Label htmlFor="dislikedFoods">Disliked Foods</Label>
+                  <Input
+                    id="dislikedFoods"
+                    placeholder="e.g., mushrooms, spicy food"
+                    value={formData.dislikedFoods}
+                    onChange={(e) => setFormData(prev => ({ ...prev, dislikedFoods: e.target.value }))}
+                    className="rounded-xl"
+                  />
+                  <p className="text-sm text-muted-foreground">Comma-separated items to keep out of plans</p>
+                </div>
+
+                {/* Meal Times */}
+                <div className="space-y-2">
+                  <Label>Meal Times</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { key: "breakfast", label: "Breakfast" },
+                      { key: "lunch", label: "Lunch" },
+                      { key: "dinner", label: "Dinner" },
+                      { key: "snack", label: "Snack" },
+                    ].map((meal) => {
+                      const enabled = formData.enabledMeals[meal.key as keyof typeof formData.enabledMeals];
+                      return (
+                        <div key={meal.key} className="space-y-1 rounded-lg border border-border/60 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={meal.key} className="text-sm font-semibold text-foreground">{meal.label}</Label>
+                            <Switch
+                              id={`${meal.key}-toggle`}
+                              checked={enabled}
+                              onCheckedChange={(checked) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  enabledMeals: { ...prev.enabledMeals, [meal.key]: checked },
+                                }))
+                              }
+                            />
+                          </div>
+                          <Input
+                            id={meal.key}
+                            type="time"
+                            value={formData.mealTimes[meal.key as keyof typeof formData.mealTimes]}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                mealTimes: { ...prev.mealTimes, [meal.key]: e.target.value },
+                              }))
+                            }
+                            className="rounded-xl"
+                            disabled={!enabled}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Additional Notes */}
@@ -275,17 +402,17 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                         className="w-full justify-start rounded-xl bg-background text-left font-normal"
                       >
                         {formData.startDate
-                          ? format(new Date(formData.startDate), "PP")
+                          ? format(parseLocalDate(formData.startDate) as Date, "PP")
                           : "Select date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="p-3 w-auto" align="start">
                       <CalendarPicker
                         mode="single"
-                        selected={formData.startDate ? new Date(formData.startDate) : undefined}
+                        selected={parseLocalDate(formData.startDate)}
                         onSelect={(date) => {
                           if (date) {
-                            const iso = date.toISOString().split("T")[0];
+                            const iso = format(date, "yyyy-MM-dd");
                             setFormData((prev) => ({ ...prev, startDate: iso }));
                           }
                         }}

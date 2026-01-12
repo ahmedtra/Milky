@@ -70,10 +70,25 @@ router.post('/chat', auth, async (req, res) => {
 // Generate meal plan
 router.post('/generate-meal-plan', auth, async (req, res) => {
   try {
-    const { duration = 7, preferences } = req.body;
+    const { duration = 7, preferences = {}, startDate: startDateInput } = req.body;
     
-    if (!preferences) {
+    if (!preferences || typeof preferences !== 'object') {
       return res.status(400).json({ message: 'User preferences are required' });
+    }
+
+    // Normalize meal selection to respect user toggles from the UI
+    const enabledMeals = preferences.enabledMeals && typeof preferences.enabledMeals === 'object'
+      ? Object.entries(preferences.enabledMeals)
+          .filter(([, enabled]) => !!enabled)
+          .map(([meal]) => String(meal).toLowerCase())
+      : [];
+    const mealsFromPayload = Array.isArray(preferences.mealsToInclude)
+      ? preferences.mealsToInclude.map(m => String(m).toLowerCase()).filter(Boolean)
+      : [];
+    const selectedMeals = mealsFromPayload.length ? mealsFromPayload : enabledMeals;
+    if (selectedMeals.length) {
+      preferences.mealsToInclude = selectedMeals;
+      preferences.includeSnacks = selectedMeals.includes('snack');
     }
 
     const tStart = Date.now();
@@ -87,9 +102,14 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
     // Generate meal plan using Gemini AI
     const aiMealPlan = await geminiService.generateMealPlan(preferences, duration, req.user);
     
-    // Calculate start and end dates
-    const startDate = new Date();
-    const endDate = new Date();
+    // Calculate start and end dates (respect user-provided startDate)
+    const parseStart = (val) => {
+      if (!val) return null;
+      const d = new Date(val);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const startDate = parseStart(startDateInput) || new Date();
+    const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + duration - 1);
 
     // Sanitize meal plan data to ensure it meets schema requirements

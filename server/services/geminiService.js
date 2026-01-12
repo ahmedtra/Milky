@@ -696,6 +696,7 @@ class GeminiService {
 
   async generateMealPlan(userPreferences, duration = 7, user = null) {
     const randomSeed = Math.floor(Math.random() * 1_000_000_000);
+    const mealTypes = this.resolveMealTypes(userPreferences);
 
     const ingredientBlueprint = this.buildIngredientBlueprint({
       preferences: userPreferences,
@@ -718,22 +719,26 @@ class GeminiService {
       const usedRecipeIds = new Set(); // track all recipes used in the plan to avoid repeats
 
       // Build candidate pools once per meal type, then reuse across days to reduce repeats
-      const padWithLLM = async (mealType, list, targetSize = 6) => {
-        const output = [...(list || [])];
-        while (output.length < targetSize) {
-          const remaining = targetSize - output.length;
-          const llmRecipes = await this.generateLLMFallbackRecipes(mealType, userPreferences, Math.min(remaining, 8));
-          if (!llmRecipes.length) break;
-          output.push(...llmRecipes);
-        }
-        return output;
-      };
-      const baseCandidateMap = {
-        breakfast: await padWithLLM('breakfast', await this.fetchCandidatesForMeal('breakfast', userPreferences, 24), 20),
-        lunch: await padWithLLM('lunch', await this.fetchCandidatesForMeal('lunch', userPreferences, 28), 24),
-        dinner: await padWithLLM('dinner', await this.fetchCandidatesForMeal('dinner', userPreferences, 28), 24),
-        snack: await padWithLLM('snack', await this.fetchCandidatesForMeal('snack', userPreferences, 14), 12)
-      };
+    const padWithLLM = async (mealType, list, targetSize = 6) => {
+      const output = [...(list || [])];
+      while (output.length < targetSize) {
+        const remaining = targetSize - output.length;
+        const llmRecipes = await this.generateLLMFallbackRecipes(mealType, userPreferences, Math.min(remaining, 8));
+        if (!llmRecipes.length) break;
+        output.push(...llmRecipes);
+      }
+      return output;
+    };
+      const baseCandidateMap = {};
+      for (const mealType of mealTypes) {
+        const sizeByType = mealType === 'snack' ? 14 : mealType === 'breakfast' ? 24 : 28;
+        const targetSize = mealType === 'snack' ? 12 : mealType === 'breakfast' ? 20 : 24;
+        baseCandidateMap[mealType] = await padWithLLM(
+          mealType,
+          await this.fetchCandidatesForMeal(mealType, userPreferences, sizeByType),
+          targetSize
+        );
+      }
 
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
         const dayBlueprint = ingredientBlueprint[dayIndex]; // Blueprint is an array, not object with .days
@@ -755,17 +760,17 @@ class GeminiService {
           const filtered = list.filter((r) => r?.id && !usedRecipeIds.has(String(r.id)));
           return filtered.length ? filtered : list;
         };
-        const candidateMap = {
-          breakfast: this.shuffle(filterUsed(baseCandidateMap.breakfast)),
-          lunch: this.shuffle(filterUsed(baseCandidateMap.lunch)),
-          dinner: this.shuffle(filterUsed(baseCandidateMap.dinner)),
-          snack: this.shuffle(filterUsed(baseCandidateMap.snack))
-        };
+        const candidateMap = mealTypes.reduce((acc, mealType) => {
+          acc[mealType] = this.shuffle(filterUsed(baseCandidateMap[mealType] || []));
+          return acc;
+        }, {});
         logMealplan(`🎲 Shuffled candidates for day ${dayIndex + 1}`, {
-          breakfast: candidateMap.breakfast.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
-          lunch: candidateMap.lunch.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
-          dinner: candidateMap.dinner.slice(0, 5).map((c) => ({ id: c.id, title: c.title })),
-          snack: candidateMap.snack.slice(0, 5).map((c) => ({ id: c.id, title: c.title }))
+          ...Object.fromEntries(
+            mealTypes.map((m) => [
+              m,
+              (candidateMap[m] || []).slice(0, 5).map((c) => ({ id: c.id, title: c.title }))
+            ])
+          )
         });
         const counts = Object.fromEntries(Object.entries(candidateMap).map(([k, v]) => [k, v?.length || 0]));
         logMealplan(`🔍 Candidate counts for day ${dayIndex + 1}`, counts);
@@ -776,10 +781,12 @@ class GeminiService {
             day: dayIndex + 1,
             counts,
             candidates: {
-              breakfast: (candidateMap.breakfast || []).map((c) => ({ id: c.id, title: c.title })),
-              lunch: (candidateMap.lunch || []).map((c) => ({ id: c.id, title: c.title })),
-              dinner: (candidateMap.dinner || []).map((c) => ({ id: c.id, title: c.title })),
-              snack: (candidateMap.snack || []).map((c) => ({ id: c.id, title: c.title }))
+              ...Object.fromEntries(
+                mealTypes.map((m) => [
+                  m,
+                  (candidateMap[m] || []).map((c) => ({ id: c.id, title: c.title }))
+                ])
+              )
             }
           },
           user
@@ -789,6 +796,37 @@ class GeminiService {
           logMealplan(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
         });
         const candidateText = this.formatCandidatesForPrompt(candidateMap);
+        const mealTimesText = mealTypes
+          .map((mt) => `- ${this.capitalize(mt)}: ${userPreferences.mealTimes?.[mt] || this.defaultMealTimes()[mt] || ''}`)
+          .join('\n');
+        const mealSchemas = mealTypes
+          .map((mt) => {
+            const time = userPreferences.mealTimes?.[mt] || this.defaultMealTimes()[mt] || '12:00';
+            const defaultCalories = mt === 'snack' ? 150 : 300;
+            return `            {
+              "type": "${mt}",
+              "scheduledTime": "${time}",
+              "recipes": [
+                {
+                  "id": "existing-recipe-id-or-null",
+                  "name": "Recipe Name",
+                  "description": "Brief description",
+                  "prepTime": 10,
+                  "cookTime": 15,
+                  "servings": 1,
+                  "ingredients": [
+                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
+                  ],
+                  "instructions": ["Step 1", "Step 2"],
+                  "nutrition": {"calories": ${defaultCalories}, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
+                  "tags": ["${dayBlueprint.cuisine}"],
+                  "difficulty": "easy"
+                }
+              ],
+              "totalNutrition": {"calories": ${defaultCalories}, "protein": 10, "carbs": 40, "fat": 8}
+            }`;
+          })
+          .join(',\n');
         const dayPrompt = `
         Create ONE DAY of meals for date ${dateStr}.
 
@@ -796,13 +834,14 @@ class GeminiService {
         Goals: ${userPreferences.goals}
         Allergies: ${userPreferences.allergies?.join(', ') || 'None'}
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
+        Preferred ingredients (use when relevant; skip if none fit): ${Array.isArray(userPreferences.includeIngredients) && userPreferences.includeIngredients.length ? userPreferences.includeIngredients.join(', ') : 'None specified'}
         
         Cuisine for this day: ${dayBlueprint.cuisine || 'any'}
 
+        Generate ONLY these meals (skip all others): ${mealTypes.join(', ')}.
+
         Meal Times:
-        - Breakfast: ${userPreferences.mealTimes?.breakfast || '08:00'}
-        - Lunch: ${userPreferences.mealTimes?.lunch || '13:00'}
-        - Dinner: ${userPreferences.mealTimes?.dinner || '19:00'}
+        ${mealTimesText}
 
         Use these ingredients as inspiration:
         ${JSON.stringify(dayBlueprint, null, 2)}
@@ -812,6 +851,7 @@ class GeminiService {
         ${candidateText}
 
         IMPORTANT:
+        - Do NOT add meal types that are not listed. If a meal type is missing in candidates, return an empty array for its recipes.
         - Prefer non-LLM candidates (ids NOT starting with "llm-") when possible; use LLM-generated fallbacks only if no suitable human/ES candidate fits.
         - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
         - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
@@ -823,94 +863,7 @@ class GeminiService {
         {
           "date": "${dateStr}",
           "meals": [
-            {
-              "type": "breakfast",
-              "scheduledTime": "${userPreferences.mealTimes?.breakfast || '08:00'}",
-              "recipes": [
-                {
-                  "id": "existing-recipe-id-or-null",
-                  "name": "Recipe Name",
-                  "description": "Brief description",
-                  "prepTime": 10,
-                  "cookTime": 15,
-                  "servings": 1,
-                  "ingredients": [
-                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
-                  ],
-                  "instructions": ["Step 1", "Step 2"],
-                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
-                  "tags": ["${dayBlueprint.cuisine}"],
-                  "difficulty": "easy"
-                }
-              ],
-              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
-            },
-            {
-              "type": "lunch",
-              "scheduledTime": "${userPreferences.mealTimes?.lunch || '13:00'}",
-              "recipes": [
-                {
-                  "id": "existing-recipe-id-or-null",
-                  "name": "Recipe Name",
-                  "description": "Brief description",
-                  "prepTime": 10,
-                  "cookTime": 15,
-                  "servings": 1,
-                  "ingredients": [
-                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
-                  ],
-                  "instructions": ["Step 1", "Step 2"],
-                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
-                  "tags": ["${dayBlueprint.cuisine}"],
-                  "difficulty": "easy"
-                }
-              ],
-              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
-            },
-            {
-              "type": "dinner",
-              "scheduledTime": "${userPreferences.mealTimes?.dinner || '19:00'}",
-              "recipes": [
-                {
-                  "id": "existing-recipe-id-or-null",
-                  "name": "Recipe Name",
-                  "description": "Brief description",
-                  "prepTime": 10,
-                  "cookTime": 15,
-                  "servings": 1,
-                  "ingredients": [
-                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "grain"}
-                  ],
-                  "instructions": ["Step 1", "Step 2"],
-                  "nutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
-                  "tags": ["${dayBlueprint.cuisine}"],
-                  "difficulty": "easy"
-                }
-              ],
-              "totalNutrition": {"calories": 300, "protein": 10, "carbs": 40, "fat": 8}
-            },
-            {
-              "type": "snack",
-              "scheduledTime": "15:00",
-              "recipes": [
-                {
-                  "id": "existing-recipe-id-or-null",
-                  "name": "Recipe Name",
-                  "description": "Brief description",
-                  "prepTime": 5,
-                  "cookTime": 0,
-                  "servings": 1,
-                  "ingredients": [
-                    {"name": "Ingredient", "amount": "1", "unit": "cup", "category": "fruit"}
-                  ],
-                  "instructions": ["Step 1", "Step 2"],
-                  "nutrition": {"calories": 150, "protein": 5, "carbs": 20, "fat": 5, "fiber": 3, "sugar": 10},
-                  "tags": ["${dayBlueprint.cuisine}"],
-                  "difficulty": "easy"
-                }
-              ],
-              "totalNutrition": {"calories": 150, "protein": 5, "carbs": 20, "fat": 5}
-            }
+${mealSchemas}
           ]
         }
         `;
@@ -952,6 +905,10 @@ class GeminiService {
           }
           
           if (dayData && dayData.meals) {
+            // Keep only requested meal types
+            dayData.meals = (dayData.meals || []).filter((meal) =>
+              meal && meal.type && mealTypes.includes(String(meal.type).toLowerCase())
+            );
             // Post-process to force recipes to come from candidateMap when available
             await this.enforceCandidateRecipes(dayData, candidateMap);
             // Keep only one recipe per meal to avoid duplicates in UI
@@ -962,7 +919,11 @@ class GeminiService {
             });
             this.dedupeDayRecipes(dayData, recentIds, usedRecipeIds);
             // Sanity check with LLM after dedupe to catch off-theme meals and propose replacements
-            await this.sanityCheckDayPlan(dayData, candidateMap);
+            await this.sanityCheckDayPlan(dayData, candidateMap, userPreferences);
+            // Drop any meal types that were added back by the checker but are not requested
+            dayData.meals = (dayData.meals || []).filter((meal) =>
+              meal && meal.type && mealTypes.includes(String(meal.type).toLowerCase())
+            );
             // Re-enforce candidates after sanity replacements to ensure times/nutrition/ingredients are grounded
             await this.enforceCandidateRecipes(dayData, candidateMap);
             // Final dedupe after enforcement
@@ -1124,7 +1085,9 @@ class GeminiService {
             total_time_min: totalTime || (normalizedPrep + cookTime) || null,
             ingredients,
             instructions: src.instructions || r?.instructions || [],
-            nutrition
+            nutrition,
+            ai_generated: src.ai_generated || r.ai_generated || false,
+            tags: Array.from(new Set([...(Array.isArray(r.tags) ? r.tags : []), ...(Array.isArray(src.tags) ? src.tags : [])]))
           };
         }
         // Always pick a candidate if none/mismatch
@@ -1167,7 +1130,8 @@ class GeminiService {
           prepTime: normalizedPrep,
           cookTime,
           total_time_min: totalTime || (normalizedPrep + cookTime) || null,
-          tags: r?.tags || [first?.cuisine].filter(Boolean),
+          ai_generated: first?.ai_generated || r?.ai_generated || false,
+          tags: Array.from(new Set([...(Array.isArray(r?.tags) ? r.tags : []), ...(Array.isArray(first?.tags) ? first.tags : []), first?.cuisine].filter(Boolean))),
           ingredients,
           instructions: first?.instructions || r?.instructions || [],
           nutrition
@@ -1186,7 +1150,18 @@ class GeminiService {
     });
 
     const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);
-    logMealplan(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`);
+    logMealplan(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`, {
+      samples: dayData.meals.flatMap((m) =>
+        (m.recipes || []).slice(0, 1).map((r) => ({
+          type: m.type,
+          id: r.id,
+          title: r.name || r.title,
+          ai_generated: r.ai_generated || false,
+          tags: Array.isArray(r.tags) ? r.tags.slice(0, 6) : [],
+          tags_str: Array.isArray(r.tags) ? r.tags.slice(0, 6).join(', ') : ''
+        }))
+      ).slice(0, 8)
+    });
   }
 
   /**
@@ -1329,6 +1304,7 @@ class GeminiService {
       cuisine preference: ${preferences.cuisine || preferences.preferredCuisine || 'any'}
       diet: ${preferences.dietType || 'any'}
       allergies/dislikes: ${(preferences.allergies || []).join(', ')}; ${(preferences.dislikedFoods || []).join(', ')}
+      preferred ingredients (use when relevant; skip if they don't fit): ${(preferences.includeIngredients || []).join(', ')}
       Ensure the meal makes sense for ${mealType} (e.g., breakfast = breakfast foods, lunch/dinner = savory mains, snack = light snack), avoid cleaning products or non-food items.
       The JSON shape:
       [
@@ -1380,6 +1356,8 @@ class GeminiService {
           title: preferences.recipeTitle || `Custom ${mealType} recipe`,
           cuisine: preferences.cuisine || preferences.preferredCuisine || 'any',
           meal_type: [mealType],
+          ai_generated: true,
+          tags: ['llm-fallback'],
           nutrition: this.ensureNutrition({}, mealType),
           ingredients_parsed: [{ name: 'Ingredient 1', amount: '1', unit: 'unit', category: 'other' }],
           instructions: ['Combine ingredients and cook to taste.']
@@ -1392,6 +1370,8 @@ class GeminiService {
           ...r,
           id: r.id || `llm-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           meal_type: Array.isArray(r.meal_type) ? r.meal_type : [mealType],
+          ai_generated: true,
+          tags: Array.from(new Set([...(Array.isArray(r.tags) ? r.tags : []), 'llm-fallback'])),
           nutrition: this.hasNutritionData(r.nutrition)
             ? r.nutrition
             : this.ensureNutrition(r.nutrition || { calories: r.calories, protein: r.protein }, mealType)
@@ -1554,7 +1534,7 @@ class GeminiService {
   /**
    * Ask LLM to sanity-check a day's meals and suggest replacements by candidate id.
    */
-  async sanityCheckDayPlan(dayData, candidateMap) {
+  async sanityCheckDayPlan(dayData, candidateMap, preferences = {}) {
     try {
       if (!dayData?.meals?.length) return;
     const summary = dayData.meals.map((m) => {
@@ -1576,9 +1556,11 @@ class GeminiService {
       const prompt = `
       Evaluate this meal day for sanity. Rules:
       - Avoid off-theme items (e.g., desserts for dinner, cleaning products, obviously non-food).
+      - Avoid repeated proteins in the same day; try to diversify main protein sources across meals (e.g., don't use chicken in lunch and dinner).
       - Avoid repeated proteins for breakfast (prefer traditional breakfast foods); keep lunch/dinner savory mains.
       - Prefer meals with protein > 0 and sensible calories (skip obvious near-zero calorie meals).
       - Keep meal type coherent: breakfast should be breakfast-like; dinner should not be sweets-only.
+      - Prefer candidates that include user preferred ingredients when available; if none fit, skip them: ${(preferences?.includeIngredients || []).join(', ')}
       - If a meal looks off-theme, propose a replacement id from the SAME meal type candidates.
       Return ONLY JSON: {"replacements":[{"type":"breakfast","replaceWithId":"candidate-id-or-null"}, ...]}
       Meals: ${JSON.stringify(summary)}
@@ -1588,6 +1570,33 @@ class GeminiService {
       const cleaned = raw.replace(/```json|```/gi, '').trim();
       const parsed = JSON.parse(cleaned);
       if (!parsed?.replacements) return;
+      // If no replacements suggested but duplicate proteins found, enforce a fallback replacement using candidates
+      const hasDupProtein = (() => {
+        const proteins = (summary || [])
+          .map((m) => (m.title || '').toLowerCase())
+          .filter(Boolean);
+        const seen = new Set();
+        for (const p of proteins) {
+          if (seen.has(p)) return true;
+          seen.add(p);
+        }
+        return false;
+      })();
+      if (!parsed.replacements.length && hasDupProtein) {
+        // Try to pick an alternative for the last meal using a different protein source
+        const lastMeal = summary[summary.length - 1];
+        if (lastMeal?.type) {
+          const typeKey = lastMeal.type.toLowerCase();
+          const bucket = candidateMap?.[typeKey] || [];
+          const currentTitle = (lastMeal.title || '').toLowerCase();
+          const alt = bucket.find(
+            (c) => (c.title || '').toLowerCase() !== currentTitle
+          );
+          if (alt) {
+            parsed.replacements.push({ type: typeKey, replaceWithId: alt.id });
+          }
+        }
+      }
       const replMap = {};
       parsed.replacements.forEach((r) => {
         if (r?.type && r.replaceWithId) replMap[r.type.toLowerCase()] = r.replaceWithId;
@@ -2838,12 +2847,40 @@ class GeminiService {
   }
 
   resolveMealTypes(preferences) {
-    const hasSnacks = preferences.includeSnacks ?? true;
-    const mealTimes = preferences.mealTimes || {};
+    const hasSnacks = preferences.includeSnacks === true;
+    const defaultTypes = ['breakfast', 'lunch', 'dinner'];
 
-    const baseTypes = ['breakfast', 'lunch', 'dinner'];
-    if (hasSnacks || mealTimes.snack) {
+    // Allow callers to explicitly choose which meals to generate
+    const userSelectedMeals = Array.isArray(preferences.mealsToInclude)
+      ? preferences.mealsToInclude.map((m) => String(m).toLowerCase()).filter(Boolean)
+      : null;
+    const enabledMeals = preferences.enabledMeals && typeof preferences.enabledMeals === 'object'
+      ? Object.entries(preferences.enabledMeals)
+          .filter(([, enabled]) => !!enabled)
+          .map(([meal]) => meal.toLowerCase())
+      : null;
+
+    let baseTypes = defaultTypes;
+    if (userSelectedMeals && userSelectedMeals.length) {
+      baseTypes = defaultTypes.filter((m) => userSelectedMeals.includes(m));
+    } else if (enabledMeals && enabledMeals.length) {
+      baseTypes = defaultTypes.filter((m) => enabledMeals.includes(m));
+    }
+
+    const wantsSnack = userSelectedMeals
+      ? userSelectedMeals.includes('snack')
+      : enabledMeals
+        ? enabledMeals.includes('snack')
+        : hasSnacks;
+
+    if (wantsSnack) {
       baseTypes.push('snack');
+    }
+
+    // Fallback to all main meals if user disabled everything
+    if (!baseTypes.length) {
+      baseTypes = defaultTypes;
+      if (hasSnacks || mealTimes.snack) baseTypes.push('snack');
     }
 
     return baseTypes;

@@ -58,17 +58,39 @@ export function DayDetailDialog({
 }: DayDetailDialogProps) {
   const safeIndex = Math.max(0, Math.min(selectedDayIndex, Math.max(0, days.length - 1)));
   const currentDay = days[safeIndex];
+  const parseLocalDate = (value: Date | string | null | undefined) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return null;
+      return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    }
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
   const dayDates = React.useMemo(() => {
     return (days || []).map((day, idx) => {
-      if (day?.date) return new Date(day.date as any);
-      if (startDate) return addDays(new Date(startDate), idx);
+      const dayDate = parseLocalDate(day?.date as any);
+      if (dayDate) return dayDate;
+      const base = parseLocalDate(startDate);
+      if (base) return addDays(base, idx);
       return null;
     });
   }, [days, startDate]);
 
   const normalize = (d: Date | null) => (d ? format(d, "yyyy-MM-dd") : "");
-  const selectedDateStr = normalize(dayDates[safeIndex] || null);
-  const bookedDates = [...dayDates.filter(Boolean), ...highlightDates.map((d) => new Date(d as any))] as Date[];
+  const selectedDate = dayDates[safeIndex] || null;
+  const selectedDateStr = normalize(selectedDate);
+  const bookedDates = [
+    ...dayDates.filter(Boolean),
+    ...highlightDates
+      .map((d) => parseLocalDate(d as any))
+      .filter(Boolean),
+  ] as Date[];
   const altOptions = React.useMemo(() => {
     const nonFavorite = swapState.options.filter(
       (opt: any) => !(opt?.planRecipe || opt?.isFavorite)
@@ -77,18 +99,21 @@ export function DayDetailDialog({
     return Array.isArray(base) ? base.slice(0, 3) : [];
   }, [swapState.options]);
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (!date) return;
-    const target = normalize(date);
-    const idx = dayDates.findIndex((d) => normalize(d as Date) === target);
-    if (idx >= 0) {
-      onSelectDay(idx);
-      if (onUpdateStartDate) {
-        const newStart = addDays(date, -idx);
-        onUpdateStartDate(format(newStart, "yyyy-MM-dd"));
-      }
-    }
-  };
+  const normalizeName = (value?: string | null) =>
+    (value || "")
+      .toString()
+      .toLowerCase()
+      .trim();
+
+  const favoriteNameSet = React.useMemo(() => {
+    const set = new Set<string>();
+    (favorites || []).forEach((fav) => {
+      const name = fav?.name || fav?.title;
+      const norm = normalizeName(name);
+      if (norm) set.add(norm);
+    });
+    return set;
+  }, [favorites]);
 
   // Swipe to change day
   const touchStartX = React.useRef<number | null>(null);
@@ -168,46 +193,46 @@ export function DayDetailDialog({
                     </div>
                   </div>
 
-                  {/* Day date selector (matches generation form style) */}
+                  {/* Day info */}
                   <div className="flex items-center gap-3">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="bg-background text-foreground font-medium">
-                          {selectedDateStr
-                            ? format(new Date(selectedDateStr), "PP")
-                            : getDayLabel(currentDay as any, safeIndex)}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="p-3 w-auto" align="start">
-                        <CalendarPicker
-                          mode="single"
-                          selected={selectedDateStr ? new Date(selectedDateStr) : undefined}
-                          onSelect={handleDateSelect}
-                          modifiers={{ booked: bookedDates }}
-                          modifiersClassNames={{
-                            booked: "bg-primary/20 text-primary font-semibold hover:bg-primary/30",
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <div className="px-3 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium">
+                      {selectedDate
+                        ? format(selectedDate, "PP")
+                        : getDayLabel(currentDay as any, safeIndex)}
+                    </div>
                     <span className="text-sm text-muted-foreground">{(currentDay.meals || []).length} meals</span>
                   </div>
 
                   {/* Meal cards */}
                   <div className="space-y-3">
-                    {(currentDay.meals || []).map((meal: Meal, mIdx: number) => (
+                    {(currentDay.meals || []).map((meal: Meal, mIdx: number) => {
+                      const recipe = meal?.recipes?.[0] || {};
+                      const recipeName = recipe?.name || recipe?.title || "";
+                      const isLlmFallback = Array.isArray(recipe?.tags) && recipe.tags.includes("llm-fallback");
+                      const isSwapOpen = swapState.key === swapKeyFor(planId, safeIndex, mIdx);
+                      const isFavorite = !!recipeName && favoriteNameSet.has(normalizeName(recipeName)) && !isSwapOpen;
+                      return (
                       <div
                         key={meal.mealId || meal._id || mIdx}
-                        className="w-full p-4 rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                        className={cn(
+                          "w-full p-4 rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md transition-shadow",
+                          isFavorite && "border-amber-300 bg-amber-50/80 shadow-[0_16px_40px_-18px_rgba(245,158,11,0.45)]"
+                        )}
                         onClick={() => onSelectMeal(safeIndex, mIdx)}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
-                              {meal.recipes?.[0]?.name || meal.type || "Meal"}
+                              {recipe.name || meal.type || "Meal"}
                             </p>
-                            <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                              {meal.type || "Meal"}
+                            <p className="text-xs sm:text-sm text-muted-foreground truncate flex items-center gap-2">
+                              <span>{meal.type || "Meal"}</span>
+                              {Array.isArray(recipe.tags) && recipe.tags.includes("llm-fallback") && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                                  <Sparkles className="h-3 w-3 text-primary" />
+                                  AI generated
+                                </span>
+                              )}
                             </p>
                           </div>
                           <div className="flex gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto sm:ml-auto sm:justify-end">
@@ -243,9 +268,17 @@ export function DayDetailDialog({
                                 e.stopPropagation();
                                 onFavorite?.(safeIndex, mIdx);
                               }}
-                              className="text-amber-500 hover:text-amber-600"
+                              className={cn(
+                                "text-amber-500 hover:text-amber-600",
+                                isFavorite && "ring-2 ring-amber-200 shadow-sm"
+                              )}
                             >
-                              <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                              <Star
+                                className={cn(
+                                  "h-5 w-5 fill-amber-400 text-amber-500",
+                                  isFavorite && "drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                                )}
+                              />
                             </Button>
                             <Button
                               variant="destructive"
@@ -354,7 +387,8 @@ export function DayDetailDialog({
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                     {(currentDay.meals || []).length === 0 && (
                       <p className="text-sm text-muted-foreground flex items-center gap-2 py-8 justify-center">
                         <Sparkles className="h-4 w-4" /> No meals for this day yet

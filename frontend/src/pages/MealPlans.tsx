@@ -58,19 +58,43 @@ export default function MealPlans() {
   const handleGenerate = async (formData: GeneratePlanFormData) => {
     const goalsMap: Record<string, string> = {
       "lose-weight": "lose_weight",
-      maintain: "maintain_weight",
+      "gain-weight": "gain_weight",
+      "maintain-weight": "maintain_weight",
       "gain-muscle": "build_muscle",
+      "build-muscle": "build_muscle",
       "improve-health": "improve_health",
       "increase-energy": "increase_energy",
     };
+    const normalizeList = (value?: string | string[]) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === "string") {
+        return value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+      return [];
+    };
 
     try {
+      const enabledMeals = formData.enabledMeals || {};
+      const selectedMeals = Object.entries(enabledMeals)
+        .filter(([, enabled]) => enabled)
+        .map(([meal]) => meal);
+
       await generateMutation.mutateAsync({
         preferences: {
           dietType: formData.dietType,
           goals: goalsMap[formData.goals] || formData.goals,
           activityLevel: formData.activityLevel,
           quickMeal: formData.quickMeal,
+          includeIngredients: normalizeList(formData.includeIngredients),
+          allergies: normalizeList(formData.allergies),
+          dislikedFoods: normalizeList(formData.dislikedFoods),
+          mealsToInclude: selectedMeals,
+          includeSnacks: selectedMeals.includes("snack"),
+          enabledMeals,
+          mealTimes: formData.mealTimes,
           additionalNotes: formData.additionalNotes,
         },
         duration: formData.duration,
@@ -146,6 +170,19 @@ export default function MealPlans() {
       .filter(Boolean) as Date[];
   }, [plansList]);
 
+  const computeFirstFreeStartDate = React.useCallback((planId: string) => {
+    const otherActive = plansList.filter(
+      (p) => p.status === "active" && getPlanId(p) !== planId
+    );
+    const otherDates = otherActive.flatMap((p) => getPlanDates(p));
+    if (otherDates.length === 0) {
+      return format(new Date(), "yyyy-MM-dd");
+    }
+    const latest = new Date(Math.max(...otherDates.map((d) => d.getTime())));
+    latest.setDate(latest.getDate() + 1);
+    return format(latest, "yyyy-MM-dd");
+  }, [plansList, getPlanDates]);
+
   function normalizeDate(value?: string) {
     if (!value) return "";
     // If already a plain date string, keep as-is to avoid TZ shifts
@@ -166,6 +203,23 @@ export default function MealPlans() {
       setStartDateDraft("");
     }
   }, [selectedPlan]);
+
+  // Preload favorites so matching/highlighting works without opening swap first
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        setFavorites((prev) => ({ ...prev, loading: true }));
+        const favs = await getFavoriteRecipes();
+        setFavorites({ items: favs, loading: false });
+      } catch (err) {
+        console.error("Error loading favorites", err);
+        setFavorites({ items: [], loading: false });
+      }
+    };
+    if (!favorites.loading && favorites.items.length === 0) {
+      loadFavorites();
+    }
+  }, [favorites.items.length, favorites.loading]);
 
   const firstNumber = (...vals: any[]): number | string => {
     for (const val of vals) {
@@ -494,6 +548,15 @@ export default function MealPlans() {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1 cursor-pointer" onClick={() => {
                       setExpandedPlanId(planId);
+                      const desiredStart = computeFirstFreeStartDate(planId);
+                      if (plan.startDate !== desiredStart) {
+                        updateDaysMutation.mutate(
+                          { planId, days: plan.days || [], startDate: desiredStart },
+                          {
+                            onError: () => toast.error("Failed to update start date"),
+                          }
+                        );
+                      }
                       setSelectedDay({ planId, dayIndex: 0 });
                       setSelectedMeal(null);
                     }}>

@@ -59,6 +59,39 @@ export default function Dashboard() {
     return d.toISOString().split("T")[0];
   };
 
+  const normalizeName = (value?: string | null) =>
+    (value || "")
+      .toString()
+      .toLowerCase()
+      .trim();
+
+  const favoriteNameSet = React.useMemo(() => {
+    const set = new Set<string>();
+    (favorites.items || []).forEach((fav: any) => {
+      const name = fav?.name || fav?.title;
+      const norm = normalizeName(name);
+      if (norm) set.add(norm);
+    });
+    return set;
+  }, [favorites.items]);
+
+  // Preload favorites so meal highlighting works without opening swap
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        setFavorites((prev) => ({ ...prev, loading: true }));
+        const favs = await getFavoriteRecipes();
+        setFavorites({ items: favs, loading: false });
+      } catch (err) {
+        console.error("Error loading favorites", err);
+        setFavorites({ items: [], loading: false });
+      }
+    };
+    if (!favorites.loading && favorites.items.length === 0) {
+      loadFavorites();
+    }
+  }, [favorites.items.length, favorites.loading]);
+
   const planCoversToday = (plan: any) => {
     if (!plan) return false;
     const start = normalizeDate((plan as any).startDate);
@@ -814,17 +847,32 @@ export default function Dashboard() {
                               {entry.meals.map((meal, mealIdx) => {
                                 const mealKey = meal.mealId || meal._id || mealIdx;
                                 const isSwapOpen = validId(entry.planId) && swapState.key === swapKeyFor(entry.planId, entry.dayIndex, mealIdx);
+                                const recipe = meal?.recipes?.[0] || {};
+                                const recipeName = recipe?.name || recipe?.title || "";
+                                const isLlmFallback = Array.isArray(recipe?.tags) && recipe.tags.includes("llm-fallback");
+                                const isFavorite = !!recipeName && favoriteNameSet.has(normalizeName(recipeName)) && !isSwapOpen;
                                 return (
                                   <div
                                     key={mealKey}
-                                    className="space-y-2 rounded-lg p-3 bg-white/85 shadow-[0_12px_30px_-25px_rgba(0,0,0,0.6)]"
+                                    className={cn(
+                                      "space-y-2 rounded-lg p-3 bg-white/85 shadow-[0_12px_30px_-25px_rgba(0,0,0,0.6)]",
+                                      isFavorite && "border border-amber-300 bg-amber-50/80 shadow-[0_16px_40px_-18px_rgba(245,158,11,0.45)]"
+                                    )}
                                   >
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                       <div className="min-w-0">
                                         <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
-                                          {meal.recipes?.[0]?.name || meal.type || "Meal"}
+                                          {recipe.name || meal.type || "Meal"}
                                         </p>
-                                        <p className="text-xs text-muted-foreground truncate">{meal.type || "Meal"}</p>
+                                        <p className="text-xs text-muted-foreground truncate flex items-center gap-2">
+                                          <span>{meal.type || "Meal"}</span>
+                                          {Array.isArray(recipe.tags) && recipe.tags.includes("llm-fallback") && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                                              <Sparkles className="h-3 w-3 text-primary" />
+                                              AI generated
+                                            </span>
+                                          )}
+                                        </p>
                                       </div>
                                       <div className="flex gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto sm:ml-auto sm:justify-end">
                                         <Button
@@ -858,9 +906,17 @@ export default function Dashboard() {
                                           variant="ghost"
                                           size="sm"
                                           onClick={() => handleFavoriteMeal(entry.planId, entry.dayIndex, mealIdx)}
-                                          className="text-amber-500 hover:text-amber-600"
+                                          className={cn(
+                                            "text-amber-500 hover:text-amber-600",
+                                            isFavorite && "ring-2 ring-amber-200 shadow-sm"
+                                          )}
                                         >
-                                          <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                                          <Star
+                                            className={cn(
+                                              "h-5 w-5 fill-amber-400 text-amber-500",
+                                              isFavorite && "drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                                            )}
+                                          />
                                         </Button>
                                         <Button
                                           variant="destructive"

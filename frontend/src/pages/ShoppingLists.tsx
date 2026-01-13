@@ -214,7 +214,33 @@ export default function ShoppingLists() {
 
   const activeCount = lists?.filter(l => l.status === 'active').length || 0;
   const completedCount = lists?.filter(l => l.status === 'completed').length || 0;
-  const totalEstimate = lists?.reduce((sum, list) => sum + computeListTotal(list), 0) || 0;
+    const totalEstimate = lists?.reduce((sum, list) => sum + computeListTotal(list), 0) || 0;
+
+  const normalizeDisplayQuantity = (item: any) => {
+    const id = getItemId(item);
+    const override = quantityOverrides[id];
+    let amount = Number((override?.amount ?? item.amount ?? item.quantity ?? 0)) || 0;
+    let unit = String((override?.unit ?? item.unit) || "").toLowerCase();
+    const cat = (item.category || "").toLowerCase();
+    const name = (item.name || "").toLowerCase();
+
+    const looksLikeCheese =
+      cat === "dairy" &&
+      /(cheese|feta|cheddar|mozzarella|parmesan|gouda|ricotta|queso|brie|emmental|swiss)/.test(name);
+    if (looksLikeCheese) {
+      const weight = convertQuantity(item, "weight");
+      amount = weight.amount;
+      unit = weight.unit;
+    }
+
+    const literUnits = ["l", "liter", "liters", "litre", "litres"];
+    if (literUnits.includes(unit) && amount > 0 && amount < 1) {
+      amount = Math.round(amount * 1000);
+      unit = "ml";
+    }
+
+    return { amount, unit };
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -497,23 +523,10 @@ export default function ShoppingLists() {
 
                           {items.length > 0 && (
                             <div className="relative">
-                              <div className="flex flex-wrap gap-2 mb-3 text-xs">
-                                {Object.keys(sectionLabels).map((key) => (
-                                  <span
-                                    key={key}
-                                    className={cn(
-                                      "px-2 py-1 rounded-full font-medium",
-                                      sectionStyles[key] || "bg-secondary text-foreground"
-                                    )}
-                                  >
-                                    {sectionLabels[key]}
-                                  </span>
-                                ))}
-                              </div>
                               <div className="max-h-64 overflow-auto pr-2 space-y-4">
                                 {Object.entries(
                                   items.reduce<Record<string, typeof items>>((acc, item) => {
-                                    const section = item.storeSection || item.category || "other";
+                                    const section = (item.category || item.storeSection || "other").toLowerCase();
                                     acc[section] = acc[section] || [];
                                     acc[section].push(item);
                                     return acc;
@@ -527,9 +540,7 @@ export default function ShoppingLists() {
                                     <div className="flex flex-wrap gap-2">
                                       {sectionItems.map((item) => {
                                         const id = getItemId(item);
-                                        const override = quantityOverrides[id];
-                                        const displayAmount = override?.amount ?? item.amount ?? item.quantity;
-                                        const displayUnit = override?.unit ?? item.unit;
+                                        const { amount: displayAmount, unit: displayUnit } = normalizeDisplayQuantity(item);
                                         const quantity = [displayAmount, displayUnit].filter(Boolean).join(" ");
                                         const price = computeItemPrice(item);
                                         const hasPrice = price !== null && price !== undefined && !Number.isNaN(price);

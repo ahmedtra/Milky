@@ -337,6 +337,31 @@ router.post('/', auth, async (req, res) => {
       const std = convertToStandardUnit({ amount, unit, name: item.name, category: item.category });
       return { ...item, amount: std.amount, unit: std.unit };
     });
+    // LLM fallback for anything still unstandardized or missing data
+    const needsLLM = (itm) => {
+      const unitOk = ['kg', 'g', 'l', 'unit'].includes((itm.unit || '').toLowerCase());
+      const hasCategory = itm.category && itm.category !== 'other';
+      const hasPrice = itm.price !== undefined && itm.price !== null && itm.price !== 0;
+      return !unitOk || !hasCategory || !hasPrice;
+    };
+    const indicesNeeding = sanitizedItems
+      .map((itm, idx) => ({ itm, idx }))
+      .filter(({ itm }) => needsLLM(itm));
+    if (indicesNeeding.length) {
+      const enriched = await enrichWithLLM(indicesNeeding.map(({ itm }) => itm));
+      enriched.forEach((enrichedItem, i) => {
+        const targetIdx = indicesNeeding[i].idx;
+        const amount = enrichedItem.amount ?? enrichedItem.quantity ?? '1';
+        const unit = (enrichedItem.unit || 'unit').toString().toLowerCase().trim();
+        const std = convertToStandardUnit({ amount, unit, name: enrichedItem.name, category: enrichedItem.category });
+        sanitizedItems[targetIdx] = {
+          ...sanitizedItems[targetIdx],
+          ...enrichedItem,
+          amount: std.amount,
+          unit: std.unit
+        };
+      });
+    }
     console.log('Sanitized items:', sanitizedItems);
     const allPurchased = sanitizedItems.length > 0 && sanitizedItems.every((i) => i.purchased);
     const estimatedTotal = typeof totalEstimatedCost === 'number'
@@ -404,6 +429,31 @@ router.put('/:id', auth, async (req, res) => {
         const std = convertToStandardUnit({ amount: item.amount, unit: item.unit, name: item.name, category: item.category });
         return { ...item, amount: std.amount, unit: std.unit };
       });
+      // LLM fallback for anything still unstandardized or missing data
+      const needsLLM = (itm) => {
+        const unitOk = ['kg', 'g', 'l', 'unit'].includes((itm.unit || '').toLowerCase());
+        const hasCategory = itm.category && itm.category !== 'other';
+        const hasPrice = itm.price !== undefined && itm.price !== null && itm.price !== 0;
+        return !unitOk || !hasCategory || !hasPrice;
+      };
+      const indicesNeeding = mappedItems
+        .map((itm, idx) => ({ itm, idx }))
+        .filter(({ itm }) => needsLLM(itm));
+      if (indicesNeeding.length) {
+        const enriched = await enrichWithLLM(indicesNeeding.map(({ itm }) => itm));
+        enriched.forEach((enrichedItem, i) => {
+          const targetIdx = indicesNeeding[i].idx;
+          const amount = enrichedItem.amount ?? enrichedItem.quantity ?? '1';
+          const unit = (enrichedItem.unit || 'unit').toString().toLowerCase().trim();
+          const std = convertToStandardUnit({ amount, unit, name: enrichedItem.name, category: enrichedItem.category });
+          mappedItems[targetIdx] = {
+            ...mappedItems[targetIdx],
+            ...enrichedItem,
+            amount: std.amount,
+            unit: std.unit
+          };
+        });
+      }
       shoppingList.items = mappedItems;
     }
 

@@ -91,6 +91,24 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       preferences.includeSnacks = selectedMeals.includes('snack');
     }
 
+    const allowedRecipeDifficulties = ['easy', 'medium', 'hard'];
+    const sanitizeRecipeDifficulty = (val) => {
+      const d = String(val || '').toLowerCase();
+      if (d === 'moderate') return 'medium';
+      if (d === 'difficult' || d === 'harder' || d === 'hardest') return 'hard';
+      if (allowedRecipeDifficulties.includes(d)) return d;
+      return 'medium';
+    };
+
+    const sanitizePreferenceDifficulty = (val) => {
+      const d = String(val || '').toLowerCase();
+      if (d === 'moderate') return 'medium';
+      if (d === 'difficult' || d === 'harder' || d === 'hardest') return 'hard';
+      if (allowedRecipeDifficulties.includes(d)) return d;
+      if (d === 'any' || d === '') return 'any';
+      return 'any';
+    };
+
     const tStart = Date.now();
     await logEvent({
       level: 'info',
@@ -100,7 +118,10 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
     });
 
     // Generate meal plan using Gemini AI
-    const aiMealPlan = await geminiService.generateMealPlan(preferences, duration, req.user);
+    const aiMealPlan = await geminiService.generateMealPlan({
+      ...preferences,
+      difficulty: sanitizePreferenceDifficulty(preferences.difficulty)
+    }, duration, req.user);
     
     // Calculate start and end dates (respect user-provided startDate)
     const parseStart = (val) => {
@@ -125,13 +146,6 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       const category = validCategories.includes(cat) ? cat : 'other';
       return { ...ing, name, amount, unit, category };
     };
-    const allowedDifficulties = ['easy', 'medium', 'hard'];
-    const sanitizeDifficulty = (val) => {
-      const d = String(val || '').toLowerCase();
-      if (d === 'moderate') return 'medium';
-      if (allowedDifficulties.includes(d)) return d;
-      return 'medium';
-    };
 
     const sanitizeNutrition = (nut) => ({
       calories: Number(nut?.calories) || 0,
@@ -149,17 +163,17 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       for (const meal of day.meals || []) {
         const recipesOut = [];
         for (const recipe of meal.recipes || []) {
-          const normalizedIngredients = await geminiService.normalizeIngredientsWithModel(recipe.ingredients || []);
-          const ingredients = Array.isArray(normalizedIngredients)
-            ? normalizedIngredients.map((ing, idx) => sanitizeIngredient(ing, idx)).filter(Boolean)
-            : [];
-          recipesOut.push({
-            ...recipe,
-            nutrition: sanitizeNutrition(recipe.nutrition),
-            difficulty: sanitizeDifficulty(recipe.difficulty),
-            ingredients
-          });
-        }
+            const normalizedIngredients = await geminiService.normalizeIngredientsWithModel(recipe.ingredients || []);
+            const ingredients = Array.isArray(normalizedIngredients)
+              ? normalizedIngredients.map((ing, idx) => sanitizeIngredient(ing, idx)).filter(Boolean)
+              : [];
+            recipesOut.push({
+              ...recipe,
+              nutrition: sanitizeNutrition(recipe.nutrition),
+              difficulty: sanitizeRecipeDifficulty(recipe.difficulty),
+              ingredients
+            });
+          }
         mealsOut.push({
           ...meal,
           totalNutrition: sanitizeNutrition(meal.totalNutrition),

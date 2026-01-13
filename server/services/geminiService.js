@@ -832,9 +832,10 @@ class GeminiService {
 
         Diet: ${userPreferences.dietType}
         Goals: ${userPreferences.goals}
+        Difficulty preference: ${userPreferences.difficulty || 'any'} (prefer matches; if none, choose the closest sensible option)
         Allergies: ${userPreferences.allergies?.join(', ') || 'None'}
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
-        Preferred ingredients (use when relevant; skip if none fit): ${Array.isArray(userPreferences.includeIngredients) && userPreferences.includeIngredients.length ? userPreferences.includeIngredients.join(', ') : 'None specified'}
+        Preferred ingredients (try to use at least ONE when relevant; skip if none fit): ${Array.isArray(userPreferences.includeIngredients) && userPreferences.includeIngredients.length ? userPreferences.includeIngredients.join(', ') : 'None specified'}
         
         Cuisine for this day: ${dayBlueprint.cuisine || 'any'}
 
@@ -855,6 +856,7 @@ class GeminiService {
         - Prefer non-LLM candidates (ids NOT starting with "llm-") when possible; use LLM-generated fallbacks only if no suitable human/ES candidate fits.
         - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
         - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
+        - When multiple candidates fit, prefer the one whose difficulty matches: ${userPreferences.difficulty || 'any'} (easy/medium/hard). If none match, choose the closest reasonable difficulty.
         - Write ALL text (recipe names, descriptions, instructions) in ENGLISH.
         - Prefer the listed existing recipes by id/title; do not invent ids.
         - Return ONLY strict JSON. Do NOT include ellipses, comments, or markdown fences.
@@ -1561,6 +1563,7 @@ ${mealSchemas}
       - Prefer meals with protein > 0 and sensible calories (skip obvious near-zero calorie meals).
       - Keep meal type coherent: breakfast should be breakfast-like; dinner should not be sweets-only.
       - Prefer candidates that include user preferred ingredients when available; if none fit, skip them: ${(preferences?.includeIngredients || []).join(', ')}
+      - Prefer recipes whose difficulty matches the user preference (${preferences?.difficulty || 'any'}). If none match, choose the closest reasonable difficulty.
       - If a meal looks off-theme, propose a replacement id from the SAME meal type candidates.
       Return ONLY JSON: {"replacements":[{"type":"breakfast","replaceWithId":"candidate-id-or-null"}, ...]}
       Meals: ${JSON.stringify(summary)}

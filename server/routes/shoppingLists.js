@@ -25,6 +25,7 @@ const categorizeName = (name = '') => {
   if (/(milk|yogurt|cheese|butter|cream)/.test(lower)) return 'dairy';
   if (/(apple|banana|berry|orange|fruit|grape)/.test(lower)) return 'produce';
   if (/(lettuce|spinach|kale|broccoli|carrot|pepper|onion|garlic|tomato|potato)/.test(lower)) return 'produce';
+  if (/(bean|lentil|chickpea|legume|peas)/.test(lower)) return 'pantry';
   if (/(bread|baguette|bun|bagel)/.test(lower)) return 'bakery';
   if (/(rice|pasta|flour|sugar|salt|oil|spice|canned|grain)/.test(lower)) return 'pantry';
   if (/(frozen|ice cream)/.test(lower)) return 'frozen';
@@ -43,14 +44,121 @@ const toNumber = (val, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const produceWeightDb = [
+  { match: /(banana)/, kg: 0.12 },
+  { match: /(apple)/, kg: 0.18 },
+  { match: /(orange|clementine|tangerine)/, kg: 0.15 },
+  { match: /(lemon|lime)/, kg: 0.07 },
+  { match: /(tomato)/, kg: 0.1 },
+  { match: /(cherry tomato|grape tomato)/, kg: 0.02 },
+  { match: /(cucumber)/, kg: 0.3 },
+  { match: /(bell pepper|pepper)/, kg: 0.16 },
+  { match: /(onion|shallot)/, kg: 0.15 },
+  { match: /(potato)/, kg: 0.21 },
+  { match: /(carrot)/, kg: 0.1 },
+  { match: /(broccoli)/, kg: 0.5 },
+  { match: /(cauliflower)/, kg: 0.8 },
+  { match: /(lettuce|greens|spinach|kale|arugula|spring mix|mixed greens)/, kg: 0.25 },
+  { match: /(avocado)/, kg: 0.2 },
+  { match: /(egg)/, kg: 0.06 },
+  { match: /(garlic)/, kg: 0.05 },
+  { match: /(herb|parsley|cilantro|basil|mint|dill)/, kg: 0.05 }
+];
+
+const estimatePieceKg = (name = '', category = '') => {
+  const lower = String(name).toLowerCase();
+  for (const entry of produceWeightDb) {
+    if (entry.match.test(lower)) return entry.kg;
+  }
+  if (category === 'dairy') return 0.25; // average block/tub of cheese/yogurt
+  if (category === 'meat') return 0.3; // rough per-piece cutlet
+  return 0.2; // generic fallback
+};
+
+const convertToStandardUnit = ({ amount, unit, name, category }) => {
+  let val = toNumber(amount, 1);
+  let rawUnit = String(unit || 'unit').toLowerCase().trim();
+  const cat = (category || '').toLowerCase();
+
+  const toKgOrG = (kgVal) => {
+    if (kgVal < 1) return { amount: Math.round(kgVal * 1000), unit: 'g' };
+    return { amount: Number(kgVal.toFixed(3)), unit: 'kg' };
+  };
+
+  const toLiters = (lVal) => ({ amount: Number(lVal.toFixed(3)), unit: 'l' });
+
+  const liquidName = /(milk|juice|water|oil|broth|stock|sauce)/.test(String(name || '').toLowerCase());
+  const isLiquid = liquidName || cat === 'beverages' || cat === 'dairy';
+
+  const unitMap = {
+    kg: () => toKgOrG(val),
+    kilogram: () => toKgOrG(val),
+    kilograms: () => toKgOrG(val),
+    g: () => (val >= 1000 ? { amount: Number((val / 1000).toFixed(3)), unit: 'kg' } : { amount: val, unit: 'g' }),
+    gram: () => (val >= 1000 ? { amount: Number((val / 1000).toFixed(3)), unit: 'kg' } : { amount: val, unit: 'g' }),
+    grams: () => (val >= 1000 ? { amount: Number((val / 1000).toFixed(3)), unit: 'kg' } : { amount: val, unit: 'g' }),
+    l: () => toLiters(val),
+    liter: () => toLiters(val),
+    liters: () => toLiters(val),
+    litre: () => toLiters(val),
+    litres: () => toLiters(val),
+    ml: () => toLiters(val / 1000),
+    milliliter: () => toLiters(val / 1000),
+    millilitre: () => toLiters(val / 1000),
+    milliliters: () => toLiters(val / 1000),
+    millilitres: () => toLiters(val / 1000),
+    lb: () => toKgOrG(val * 0.4536),
+    lbs: () => toKgOrG(val * 0.4536),
+    pound: () => toKgOrG(val * 0.4536),
+    pounds: () => toKgOrG(val * 0.4536),
+    oz: () => toKgOrG(val * 0.02835),
+    ounce: () => toKgOrG(val * 0.02835),
+    ounces: () => toKgOrG(val * 0.02835),
+    cup: () => (isLiquid ? toLiters(val * 0.24) : toKgOrG(val * 0.12)),
+    cups: () => (isLiquid ? toLiters(val * 0.24) : toKgOrG(val * 0.12)),
+    tbsp: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
+    tablespoon: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
+    tablespoons: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
+    tsp: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
+    teaspoon: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
+    teaspoons: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
+    'fl oz': () => toLiters(val * 0.03),
+    floz: () => toLiters(val * 0.03)
+  };
+
+  if (unitMap[rawUnit]) {
+    return unitMap[rawUnit]();
+  }
+
+  // For piece-based produce/dairy/meat, estimate weight
+  if (rawUnit === 'unit' && (cat === 'produce' || cat === 'meat' || cat === 'dairy' || cat === 'bakery')) {
+    const perPieceKg = estimatePieceKg(name, cat);
+    return toKgOrG(perPieceKg * val);
+  }
+
+  // Fallback: keep amount and default unit
+  return { amount: val, unit: rawUnit || 'unit' };
+};
+
 const computeTotal = (items = []) =>
-  items.reduce((sum, item) => sum + toNumber(item.price, 0), 0);
+  items.reduce((sum, item) => {
+    const val = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
+    return sum + toNumber(val, 0);
+  }, 0);
+
+const computeSectionTotals = (items = []) => {
+  const totals = {};
+  items.forEach((item) => {
+    const section = item.category || 'other';
+    const val = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
+    totals[section] = (totals[section] || 0) + toNumber(val, 0);
+  });
+  return totals;
+};
 
 // Ask LLM to enrich missing category/price when heuristics leave "other" or price is missing
 const enrichWithLLM = async (items) => {
-  const needsEnrichment = items
-    .map((item, idx) => ({ item, idx }))
-    .filter(({ item }) => !item.category || item.category === 'other' || item.price === 0 || item.price === undefined || item.price === null);
+  const needsEnrichment = items.map((item, idx) => ({ item, idx }));
   if (!needsEnrichment.length) return items;
   try {
     const payload = needsEnrichment.map(({ item }) => ({
@@ -63,10 +171,26 @@ const enrichWithLLM = async (items) => {
     const prompt = `
     Infer shopping metadata for these items. Return ONLY JSON array with objects:
     [
-      { "name": "string", "amount": "string", "unit": "string", "category": "produce|meat|dairy|bakery|pantry|frozen|beverages|other", "price": number }
+      { "name": "string", "amount": "number", "unit": "kg|g|l|unit", "category": "produce|meat|dairy|bakery|pantry|frozen|beverages|other", "price": number }
     ]
-    Keep order. Use reasonable grocery prices in USD (positive numbers); only use 0 if truly unknown. If unsure on category, set to "other".
-    Items: ${JSON.stringify(payload, null, 2)}
+    Rules (convert EVERY item):
+    - Allowed output units ONLY: kg, g, l, or unit. Never output cups, tbsp, tsp, oz, lb, ml, etc.
+    - You MUST convert the provided amount/unit into the chosen unit using realistic cooking/grocery multipliers. Do not reuse the same numeric amount after changing units.
+      Common conversions to guide you (use closest realistic value):
+        • 1 lb ≈ 0.4536 kg
+        • 1 oz (weight) ≈ 0.02835 kg
+        • 1 cup liquid ≈ 0.24 l
+        • 1 tbsp ≈ 0.015 l
+        • 1 tsp ≈ 0.005 l
+        • 1 fl oz ≈ 0.03 l
+        • 1000 g = 1 kg, 1000 ml = 1 l
+        • Weights -> kg, volumes -> liters. If sold by piece (e.g., eggs, single items clearly each), use unit with the count.
+        • If the final weight is < 1 kg, return grams (unit = "g" and scale amount accordingly). Do NOT leave it as 0.x kg.
+        • Dry goods (beans, rice, pasta, flour, lentils, chickpeas, canned items) => kg (or unit if clearly per-piece/can). Never liters for dry goods.
+        • Liquids (water, juice, milk, oil, broth, stock, sauces) => liters.
+        • Fresh produce and dairy/cheese => kg (or g if <1 kg). Avoid "unit" unless truly sold per piece; convert dairy from unit to kg using a reasonable block/tub weight estimate.
+    - Set a realistic grocery price in USD (>0), only use 0 if unknown.
+    Keep order. Items: ${JSON.stringify(payload, null, 2)}
     `;
     const text = await geminiService.callTextModel(prompt, 0.2, 'json');
     const jsonMatch = text && text.match(/\[[\s\S]*\]/);
@@ -76,18 +200,24 @@ const enrichWithLLM = async (items) => {
         const target = needsEnrichment[i];
         if (!target) return;
         const idx = target.idx;
+        const amtNum = toNumber(meta?.amount, items[idx].amount);
+        const normUnitRaw = String(meta?.unit || items[idx].unit || 'unit').toLowerCase().trim();
+        const allowedUnits = new Set(['kg', 'g', 'l', 'unit']);
+        const normUnit = allowedUnits.has(normUnitRaw) ? normUnitRaw : 'unit';
         items[idx] = {
           ...items[idx],
           category: meta?.category || items[idx].category || 'other',
           price: toNumber(meta?.price, items[idx].price || 0),
-          amount: meta?.amount || items[idx].amount,
-          unit: meta?.unit || items[idx].unit
+          estimatedPrice: toNumber(meta?.price, items[idx].estimatedPrice || items[idx].price || 0),
+          amount: amtNum,
+          unit: normUnit
         };
       });
       console.log('LLM shopping enrichment result (price/category):', parsed.map((m) => ({
         name: m?.name,
         price: m?.price,
-        category: m?.category
+        category: m?.category,
+        unit: m?.unit
       })));
     }
   } catch (err) {
@@ -114,8 +244,14 @@ router.get('/', auth, async (req, res) => {
 
     const total = await ShoppingList.countDocuments(query);
 
+    const withSections = shoppingLists.map((list) => {
+      const obj = list.toObject();
+      obj.sectionTotals = computeSectionTotals(obj.items || []);
+      return obj;
+    });
+
     res.json({
-      shoppingLists,
+      shoppingLists: withSections,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total
@@ -138,7 +274,10 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Shopping list not found' });
     }
 
-    res.json({ shoppingList });
+    const obj = shoppingList.toObject();
+    obj.sectionTotals = computeSectionTotals(obj.items || []);
+
+    res.json({ shoppingList: obj });
   } catch (error) {
     console.error('Get shopping list error:', error);
     res.status(500).json({ message: 'Server error fetching shopping list' });
@@ -181,69 +320,23 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-  // Ask LLM to enrich missing category/price when heuristics leave "other" or price is missing
-  const enrichWithLLM = async (items) => {
-    const needsEnrichment = items
-      .map((item, idx) => ({ item, idx }))
-      .filter(({ item }) => !item.category || item.category === 'other' || item.price === 0 || item.price === undefined || item.price === null);
-    if (!needsEnrichment.length) return items;
-    try {
-      const payload = needsEnrichment.map(({ item }) => ({
-        name: item.name,
-        amount: item.amount,
-        unit: item.unit,
-        category: item.category || 'other',
-        price: item.price || 0
-      }));
-      const prompt = `
-      Infer shopping metadata for these items. Return ONLY JSON array with objects:
-      [
-        { "name": "string", "amount": "string", "unit": "string", "category": "produce|meat|dairy|bakery|pantry|frozen|beverages|other", "price": number }
-      ]
-      Keep order. Use reasonable grocery prices in USD (positive numbers); only use 0 if truly unknown. If unsure on category, set to "other".
-      Items: ${JSON.stringify(payload, null, 2)}
-      `;
-      const text = await geminiService.callTextModel(prompt, 0.2, 'json');
-      const jsonMatch = text && text.match(/\[[\s\S]*\]/);
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((meta, i) => {
-          const target = needsEnrichment[i];
-          if (!target) return;
-          const idx = target.idx;
-          items[idx] = {
-            ...items[idx],
-            category: meta?.category || items[idx].category || 'other',
-            price: toNumber(meta?.price, items[idx].price || 0),
-            amount: meta?.amount || items[idx].amount,
-            unit: meta?.unit || items[idx].unit
-          };
-        });
-        console.log('LLM shopping enrichment result (price/category):', parsed.map((m) => ({
-          name: m?.name,
-          price: m?.price,
-          category: m?.category
-        })));
-      }
-    } catch (err) {
-      console.warn('⚠️ LLM enrichment for shopping items failed:', err.message);
-    }
-    return items;
-  };
-
-    let sanitizedItems = items.map(item => {
+    let sanitizedItems = await enrichWithLLM(items.map(item => {
       const mappedCategory = categoryMap[item.category?.toLowerCase()] || item.category || categorizeName(item.name);
-      const { amount, unit } = defaultAmountUnit(item.amount || item.quantity);
+      const priceVal = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
       return {
         ...item,
-        amount,
-        unit,
-        price: typeof item.price === 'number' ? item.price : 0,
+        price: toNumber(priceVal, 0),
+        estimatedPrice: toNumber(priceVal, 0),
         purchased: Boolean(item.purchased),
         category: mappedCategory
       };
+    }));
+    sanitizedItems = sanitizedItems.map((item) => {
+      const amount = item.amount ?? item.quantity ?? '1';
+      const unit = (item.unit || 'unit').toString().toLowerCase().trim();
+      const std = convertToStandardUnit({ amount, unit, name: item.name, category: item.category });
+      return { ...item, amount: std.amount, unit: std.unit };
     });
-    sanitizedItems = await enrichWithLLM(sanitizedItems);
     console.log('Sanitized items:', sanitizedItems);
     const allPurchased = sanitizedItems.length > 0 && sanitizedItems.every((i) => i.purchased);
     const estimatedTotal = typeof totalEstimatedCost === 'number'
@@ -263,9 +356,12 @@ router.post('/', auth, async (req, res) => {
 
     await shoppingList.save();
 
+    const obj = shoppingList.toObject();
+    obj.sectionTotals = computeSectionTotals(obj.items || []);
+
     res.status(201).json({
       message: 'Shopping list created successfully',
-      shoppingList
+      shoppingList: obj
     });
   } catch (error) {
     console.error('Create shopping list error:', error);
@@ -292,24 +388,26 @@ router.put('/:id', auth, async (req, res) => {
     if (items) {
       let mappedItems = items.map(item => {
         const mappedCategory = categoryMap[item.category?.toLowerCase()] || item.category || categorizeName(item.name);
-        const { amount, unit } = defaultAmountUnit(item.amount || item.quantity);
+        const priceVal = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
         return {
           ...item,
-          amount,
-          unit,
-          price: typeof item.price === 'number' ? item.price : 0,
+          amount: item.amount ?? item.quantity ?? '1',
+          unit: (item.unit || 'unit').toString().toLowerCase().trim(),
+          price: toNumber(priceVal, 0),
+          estimatedPrice: toNumber(priceVal, 0),
           purchased: Boolean(item.purchased),
           category: mappedCategory
         };
       });
       mappedItems = await enrichWithLLM(mappedItems);
+      mappedItems = mappedItems.map((item) => {
+        const std = convertToStandardUnit({ amount: item.amount, unit: item.unit, name: item.name, category: item.category });
+        return { ...item, amount: std.amount, unit: std.unit };
+      });
       shoppingList.items = mappedItems;
-
-      // Recompute total if not explicitly provided
-      if (totalEstimatedCost === undefined || totalEstimatedCost === null) {
-        shoppingList.totalEstimatedCost = computeTotal(mappedItems);
-      }
     }
+
+    console.log('Updating shopping list:', shoppingList.items);
     if (status) shoppingList.status = status;
     if (store) shoppingList.store = store;
     if (notes) shoppingList.notes = notes;
@@ -321,9 +419,12 @@ router.put('/:id', auth, async (req, res) => {
 
     await shoppingList.save();
 
+    const obj = shoppingList.toObject();
+    obj.sectionTotals = computeSectionTotals(obj.items || []);
+
     res.json({
       message: 'Shopping list updated successfully',
-      shoppingList
+      shoppingList: obj
     });
   } catch (error) {
     console.error('Update shopping list error:', error);

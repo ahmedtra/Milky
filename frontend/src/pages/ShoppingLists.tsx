@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Plus, Check, ShoppingCart, Loader2, 
@@ -36,6 +36,9 @@ export default function ShoppingLists() {
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, { amount: number; unit: string }>>({});
+  const touchStartX = useRef<number | null>(null);
+  const swipeDetected = useRef(false);
   const sectionLabels: Record<string, string> = {
     produce: "Produce",
     meat: "Meat & Seafood",
@@ -45,6 +48,16 @@ export default function ShoppingLists() {
     bakery: "Bakery",
     beverages: "Beverages",
     other: "Other",
+  };
+  const sectionStyles: Record<string, string> = {
+    produce: "bg-emerald-100 text-emerald-800",
+    meat: "bg-rose-100 text-rose-800",
+    dairy: "bg-sky-100 text-sky-800",
+    pantry: "bg-amber-100 text-amber-800",
+    frozen: "bg-cyan-100 text-cyan-800",
+    bakery: "bg-orange-100 text-orange-800",
+    beverages: "bg-indigo-100 text-indigo-800",
+    other: "bg-slate-100 text-slate-700",
   };
 
   const computeItemPrice = (item: any) =>
@@ -58,6 +71,120 @@ export default function ShoppingLists() {
     if (typeof list?.totalEstimatedCost === 'number') return list.totalEstimatedCost;
     const items = Array.isArray(list?.items) ? list.items : [];
     return items.reduce((sum, item) => sum + computeItemPrice(item), 0);
+  };
+
+  const perPieceKgEstimate = (name: string, category: string) => {
+    const lower = (name || "").toLowerCase();
+    const table: Array<{ test: RegExp; kg: number }> = [
+      { test: /(banana)/, kg: 0.12 },
+      { test: /(apple)/, kg: 0.18 },
+      { test: /(orange|clementine|tangerine)/, kg: 0.15 },
+      { test: /(lemon|lime)/, kg: 0.07 },
+      { test: /(tomato)/, kg: 0.1 },
+      { test: /(cherry tomato|grape tomato)/, kg: 0.02 },
+      { test: /(cucumber)/, kg: 0.3 },
+      { test: /(bell pepper|pepper)/, kg: 0.16 },
+      { test: /(onion|shallot)/, kg: 0.15 },
+      { test: /(potato)/, kg: 0.21 },
+      { test: /(carrot)/, kg: 0.1 },
+      { test: /(broccoli)/, kg: 0.5 },
+      { test: /(cauliflower)/, kg: 0.8 },
+      { test: /(lettuce|greens|spinach|kale|arugula|spring mix|mixed greens)/, kg: 0.25 },
+      { test: /(avocado)/, kg: 0.2 },
+      { test: /(garlic)/, kg: 0.05 },
+      { test: /(herb|parsley|cilantro|basil|mint|dill)/, kg: 0.05 },
+    ];
+    for (const entry of table) {
+      if (entry.test.test(lower)) return entry.kg;
+    }
+    if (category === "dairy") return 0.25;
+    if (category === "meat") return 0.3;
+    return 0.2;
+  };
+
+  const isLiquid = (name: string, category: string) =>
+    /(milk|juice|water|oil|broth|stock|sauce)/.test((name || "").toLowerCase()) ||
+    category === "beverages" ||
+    category === "dairy";
+
+  const convertQuantity = (item: any, target: "pieces" | "weight" | "cups" | "liters") => {
+    const id = getItemId(item);
+    const override = quantityOverrides[id];
+    const baseAmount = Number((override?.amount ?? item.amount ?? item.quantity ?? 0)) || 0;
+    const baseUnit = String((override?.unit ?? item.unit) || "").toLowerCase();
+    const cat = item.category || "other";
+    const name = item.name || "";
+
+    // Normalize starting values
+    let kgVal: number | null = null;
+    if (["kg", "kilogram", "kilograms"].includes(baseUnit)) kgVal = baseAmount;
+    if (["g", "gram", "grams"].includes(baseUnit)) kgVal = baseAmount / 1000;
+    if (["lb", "lbs", "pound", "pounds"].includes(baseUnit)) kgVal = baseAmount * 0.4536;
+    if (["oz", "ounce", "ounces"].includes(baseUnit)) kgVal = baseAmount * 0.02835;
+    if (baseUnit === "unit") {
+      const perPiece = perPieceKgEstimate(name, cat);
+      kgVal = perPiece * baseAmount;
+    }
+
+    const liters =
+      ["l", "liter", "liters", "litre", "litres"].includes(baseUnit)
+        ? baseAmount
+        : ["ml", "milliliter", "millilitre", "milliliters", "millilitres"].includes(baseUnit)
+          ? baseAmount / 1000
+          : ["cup", "cups"].includes(baseUnit)
+            ? baseAmount * 0.24
+            : null;
+
+    if (target === "pieces") {
+      const perPiece = perPieceKgEstimate(name, cat);
+      const pieces = kgVal !== null ? kgVal / perPiece : baseAmount || 1;
+      return { amount: Math.max(1, Number(pieces.toFixed(2))), unit: "unit" };
+    }
+    if (target === "weight") {
+      const weightKg = kgVal !== null ? kgVal : baseAmount;
+      if (weightKg < 1) return { amount: Math.round(weightKg * 1000), unit: "g" };
+      return { amount: Number(weightKg.toFixed(3)), unit: "kg" };
+    }
+    if (target === "cups") {
+      const cups = liters !== null ? liters / 0.24 : baseAmount / 0.24;
+      return { amount: Number(cups.toFixed(2)), unit: "cup" };
+    }
+    if (target === "liters") {
+      const l = liters !== null ? liters : baseAmount * 0.24;
+      return { amount: Number(l.toFixed(3)), unit: "l" };
+    }
+    return { amount: baseAmount, unit: item.unit || "" };
+  };
+
+  const handleSwipeConvert = (item: any, direction: "left" | "right") => {
+    const id = getItemId(item);
+    const cat = item.category || "other";
+    const name = item.name || "";
+    const unit = String((quantityOverrides[id]?.unit ?? item.unit) || "").toLowerCase();
+    const liquid = isLiquid(name, cat);
+
+    let next: { amount: number; unit: string };
+    if (liquid) {
+      next = unit === "cup" ? convertQuantity(item, "liters") : convertQuantity(item, "cups");
+    } else {
+      const target = unit === "unit" ? "weight" : "pieces";
+      next = convertQuantity(item, target);
+    }
+    setQuantityOverrides((prev) => ({ ...prev, [id]: next }));
+    // Allow subsequent gestures shortly after converting
+    setTimeout(() => {
+      swipeDetected.current = false;
+    }, 150);
+  };
+
+  const handleWheelConvert = (e: React.WheelEvent, item: any) => {
+    // Prevent browser horizontal navigation; only trigger on meaningful horizontal scroll
+    if (Math.abs(e.deltaX) > 10 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      e.preventDefault();
+      e.stopPropagation();
+      swipeDetected.current = true;
+      handleSwipeConvert(item, e.deltaX > 0 ? "left" : "right");
+    }
   };
 
   const handleGenerateFromPlan = async () => {
@@ -370,6 +497,19 @@ export default function ShoppingLists() {
 
                           {items.length > 0 && (
                             <div className="relative">
+                              <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                                {Object.keys(sectionLabels).map((key) => (
+                                  <span
+                                    key={key}
+                                    className={cn(
+                                      "px-2 py-1 rounded-full font-medium",
+                                      sectionStyles[key] || "bg-secondary text-foreground"
+                                    )}
+                                  >
+                                    {sectionLabels[key]}
+                                  </span>
+                                ))}
+                              </div>
                               <div className="max-h-64 overflow-auto pr-2 space-y-4">
                                 {Object.entries(
                                   items.reduce<Record<string, typeof items>>((acc, item) => {
@@ -386,7 +526,11 @@ export default function ShoppingLists() {
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                       {sectionItems.map((item) => {
-                                        const quantity = [item.amount ?? item.quantity, item.unit].filter(Boolean).join(" ");
+                                        const id = getItemId(item);
+                                        const override = quantityOverrides[id];
+                                        const displayAmount = override?.amount ?? item.amount ?? item.quantity;
+                                        const displayUnit = override?.unit ?? item.unit;
+                                        const quantity = [displayAmount, displayUnit].filter(Boolean).join(" ");
                                         const price = computeItemPrice(item);
                                         const hasPrice = price !== null && price !== undefined && !Number.isNaN(price);
                                         const purchased = !!item.purchased;
@@ -397,6 +541,10 @@ export default function ShoppingLists() {
                                             role="button"
                                             aria-pressed={purchased}
                                             onClick={(e) => {
+                                              if (swipeDetected.current) {
+                                                swipeDetected.current = false;
+                                                return;
+                                              }
                                               e.stopPropagation();
                                               updateItemMutation.mutate({
                                                 listId: getListId(list),
@@ -404,6 +552,47 @@ export default function ShoppingLists() {
                                                 purchased: !purchased,
                                               });
                                             }}
+                                            onTouchStart={(e) => {
+                                              touchStartX.current = e.touches[0].clientX;
+                                            }}
+                                            onTouchEnd={(e) => {
+                                              if (touchStartX.current === null) return;
+                                              const delta = e.changedTouches[0].clientX - touchStartX.current;
+                                              touchStartX.current = null;
+                                              if (Math.abs(delta) > 30) {
+                                                e.stopPropagation();
+                                                swipeDetected.current = true;
+                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
+                                              }
+                                            }}
+                                            onPointerDown={(e) => {
+                                              touchStartX.current = e.clientX || null;
+                                            }}
+                                            onPointerMove={(e) => {
+                                              if (touchStartX.current === null) return;
+                                              const delta = (e.clientX || 0) - touchStartX.current;
+                                              if (Math.abs(delta) > 30 && !swipeDetected.current) {
+                                                swipeDetected.current = true;
+                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
+                                              }
+                                            }}
+                                            onPointerUp={(e) => {
+                                              if (touchStartX.current === null) return;
+                                              if (swipeDetected.current) {
+                                                touchStartX.current = null;
+                                                return;
+                                              }
+                                              const delta = (e.clientX || 0) - touchStartX.current;
+                                              touchStartX.current = null;
+                                              if (Math.abs(delta) > 30) {
+                                                e.stopPropagation();
+                                                swipeDetected.current = true;
+                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
+                                              } else {
+                                                swipeDetected.current = false;
+                                              }
+                                            }}
+                                            onWheel={(e) => handleWheelConvert(e, item)}
                                             className={cn(
                                               "flex items-center gap-2 text-sm rounded-lg border px-3 py-2 min-w-[220px] max-w-[280px] flex-1 cursor-pointer transition",
                                               purchased

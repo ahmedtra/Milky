@@ -87,6 +87,7 @@ export default function MealPlans() {
           dietType: formData.dietType,
           goals: goalsMap[formData.goals] || formData.goals,
           activityLevel: formData.activityLevel,
+          difficulty: formData.difficulty,
           quickMeal: formData.quickMeal,
           includeIngredients: normalizeList(formData.includeIngredients),
           allergies: normalizeList(formData.allergies),

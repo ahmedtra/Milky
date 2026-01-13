@@ -113,7 +113,12 @@ const buildQuery = (filters = {}) => {
 
   const includeIngredients = cleanList(filters.include_ingredients);
   if (includeIngredients.length) {
-    bool.filter.push({ terms: { ingredients_norm: includeIngredients } });
+    bool.filter.push({
+      bool: {
+        should: includeIngredients.map((term) => ({ term: { ingredients_norm: term } })),
+        minimum_should_match: 1
+      }
+    });
   }
 
   const excludeIngredients = cleanList(filters.exclude_ingredients);

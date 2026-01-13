@@ -113,12 +113,26 @@ const buildQuery = (filters = {}) => {
 
   const includeIngredients = cleanList(filters.include_ingredients);
   if (includeIngredients.length) {
-    bool.filter.push({
-      bool: {
-        should: includeIngredients.map((term) => ({ term: { ingredients_norm: term } })),
-        minimum_should_match: 1
-      }
-    });
+    // To avoid picking the same preferred ingredient repeatedly, pick one as a required
+    // "anchor" for this search and keep the rest as optional boosts. This lets upstream
+    // callers run multiple queries and naturally rotate which preferred ingredient
+    // becomes mandatory.
+    const anchorIdx = Math.floor(Math.random() * includeIngredients.length);
+    const anchor = includeIngredients[anchorIdx];
+    const rest = includeIngredients.filter((_, i) => i !== anchorIdx);
+
+    // Require the anchor ingredient in the normalized ingredients list
+    bool.filter.push({ term: { ingredients_norm: anchor } });
+
+    // Keep the others as optional should clauses so matches that contain them are boosted
+    if (rest.length) {
+      bool.should.push({
+        bool: {
+          should: rest.map((term) => ({ term: { ingredients_norm: term } })),
+          minimum_should_match: 1
+        }
+      });
+    }
   }
 
   const excludeIngredients = cleanList(filters.exclude_ingredients);

@@ -320,17 +320,66 @@ class GeminiService {
     }
     vectorMs = Date.now() - tVecStart;
 
-    
     const randomSeed = Date.now() + Math.floor(Math.random() * 1_000_000);
     const tSearchStart = Date.now();
-    
-    let results = await searchRecipes(filters, { size, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-    // Attach nutrition snapshot so downstream consumers don't lose macros
-    if (results?.results?.length) {
-      results.results = results.results.map((r) => ({
-        ...r,
-        nutrition: this.extractNutritionFromSource(r)
-      }));
+
+    const includeList = Array.isArray(filters.include_ingredients)
+      ? filters.include_ingredients.filter(Boolean)
+      : [];
+
+    const runSearch = async (customFilters, customSize = size) => {
+      const res = await searchRecipes(customFilters, { size: customSize, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+      if (res?.results?.length) {
+        res.results = res.results.map((r) => ({
+          ...r,
+          nutrition: this.extractNutritionFromSource(r)
+        }));
+      }
+      return res;
+    };
+
+    let results = null;
+
+    // If the user provided multiple preferred ingredients, run one query per ingredient
+    // and merge the results in a round-robin fashion so each ingredient gets surfaced.
+    if (includeList.length > 1) {
+      const perAnchor = [];
+      for (const term of includeList) {
+        const perFilters = { ...filters, include_ingredients: [term] };
+        const per = await runSearch(perFilters, Math.max(size, 5));
+        const hits = (per?.results || []).map((r) => ({ ...r, __anchor: term }));
+        if (hits.length) perAnchor.push(hits);
+      }
+
+      const merged = [];
+      let progress = true;
+      while (progress && merged.length < size) {
+        progress = false;
+        for (let i = 0; i < perAnchor.length && merged.length < size; i += 1) {
+          const list = perAnchor[i];
+          if (list && list.length) {
+            merged.push(list.shift());
+            progress = true;
+          }
+        }
+      }
+
+      // Backfill with any remaining hits if still short
+      if (merged.length < size) {
+        const leftovers = perAnchor.flat();
+        for (const hit of leftovers) {
+          if (merged.length >= size) break;
+          merged.push(hit);
+        }
+      }
+
+      if (merged.length) {
+        results = { results: merged };
+      }
+    }
+
+    if (!results) {
+      results = await runSearch(filters, size);
     }
 
     // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
@@ -857,6 +906,7 @@ class GeminiService {
         - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
         - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
         - When multiple candidates fit, prefer the one whose difficulty matches: ${userPreferences.difficulty || 'any'} (easy/medium/hard). If none match, choose the closest reasonable difficulty.
+        - Rotate preferred ingredients: if includeIngredients has multiple items, try to use different ones across meals so the same preferred ingredient is not reused until others were attempted; only repeat when you have already used or ruled out the rest.
         - Write ALL text (recipe names, descriptions, instructions) in ENGLISH.
         - Prefer the listed existing recipes by id/title; do not invent ids.
         - Return ONLY strict JSON. Do NOT include ellipses, comments, or markdown fences.
@@ -1307,6 +1357,7 @@ ${mealSchemas}
       diet: ${preferences.dietType || 'any'}
       allergies/dislikes: ${(preferences.allergies || []).join(', ')}; ${(preferences.dislikedFoods || []).join(', ')}
       preferred ingredients (use when relevant; skip if they don't fit): ${(preferences.includeIngredients || []).join(', ')}
+      Avoid repeating the same preferred ingredient across recipes; if multiple preferred ingredients exist, spread them so each gets used at most once before repeating.
       Ensure the meal makes sense for ${mealType} (e.g., breakfast = breakfast foods, lunch/dinner = savory mains, snack = light snack), avoid cleaning products or non-food items.
       The JSON shape:
       [
@@ -1563,6 +1614,7 @@ ${mealSchemas}
       - Prefer meals with protein > 0 and sensible calories (skip obvious near-zero calorie meals).
       - Keep meal type coherent: breakfast should be breakfast-like; dinner should not be sweets-only.
       - Prefer candidates that include user preferred ingredients when available; if none fit, skip them: ${(preferences?.includeIngredients || []).join(', ')}
+      - If multiple preferred ingredients are provided, spread them across meals and avoid reusing the same preferred ingredient until others have been used or clearly do not fit.
       - Prefer recipes whose difficulty matches the user preference (${preferences?.difficulty || 'any'}). If none match, choose the closest reasonable difficulty.
       - If a meal looks off-theme, propose a replacement id from the SAME meal type candidates.
       Return ONLY JSON: {"replacements":[{"type":"breakfast","replaceWithId":"candidate-id-or-null"}, ...]}

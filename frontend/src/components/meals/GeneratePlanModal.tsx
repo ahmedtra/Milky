@@ -132,6 +132,9 @@ const ingredientSections: Array<{
     color: "amber",
     items: [
       { name: "Chicken Breast" },
+      { name: "Beef" },
+      { name: "Pork" },
+      { name: "Lamb" },
       { name: "Salmon" },
       { name: "Shrimp" },
       { name: "Tofu" },

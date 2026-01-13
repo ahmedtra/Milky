@@ -102,10 +102,16 @@ export default function ShoppingLists() {
     return 0.2;
   };
 
-  const isLiquid = (name: string, category: string) =>
-    /(milk|juice|water|oil|broth|stock|sauce)/.test((name || "").toLowerCase()) ||
-    category === "beverages" ||
-    category === "dairy";
+  const isLiquid = (name: string, category: string) => {
+    const lower = (name || "").toLowerCase();
+    if (/(egg)/.test(lower)) return false;
+    if (category === "beverages") return true;
+    // Only treat dairy as liquid if it is a pourable dairy (milk/cream/yogurt), not eggs/cheese
+    if (category === "dairy") {
+      return /(milk|cream|yogurt)/.test(lower);
+    }
+    return /(milk|juice|water|oil|broth|stock|sauce|vinegar)/.test(lower);
+  };
 
   const convertQuantity = (item: any, target: "pieces" | "weight" | "cups" | "liters") => {
     const id = getItemId(item);
@@ -238,6 +244,13 @@ export default function ShoppingLists() {
       amount = Math.round(amount * 1000);
       unit = "ml";
     }
+
+    // Final guardrails to avoid zero/NaN display
+    if (!Number.isFinite(amount) || amount <= 0) {
+      const fallback = Number(item.amount ?? item.quantity ?? 1) || 1;
+      amount = fallback;
+    }
+    if (!unit) unit = "unit";
 
     return { amount, unit };
   };

@@ -306,6 +306,34 @@ class GeminiService {
         goal_fit: preferences?.goals ? String(preferences.goals).toLowerCase() : null,
         activity_fit: preferences?.activityLevel ? String(preferences.activityLevel).toLowerCase() : null
       };
+      // Add day/story context: weekday/weekend difficulty/quick bias, seasonality
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const dayOfWeek = today.getDay(); // 0=Sun
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      if (!filters.difficulty && preferences?.difficulty !== 'hard') {
+        filters.difficulty = isWeekend ? 'medium' : 'easy';
+      }
+      if (!preferences?.quickMeal && !isWeekend) {
+        filters.quick = true;
+      }
+      const seasonalByMonth = {
+        1: ['citrus', 'kale'],
+        2: ['citrus', 'cabbage'],
+        3: ['asparagus', 'peas'],
+        4: ['asparagus', 'spinach'],
+        5: ['strawberry', 'peas'],
+        6: ['berries', 'tomato'],
+        7: ['berries', 'corn'],
+        8: ['tomato', 'zucchini'],
+        9: ['apple', 'squash'],
+        10: ['pumpkin', 'mushroom'],
+        11: ['pumpkin', 'brussels sprouts'],
+        12: ['citrus', 'potato'],
+      };
+      if ((!filters.include_ingredients || !filters.include_ingredients.length) && seasonalByMonth[month]) {
+        filters.include_ingredients = seasonalByMonth[month];
+      }
     }
     filterMs = Date.now() - tFiltersStart;
 
@@ -323,63 +351,13 @@ class GeminiService {
     const randomSeed = Date.now() + Math.floor(Math.random() * 1_000_000);
     const tSearchStart = Date.now();
 
-    const includeList = Array.isArray(filters.include_ingredients)
-      ? filters.include_ingredients.filter(Boolean)
-      : [];
-
-    const runSearch = async (customFilters, customSize = size) => {
-      const res = await searchRecipes(customFilters, { size: customSize, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-      if (res?.results?.length) {
-        res.results = res.results.map((r) => ({
-          ...r,
-          nutrition: this.extractNutritionFromSource(r)
-        }));
-      }
-      return res;
-    };
-
-    let results = null;
-
-    // If the user provided multiple preferred ingredients, run one query per ingredient
-    // and merge the results in a round-robin fashion so each ingredient gets surfaced.
-    if (includeList.length > 1) {
-      const perAnchor = [];
-      for (const term of includeList) {
-        const perFilters = { ...filters, include_ingredients: [term] };
-        const per = await runSearch(perFilters, Math.max(size, 5));
-        const hits = (per?.results || []).map((r) => ({ ...r, __anchor: term }));
-        if (hits.length) perAnchor.push(hits);
-      }
-
-      const merged = [];
-      let progress = true;
-      while (progress && merged.length < size) {
-        progress = false;
-        for (let i = 0; i < perAnchor.length && merged.length < size; i += 1) {
-          const list = perAnchor[i];
-          if (list && list.length) {
-            merged.push(list.shift());
-            progress = true;
-          }
-        }
-      }
-
-      // Backfill with any remaining hits if still short
-      if (merged.length < size) {
-        const leftovers = perAnchor.flat();
-        for (const hit of leftovers) {
-          if (merged.length >= size) break;
-          merged.push(hit);
-        }
-      }
-
-      if (merged.length) {
-        results = { results: merged };
-      }
-    }
-
-    if (!results) {
-      results = await runSearch(filters, size);
+    const res = await searchRecipes(filters, { size, randomSeed, logSearch: LOG_SEARCH || LOG_MEALPLAN });
+    let results = res;
+    if (res?.results?.length) {
+      res.results = res.results.map((r) => ({
+        ...r,
+        nutrition: this.extractNutritionFromSource(r)
+      }));
     }
 
     // Fallback: if nothing returned and a diet filter was applied, retry without diet_tags
@@ -509,25 +487,7 @@ class GeminiService {
       }
     }
     const shuffled = this.shuffle(filtered);
-    logMealplan(`🍽️ Candidates fetched for ${mealType}: ${shuffled.length} (filtered from ${rawResults.length})`, {
-      totalMs: Date.now() - tStart,
-      filterMs,
-      vectorMs,
-      searchMs
-    });
-    // Final concise snapshot after all filtering/shuffle
-    logMealplan(`🍽️ Candidates final snapshot for ${mealType}`, {
-      count: shuffled.length,
-      entries: shuffled.slice(0, 10).map((c) => ({
-        id: c.id || c._id,
-        title: c.title,
-        prep: c.prep_time_minutes ?? c.prepTime ?? null,
-        cook: c.cook_time_minutes ?? c.cookTime ?? null,
-        total: c.total_time_min ?? c.total_time_minutes ?? null,
-        hasParsedIngredients: Array.isArray(c.ingredients_parsed) && c.ingredients_parsed.length,
-        hasRawIngredients: typeof c.ingredients_raw === 'string' && !!c.ingredients_raw.trim()
-      }))
-    });
+    logMealplan(`🍽️ Candidates fetched for ${mealType}: ${shuffled.length} (filtered from ${rawResults.length})`);
 
     const buildNutrition = (src) => {
       const nutrition = {};
@@ -541,7 +501,7 @@ class GeminiService {
         }
       };
       const nSrc = src?.nutrition || src || {};
-      console.log(nSrc)
+      
       addNumber('calories', nSrc.calories, src?.calories);
       addNumber('protein', nSrc.protein, nSrc.protein_g, nSrc.protein_grams, src?.protein, src?.protein_g, src?.protein_grams);
       addNumber('carbs', nSrc.carbs, nSrc.carbs_g, nSrc.carbs_grams, src?.carbs, src?.carbs_g, src?.carbs_grams);
@@ -780,8 +740,9 @@ class GeminiService {
     };
       const baseCandidateMap = {};
       for (const mealType of mealTypes) {
-        const sizeByType = mealType === 'snack' ? 14 : mealType === 'breakfast' ? 24 : 28;
-        const targetSize = mealType === 'snack' ? 12 : mealType === 'breakfast' ? 20 : 24;
+        // Keep pools small to avoid prompt bloat
+        const sizeByType = mealType === 'snack' ? 12 : mealType === 'breakfast' ? 20 : 30;
+        const targetSize = mealType === 'snack' ? 10 : mealType === 'breakfast' ? 16 : 24;
         baseCandidateMap[mealType] = await padWithLLM(
           mealType,
           await this.fetchCandidatesForMeal(mealType, userPreferences, sizeByType),
@@ -1083,9 +1044,13 @@ ${mealSchemas}
       candidatesByMeal[mealType] = { list: hydrated, map };
     }
 
+    // Snapshot of LLM-picked meals before we enforce/graft candidates
     logMealplan('🧭 enforceCandidateRecipes start', {
       meals: dayData.meals.length,
-      candidateTypes: Object.keys(candidateMap)
+      picks: dayData.meals.map((m) => ({
+        mealType: m.type,
+        llmTitle: m.recipes?.[0]?.name || m.recipes?.[0]?.title || null
+      }))
     });
 
     dayData.meals = dayData.meals.map((meal) => {
@@ -1099,7 +1064,15 @@ ${mealSchemas}
 
       const fixRecipe = (r) => {
         if (r && bucket.map.has(String(r.id))) {
-          const src = bucket.map.get(String(r.id));
+          // Optionally rotate to a different candidate to avoid repetition across runs
+          let chosen = bucket.map.get(String(r.id));
+          if (bucket.list.length > 1 && Math.random() < 0.35) {
+            const alt = this.shuffle(bucket.list).find(
+              (c) => c?.id && String(c.id) !== String(chosen.id) && !dayUsedIds.has(String(c.id))
+            );
+            if (alt) chosen = alt;
+          }
+          const src = chosen;
           // Always use parsed ingredients_raw to stay grounded
           let ingredients = this.parseIngredientsFromSource(src);
           if (!ingredients.length && Array.isArray(r.ingredients)) {
@@ -1116,16 +1089,9 @@ ${mealSchemas}
           const prepTime = src.prep_time_minutes ?? src.prepTime ?? r.prepTime ?? 0;
           const cookTime = src.cook_time_minutes ?? src.cookTime ?? r.cookTime ?? 0;
           const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
-          logMealplan('✅ enforceCandidateRecipes: matched candidate', {
+          logMealplan('✅ enforceCandidateRecipes: matched', {
             mealType,
-            id: src.id,
-            title: cleanName || src.title,
-            calories: nutrition?.calories,
-            protein: nutrition?.protein,
-            prep: normalizedPrep || null,
-            cook: cookTime || null,
-            total: totalTime || (normalizedPrep + cookTime) || null,
-            ingredientsCount: ingredients.length
+            title: cleanName || src.title
           });
           return {
             ...r,
@@ -1158,22 +1124,9 @@ ${mealSchemas}
         const prepTime = first?.prep_time_minutes ?? first?.prepTime ?? r?.prepTime ?? 0;
         const cookTime = first?.cook_time_minutes ?? first?.cookTime ?? r?.cookTime ?? 0;
         const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
-        logMealplan('🔄 enforceCandidateRecipes: replacing with candidate', {
+        logMealplan('🔄 enforceCandidateRecipes: replacing', {
           mealType,
-          chosenId: first?.id || null,
-          title: cleanName || first?.title,
-          calories: nutrition?.calories,
-          protein: nutrition?.protein,
-          prep: normalizedPrep || null,
-          cook: cookTime || null,
-          total: totalTime || (normalizedPrep + cookTime) || null,
-          ingredientsCount: ingredients.length
-        });
-        logMealplan('🔄 fixRecipe: replacing with random candidate', {
-          mealType,
-          chosenId: first?.id || null,
-          candidateTitles: this.shuffle(bucket.list).slice(0, 3).map((c) => c.title),
-          nutrition
+          title: cleanName || first?.title
         });
         const base = {
           id: first?.id || null,
@@ -1203,16 +1156,10 @@ ${mealSchemas}
 
     const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);
     logMealplan(`✅ enforceCandidateRecipes done. Meals=${dayData.meals.length}, recipes=${recipeCount}`, {
-      samples: dayData.meals.flatMap((m) =>
-        (m.recipes || []).slice(0, 1).map((r) => ({
-          type: m.type,
-          id: r.id,
-          title: r.name || r.title,
-          ai_generated: r.ai_generated || false,
-          tags: Array.isArray(r.tags) ? r.tags.slice(0, 6) : [],
-          tags_str: Array.isArray(r.tags) ? r.tags.slice(0, 6).join(', ') : ''
-        }))
-      ).slice(0, 8)
+      meals: dayData.meals.map((m) => ({
+        mealType: m.type,
+        title: m.recipes?.[0]?.name || m.recipes?.[0]?.title || null
+      }))
     });
   }
 

@@ -1,5 +1,4 @@
-const { client, recipeIndex } = require('./elasticsearchClient');
-const { ensureRecipeIndex } = require('./indexManagement');
+const { searchRecipesZilliz } = require('./zillizSearch');
 
 const parseNumeric = (val) => {
   if (val === undefined || val === null) return null;
@@ -222,95 +221,23 @@ const buildQuery = (filters = {}) => {
 };
 
 const searchRecipes = async (filters = {}, options = {}) => {
-  await ensureRecipeIndex();
-
   const size = Math.min(options.size || 50, 200);
-  const query = buildQuery(filters);
-  const hasVector = Array.isArray(filters.query_vector) && filters.query_vector.length > 0;
-  const knnClause = hasVector
-    ? {
-        field: 'embedding',
-        query_vector: filters.query_vector,
-        k: Math.min(size * 5, 500),
-        num_candidates: Math.min(size * 10, 1000)
-      }
-    : null;
-
-  // Randomize results using _seq_no to avoid fielddata on _id; can disable with options.randomize=false.
-  // Seed is randomized per call unless explicitly provided.
-  const randomSeed = options.randomSeed ?? Math.floor(Math.random() * 1_000_000_000);
-  const finalQuery = options.randomize === false
-    ? query
-    : {
-        function_score: {
-          query,
-          random_score: { seed: randomSeed, field: '_seq_no' },
-          boost_mode: 'replace'
-        }
-      };
-
-  const response = await client.search({
-    index: recipeIndex,
-    size,
-    query: hasVector ? query : finalQuery,
-    ...(knnClause ? { knn: knnClause } : {}),
-    track_total_hits: true,
-    _source: {
-      excludes: ['raw']
-    }
-  });
-
-  if (options.logSearch) {
-    const preview = (response?.hits?.hits || []).slice(0, 5).map((h) => {
-      const src = h._source || {};
-      return {
-        id: h._id,
-        title: src.title,
-        calories: src.nutrition?.calories ?? src.calories,
-        protein: src.nutrition?.protein ?? src.protein ?? src.protein_grams ?? src.protein_g,
-        carbs: src.nutrition?.carbs ?? src.carbs ?? src.carbs_g ?? src.carbs_grams,
-        fat: src.nutrition?.fat ?? src.fat ?? src.fat_g ?? src.fat_grams,
-        fiber: src.nutrition?.fiber ?? src.fiber ?? src.fiber_g ?? src.fiber_grams,
-        sugar: src.nutrition?.sugar ?? src.sugar ?? src.sugar_g ?? src.sugar_grams
-      };
-    });
-    console.log('🔎 ES search', {
-      size,
-      hasVector,
-      totalHits: response?.hits?.total?.value || 0,
-      filters: { ...filters, query_vector: hasVector ? '[vector]' : undefined },
-      preview
-    });
-  }
-
-  const hits = response?.hits?.hits || [];
+  const docs = await searchRecipesZilliz(filters, { size, offset: options.from || 0 });
+  const results = docs.map((doc) => ({
+    ...doc,
+    nutrition: normalizeNutrition(doc)
+  }));
   return {
-    took: response?.took,
-    total: response?.hits?.total?.value || 0,
-    results: hits.map((hit) => ({
-      id: hit._id,
-      score: hit._score,
-      ...hit._source,
-      // Expose a normalized nutrition snapshot so downstream consumers can
-      // rely on either canonical fields or legacy *_g fields.
-      nutrition: normalizeNutrition(hit._source)
-    }))
+    took: undefined,
+    total: results.length,
+    results
   };
 };
 
 const getRecipeById = async (id) => {
   if (!id) return null;
-  await ensureRecipeIndex();
-
-  try {
-    const res = await client.get({ index: recipeIndex, id });
-    return res?._source ? { id: res._id, ...res._source } : null;
-  } catch (error) {
-    if (error?.meta?.statusCode === 404) {
-      return null;
-    }
-    throw error;
-  }
+  const res = await searchRecipesZilliz({ title_exact: id }, { size: 1 });
+  return res && res.length ? res[0] : null;
 };
 
 const findAlternatives = async ({
@@ -358,7 +285,6 @@ const findAlternatives = async ({
 
 module.exports = {
   searchRecipes,
-  buildQuery,
   getRecipeById,
   findAlternatives
 };

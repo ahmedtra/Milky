@@ -751,19 +751,13 @@ class GeminiService {
       }
 
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
-        const dayBlueprint = ingredientBlueprint[dayIndex]; // Blueprint is an array, not object with .days
-        
-        if (!dayBlueprint) {
-          console.error(`❌ No blueprint found for day ${dayIndex}, using fallback`);
-          days.push(fallbackPlan.days[dayIndex]);
-          continue;
-        }
-        
-        logMealplan(`📅 Generating day ${dayIndex + 1}/${duration} (${dayBlueprint.cuisine || 'any'} cuisine)`);
+        logMealplan(`📅 Generating day ${dayIndex + 1}/${duration}`);
         
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + dayIndex);
         const dateStr = currentDate.toISOString().split('T')[0];
+        const weekdayLabel = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+        const monthLabel = currentDate.toLocaleDateString('en-US', { month: 'long' });
         
         // Reuse pre-fetched candidates; filter out recently used and shuffle to avoid repeats
         const filterUsed = (list = []) => {
@@ -771,7 +765,9 @@ class GeminiService {
           return filtered.length ? filtered : list;
         };
         const candidateMap = mealTypes.reduce((acc, mealType) => {
-          acc[mealType] = this.shuffle(filterUsed(baseCandidateMap[mealType] || []));
+          const pool = this.shuffle(filterUsed(baseCandidateMap[mealType] || []));
+          // keep a small random subset per day to force variety across days
+          acc[mealType] = pool.slice(0, 5);
           return acc;
         }, {});
         logMealplan(`🎲 Shuffled candidates for day ${dayIndex + 1}`, {
@@ -829,7 +825,7 @@ class GeminiService {
                   ],
                   "instructions": ["Step 1", "Step 2"],
                   "nutrition": {"calories": ${defaultCalories}, "protein": 10, "carbs": 40, "fat": 8, "fiber": 5, "sugar": 10},
-                  "tags": ["${dayBlueprint.cuisine}"],
+                  "tags": [],
                   "difficulty": "easy"
                 }
               ],
@@ -846,16 +842,12 @@ class GeminiService {
         Allergies: ${userPreferences.allergies?.join(', ') || 'None'}
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
         Preferred ingredients (try to use at least ONE when relevant; skip if none fit): ${Array.isArray(userPreferences.includeIngredients) && userPreferences.includeIngredients.length ? userPreferences.includeIngredients.join(', ') : 'None specified'}
+        Context: Month ${monthLabel}, Weekday ${weekdayLabel}. Adjust variety accordingly (e.g., lighter on busy weekdays, seasonal feel by month). If you infer current weather from context, reflect it subtly; otherwise ignore.
         
-        Cuisine for this day: ${dayBlueprint.cuisine || 'any'}
-
         Generate ONLY these meals (skip all others): ${mealTypes.join(', ')}.
 
         Meal Times:
         ${mealTimesText}
-
-        Use these ingredients as inspiration:
-        ${JSON.stringify(dayBlueprint, null, 2)}
 
         Here are EXISTING recipes you must prefer and pick from (by id and title).
         You MUST select only from these; do not invent ids or titles. If none fits, pick the closest candidate instead of leaving empty.
@@ -864,7 +856,7 @@ class GeminiService {
         IMPORTANT:
         - Do NOT add meal types that are not listed. If a meal type is missing in candidates, return an empty array for its recipes.
         - Prefer non-LLM candidates (ids NOT starting with "llm-") when possible; use LLM-generated fallbacks only if no suitable human/ES candidate fits.
-        - Each meal must select exactly one recipe id from the candidates listed for that meal type; do NOT pull from another meal type and do NOT invent ids.
+        - For each meal, choose up to TWO distinct candidate ids (primary + alternate) from that meal type only; do NOT invent ids. This system may randomly keep just one of them.
         - Choose candidates that make sense for the meal type (e.g., breakfast should be breakfast foods, not dinner entrées or cleaning products); skip off-theme items and pick the next best food item from the same meal type list.
         - When multiple candidates fit, prefer the one whose difficulty matches: ${userPreferences.difficulty || 'any'} (easy/medium/hard). If none match, choose the closest reasonable difficulty.
         - Rotate preferred ingredients: if includeIngredients has multiple items, try to use different ones across meals so the same preferred ingredient is not reused until others were attempted; only repeat when you have already used or ruled out the rest.
@@ -1054,12 +1046,22 @@ ${mealSchemas}
     });
 
     dayData.meals = dayData.meals.map((meal) => {
-      const mealType = (meal?.type || '').toLowerCase();
+      // If LLM returned multiple recipes, pick one of the first two to introduce variety
+      const normalizedMeal = (() => {
+        const recs = Array.isArray(meal?.recipes) ? meal.recipes : [];
+        if (recs.length > 1) {
+          const choice = this.shuffle(recs.slice(0, 2))[0];
+          return { ...meal, recipes: [choice] };
+        }
+        return meal;
+      })();
+      const mealNormalized = normalizedMeal;
+      const mealType = (mealNormalized?.type || '').toLowerCase();
       const bucket = candidatesByMeal[mealType];
       if (!bucket || !bucket.list?.length) {
         // No candidates for this meal type: drop non-grounded recipes
         logMealplan(`⚠️ No candidates for meal type "${mealType}", clearing recipes`);
-        return { ...meal, recipes: [] };
+        return { ...mealNormalized, recipes: [] };
       }
 
       const fixRecipe = (r) => {
@@ -1145,13 +1147,13 @@ ${mealSchemas}
         return { ...r, ...base };
       };
 
-      const recipes = Array.isArray(meal?.recipes) && meal.recipes.length
-        ? meal.recipes.map(fixRecipe)
+      const recipes = Array.isArray(mealNormalized?.recipes) && mealNormalized.recipes.length
+        ? mealNormalized.recipes.map(fixRecipe)
         : [fixRecipe(null)];
 
       const totalNutrition = this.sumRecipeNutrition(recipes);
 
-      return { ...meal, recipes, totalNutrition };
+      return { ...mealNormalized, recipes, totalNutrition };
     });
 
     const recipeCount = dayData.meals.reduce((acc, m) => acc + (m.recipes?.length || 0), 0);

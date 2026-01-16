@@ -95,6 +95,11 @@ const rehydrateDoc = (hit) => {
 const buildScalarFilters = (filters = {}) => {
   const constraints = [];
 
+  // Exact title
+  if (filters.title_exact) {
+    constraints.push({ field: "title", operator: "==", value: String(filters.title_exact) });
+  }
+
   // Diet tags
   const dietTags = cleanList(filters.dietary_tags || filters.diet_tags);
   if (dietTags.length) {

@@ -1873,6 +1873,14 @@ ${mealSchemas}
           ? (results || []).filter((r) => (r.title || '').toLowerCase().includes(keyword))
           : results || [];
         let useResults = filtered.length ? filtered : results;
+        if (LOG_SEARCH || LOG_MEALPLAN) {
+          console.log('🔎 chatbot recipe_search raw results', {
+            keyword,
+            total: results?.length || 0,
+            filtered: filtered?.length || 0,
+            sample: (results || []).slice(0, 3).map((r) => r.title || r.name)
+          });
+        }
 
         const shouldForceLLM = keyword && !filtered.length;
         // If results are sparse or irrelevant, backfill with LLM-generated recipes
@@ -1887,6 +1895,12 @@ ${mealSchemas}
           );
           if (fallback?.length) {
             useResults = (useResults || []).concat(fallback);
+            if (LOG_SEARCH || LOG_MEALPLAN) {
+              console.log('✨ chatbot recipe_search falling back to LLM', {
+                reason: shouldForceLLM ? 'keyword_no_match' : 'low_count',
+                fallbackCount: fallback.length
+              });
+            }
           }
         }
         if (!useResults?.length) {
@@ -1898,6 +1912,7 @@ ${mealSchemas}
           const candidateData = useResults.map((r, idx) => ({
             id: r.id || r._id || `c${idx}`,
             title: r.title || r.name,
+            ai: isAiGenerated(r),
             calories: r.nutrition?.calories ?? r.calories,
             protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
             time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes
@@ -1925,11 +1940,11 @@ ${mealSchemas}
             : null;
           if (keepIds && keepIds.length) {
             useResults = useResults.filter((r, idx) => {
-              const id = r.id || r._id || `c${idx}`;
-              return keepIds.includes(String(id));
-            });
-          }
-          if (!useResults.length) {
+            const id = r.id || r._id || `c${idx}`;
+            return keepIds.includes(String(id));
+          });
+        }
+        if (!useResults.length) {
             useResults = candidateData.map((c, idx) => useResults[idx]).filter(Boolean); // fallback to original
           }
         } catch (filterErr) {

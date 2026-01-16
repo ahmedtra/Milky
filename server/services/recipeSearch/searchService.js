@@ -222,11 +222,28 @@ const buildQuery = (filters = {}) => {
 
 const searchRecipes = async (filters = {}, options = {}) => {
   const size = Math.min(options.size || 50, 200);
+  const logSearch = options.logSearch;
+  if (logSearch) {
+    console.log('🔎 searchRecipes input', {
+      filters,
+      size,
+      offset: options.from || 0
+    });
+  }
   const docs = await searchRecipesZilliz(filters, { size, offset: options.from || 0 });
   const results = docs.map((doc) => ({
     ...doc,
     nutrition: normalizeNutrition(doc)
   }));
+  if (logSearch) {
+    console.log('🔎 searchRecipes results', {
+      count: results.length,
+      sampleTitles: results.slice(0, 3).map((r) => r.title || r.name),
+      ids: results.slice(0, 5).map((r) => r.id || r._id)
+    });
+  } else if (results.length === 0) {
+    console.warn('⚠️ searchRecipes returned 0 results', { filters, size, offset: options.from || 0 });
+  }
   return {
     took: undefined,
     total: results.length,
@@ -237,7 +254,12 @@ const searchRecipes = async (filters = {}, options = {}) => {
 const getRecipeById = async (id) => {
   if (!id) return null;
   const res = await searchRecipesZilliz({ title_exact: id }, { size: 1 });
-  return res && res.length ? res[0] : null;
+  if (!res || !res.length) return null;
+  const doc = res[0];
+  return {
+    ...doc,
+    nutrition: normalizeNutrition(doc)
+  };
 };
 
 const findAlternatives = async ({

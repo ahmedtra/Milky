@@ -16,7 +16,6 @@ const adminLogRoutes = require('./routes/adminLogs');
 const requestLogger = require('./middleware/requestLogger');
 const { initializeTelegramBot } = require('./services/telegramBot');
 const { initializeNotificationScheduler } = require('./services/notificationScheduler');
-const { initializeImageMaintenance } = require('./services/imageMaintenance');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -89,7 +88,6 @@ if (process.env.DISABLE_TELEGRAM_BOT !== 'true') {
 
 // Initialize notification scheduler
 initializeNotificationScheduler();
-initializeImageMaintenance();
 
 // Routes
 app.use('/api/gemini', geminiRoutes);

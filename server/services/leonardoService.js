@@ -6,15 +6,8 @@ const SILICONFLOW_MODEL = process.env.SILICONFLOW_MODEL || "black-forest-labs/FL
 const LEONARDO_API_BASE = "https://cloud.leonardo.ai/api/rest/v1";
 // Default to Leonardo Vision XL; override via env if needed
 const LEONARDO_MODEL_ID = process.env.LEONARDO_MODEL_ID || "5c232a9e-9061-4777-980a-ddc8e65647c6";
-const { client: esClient, recipeIndex } = require("./recipeSearch/elasticsearchClient");
 const { groqChat } = require("./groqClient");
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
-const IMAGE_DIR = path.resolve(__dirname, "../../public/meal-images");
-if (!fs.existsSync(IMAGE_DIR)) {
-  fs.mkdirSync(IMAGE_DIR, { recursive: true });
-}
 let milvus = null;
 let ZILLIZ_COLLECTION = null;
 try {
@@ -108,12 +101,15 @@ function buildPrompt(recipe) {
   if (instructions) details.push(`Cooking steps: ${instructions}.`);
 
   const prompt = [
-    "Premium food photography of the finished dish, family-friendly and modest presentation.",
-    "Soft minimalism, clean plating, natural light, botanical green accent.",
+    "Ultra-realistic, appetizing food photo of the finished dish on a plate, inviting to eat.",
+    "Plated like a modern bistro: clean white plate, gentle highlights, natural daylight, shallow depth of field.",
+    "Warm tones, light steam if hot, fresh herbs or citrus for brightness, no text or watermarks.",
     `Dish: ${name}.`,
     details.join(" "),
-    "Show a ready-to-eat plated meal."
-  ].join(" ").trim();
+    "Emphasize texture and juiciness; keep background uncluttered."
+  ]
+    .join(" ")
+    .trim();
 
   return sanitizePromptText(prompt);
 }
@@ -262,15 +258,6 @@ async function waitForGeneration(id, { timeoutMs = 300000, pollMs = 2000 } = {})
   throw new Error("Leonardo generation timed out");
 }
 
-async function downloadToLocal(url, fileName) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Download failed ${res.status}: ${await res.text()}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const target = path.join(IMAGE_DIR, fileName);
-  fs.writeFileSync(target, buf);
-  return target;
-}
-
 async function upsertImageToZilliz(recipeId, driveUrl, generatorUrl) {
   if (!milvus || !ZILLIZ_COLLECTION || !recipeId || !driveUrl) return;
   try {
@@ -351,43 +338,15 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
   try {
     if (!meal?.recipes?.length) return meal;
     const recipe = meal.recipes[0];
-  // If recipe already has an image, ensure it is on the public R2 domain; if not, rehost and update ES/Zilliz
-  if (recipe.image || recipe.imageUrl) {
-    const current = recipe.imageUrl || recipe.image;
-    if (current && isPublicR2(current)) return meal;
-    // Not public: clear to force regeneration
-    recipe.image = null;
-    recipe.imageUrl = null;
-  }
+    // If recipe already has an image, ensure it is on the public R2 domain; if not, clear to force regeneration
+    if (recipe.image || recipe.imageUrl) {
+      const current = recipe.imageUrl || recipe.image;
+      if (current && isPublicR2(current)) return meal;
+      recipe.image = null;
+      recipe.imageUrl = null;
+    }
     if (!hasKey() && !hasSiliconKey()) return meal;
     const title = recipe.title || recipe.name;
-
-    // Try to reuse an image from Elasticsearch if it exists for this recipe title
-    if (title) {
-      try {
-        const search = await esClient.search({
-          index: recipeIndex,
-          size: 1,
-          query: { match_phrase: { title } },
-          _source: ["image", "imageUrl", "recipes.image", "recipes.imageUrl"],
-        });
-        const hit = search?.hits?.hits?.[0];
-        const hitSrc = hit?._source;
-        const esImg =
-          hitSrc?.image ||
-          hitSrc?.imageUrl ||
-          (Array.isArray(hitSrc?.recipes) && (hitSrc.recipes[0]?.image || hitSrc.recipes[0]?.imageUrl));
-        if (esImg && isPublicR2(normalizeToPublicR2(esImg))) {
-          const finalUrl = normalizeToPublicR2(esImg);
-          recipe.image = finalUrl;
-          recipe.imageUrl = finalUrl;
-          console.log("✅ Reused image from ES", { title, index: recipeIndex, url: finalUrl });
-          return meal;
-        }
-      } catch (err) {
-        console.warn("ℹ️ ES lookup for existing image failed", err.message);
-      }
-    }
 
     const safeNameBase = (recipe.title || recipe.name || "meal").replace(/[^a-z0-9_-]+/gi, "_").slice(0, 60);
     console.log("🖼️ Generating image for recipe:", {
@@ -397,9 +356,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
     const url = await generateMealImage(recipe);
     if (url) {
       const remoteUrl = url; // generator URL
-      const fileBase = (recipe.recipeId || recipe._id || recipe.id || safeNameBase || "meal").toString().replace(/[^a-z0-9_-]+/gi, "_") || "meal";
-      const fileName = `${fileBase}.png`;
-
       // Upload to R2 for stable hosting
       let r2Url = normalizeToPublicR2(remoteUrl);
       if (hasR2()) {
@@ -407,23 +363,16 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
           const resp = await fetch(remoteUrl);
           if (!resp.ok) throw new Error(`Download failed ${resp.status}`);
           const buf = Buffer.from(await resp.arrayBuffer());
-          r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, fileName));
+          const key = `${(recipe.recipeId || recipe._id || recipe.id || safeNameBase || "meal").toString().replace(/[^a-z0-9_-]+/gi, "_") || "meal"}.png`;
+          r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, key));
         } catch (err) {
           console.warn("⚠️ Failed to upload to R2, falling back to generator URL:", err.message);
           r2Url = normalizeToPublicR2(remoteUrl);
         }
       }
 
-      // Download to local for resilience (uses R2 URL if available)
-      try {
-        await downloadToLocal(r2Url, fileName);
-      } catch (err) {
-        console.warn("⚠️ Failed to cache image locally, using remote URL:", err.message);
-      }
-
-      // Serve from R2; keep generator URL only in logs
+      // Serve from R2
       recipe.image = r2Url;
-      const localPath = `/meal-images/${fileName}`;
       recipe.imageUrl = r2Url;
       console.log("🖼️ Image set on recipe", {
         id: recipe.recipeId || recipe._id || recipe.id,
@@ -432,62 +381,9 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
         remote: remoteUrl,
         r2: r2Url
       });
-      let zillizId = null;
       const primaryIdRaw = recipe.recipeId || recipe._id || recipe.id;
-      if (primaryIdRaw) zillizId = String(primaryIdRaw);
-      // If this recipe is already in Elasticsearch, persist the image URL there too
-      const esIds = [recipe.recipeId, recipe._id, recipe.id].filter(Boolean);
-      let persisted = false;
-      for (const esId of esIds) {
-        try {
-          await esClient.update({
-            index: recipeIndex,
-            id: esId,
-            doc: { image: r2Url, imageUrl: r2Url },
-            doc_as_upsert: false,
-          });
-          console.log("✅ Persisted image to ES", { id: esId, index: recipeIndex });
-          persisted = true;
-          zillizId = String(esId);
-          break; // success
-        } catch (err) {
-          if (err?.meta?.statusCode !== 404) {
-            console.warn("⚠️ Failed to persist image to Elasticsearch", err.message);
-          }
-        }
-      }
-      // If no id match OR we have no ids, try a search by title
-      if (!persisted && title) {
-        try {
-          const search = await esClient.search({
-            index: recipeIndex,
-            size: 1,
-            query: { match_phrase: { title } },
-          });
-          const hitId = search?.hits?.hits?.[0]?._id;
-          if (hitId) {
-            await esClient.update({
-              index: recipeIndex,
-              id: hitId,
-              doc: { image: r2Url, imageUrl: r2Url },
-              doc_as_upsert: false,
-            });
-            console.log("✅ Persisted image to ES via title lookup", { title, id: hitId, index: recipeIndex });
-            persisted = true;
-            zillizId = String(hitId);
-          } else {
-            console.log("ℹ️ No ES hit found by title for image persistence", { title });
-          }
-        } catch (err) {
-          if (err?.meta?.statusCode !== 404) {
-            console.warn("⚠️ Failed to persist image to Elasticsearch via search", err.message);
-          }
-        }
-      } else if (!esIds.length && !title) {
-        console.log("ℹ️ Skipped ES persistence: no recipe IDs and no title found on recipe");
-      }
-
-      // Try to persist image to Zilliz as partial update
+      const zillizId = primaryIdRaw ? String(primaryIdRaw) : null;
+      // Persist image to Zilliz as partial update
       await upsertImageToZilliz(zillizId, r2Url, r2Url);
     }
     return meal;

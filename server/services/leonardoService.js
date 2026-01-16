@@ -1,13 +1,44 @@
 const fetch = global.fetch || require("node-fetch");
 
-const LEONARDO_API_KEY = process.env.LEONARDO_API_KEY || process.env.LEONARDO_KEY;
+const LEONARDO_API_KEY = (process.env.LEONARDO_API_KEY || process.env.LEONARDO_KEY || "").trim();
+const SILICONFLOW_API_KEY = (process.env.SILICONFLOW_API_KEY || "").trim();
+const SILICONFLOW_MODEL = process.env.SILICONFLOW_MODEL || "black-forest-labs/FLUX.1-schnell";
 const LEONARDO_API_BASE = "https://cloud.leonardo.ai/api/rest/v1";
 // Default to Leonardo Vision XL; override via env if needed
 const LEONARDO_MODEL_ID = process.env.LEONARDO_MODEL_ID || "5c232a9e-9061-4777-980a-ddc8e65647c6";
 const { client: esClient, recipeIndex } = require("./recipeSearch/elasticsearchClient");
 const { groqChat } = require("./groqClient");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const IMAGE_DIR = path.resolve(__dirname, "../../public/meal-images");
+if (!fs.existsSync(IMAGE_DIR)) {
+  fs.mkdirSync(IMAGE_DIR, { recursive: true });
+}
+let milvus = null;
+let ZILLIZ_COLLECTION = null;
+try {
+  ({ milvus, ZILLIZ_COLLECTION } = require("./recipeSearch/zillizClient"));
+} catch (_e) {
+  // Zilliz not configured; skip vector DB image updates
+}
+const R2_ENDPOINT = (process.env.R2_ENDPOINT || "").replace(/\/$/, "");
+const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE || "").replace(/\/$/, "");
+const R2_ACCESS_KEY = (process.env.R2_ACCESS_KEY || process.env.R2_ACCESS_KEY_ID || "").trim();
+const R2_SECRET_KEY = (process.env.R2_SECRET_KEY || process.env.R2_SECRET_ACCESS_KEY || "").trim();
+const R2_BUCKET = (process.env.R2_BUCKET || "milky").trim();
+const hasR2 = () => R2_ENDPOINT && R2_ACCESS_KEY && R2_SECRET_KEY && R2_BUCKET;
+
+const normalizeToPublicR2 = (url) => {
+  if (!url || !R2_PUBLIC_BASE) return url;
+  const match = url.match(/https?:\/\/[^/]+\/milky\/(.+)/);
+  if (match) return `${R2_PUBLIC_BASE}/${match[1]}`;
+  return url;
+};
+const isPublicR2 = (url) => !!(url && R2_PUBLIC_BASE && url.startsWith(R2_PUBLIC_BASE));
 
 const hasKey = () => Boolean(LEONARDO_API_KEY);
+const hasSiliconKey = () => Boolean(SILICONFLOW_API_KEY);
 
 async function postJSON(path, body) {
   const res = await fetch(`${LEONARDO_API_BASE}${path}`, {
@@ -93,6 +124,91 @@ function truncatePrompt(prompt, maxLen = 1400) {
   return prompt.slice(0, maxLen - 3).trimEnd() + "...";
 }
 
+// Minimal AWS SigV4 signer for R2
+function hmac(key, str) {
+  return crypto.createHmac("sha256", key).update(str).digest();
+}
+function hash(str) {
+  return crypto.createHash("sha256").update(str).digest("hex");
+}
+function getAmzDate(date) {
+  // returns YYYYMMDDTHHmmssZ
+  return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+}
+async function uploadToR2FromBuffer(buffer, key, contentType = "image/png") {
+  if (!hasR2()) throw new Error("R2 not configured");
+  const method = "PUT";
+  const now = new Date();
+  const amzDate = getAmzDate(now);
+  const dateStamp = amzDate.slice(0, 8); // YYYYMMDD
+  const region = "auto";
+  const service = "s3";
+  const host = new URL(R2_ENDPOINT).host;
+  const canonicalUri = `/${R2_BUCKET}/${key}`;
+  const payloadHash = hash(buffer);
+  const canonicalHeaders = `host:${host}\n` + `x-amz-content-sha256:${payloadHash}\n` + `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    hash(canonicalRequest),
+  ].join("\n");
+  const kDate = hmac(`AWS4${R2_SECRET_KEY}`, dateStamp);
+  const kRegion = hmac(kDate, region);
+  const kService = hmac(kRegion, service);
+  const kSigning = hmac(kService, "aws4_request");
+  const signature = crypto.createHmac("sha256", kSigning).update(stringToSign).digest("hex");
+  const authorization = [
+    `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+
+  const res = await fetch(`${R2_ENDPOINT}${canonicalUri}`, {
+    method,
+    headers: {
+      Host: host,
+      "Content-Type": contentType,
+      "x-amz-date": amzDate,
+      "x-amz-content-sha256": payloadHash,
+      Authorization: authorization,
+    },
+    body: buffer,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`R2 upload failed ${res.status}: ${text}`);
+  }
+  // Public URL (assumes bucket/object is publicly accessible)
+  const base = R2_PUBLIC_BASE || `${R2_ENDPOINT}/${R2_BUCKET}`;
+  return `${base}/${key}`;
+}
+
+async function rehostUrlToR2(sourceUrl, keyHint) {
+  if (!hasR2() || !sourceUrl) return sourceUrl;
+  try {
+    const resp = await fetch(sourceUrl);
+    if (!resp.ok) throw new Error(`Download failed ${resp.status}`);
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const key = `${(keyHint || "image").replace(/[^a-z0-9_-]+/gi, "_") || "image"}.png`;
+    const r2Url = await uploadToR2FromBuffer(buf, key);
+    return normalizeToPublicR2(r2Url);
+  } catch (err) {
+    console.warn("⚠️ R2 rehost failed:", err.message);
+    return sourceUrl;
+  }
+}
+
 async function summarizePromptWithGroq(recipe) {
   if (!groqChat || !process.env.GROQ_API_KEY) return null;
   const name = recipe?.name || "meal";
@@ -146,12 +262,70 @@ async function waitForGeneration(id, { timeoutMs = 300000, pollMs = 2000 } = {})
   throw new Error("Leonardo generation timed out");
 }
 
+async function downloadToLocal(url, fileName) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed ${res.status}: ${await res.text()}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const target = path.join(IMAGE_DIR, fileName);
+  fs.writeFileSync(target, buf);
+  return target;
+}
+
+async function upsertImageToZilliz(recipeId, driveUrl, generatorUrl) {
+  if (!milvus || !ZILLIZ_COLLECTION || !recipeId || !driveUrl) return;
+  try {
+    await milvus.upsert({
+      collection_name: ZILLIZ_COLLECTION,
+      data: [{ id: String(recipeId), image: driveUrl, imageUrl: driveUrl }],
+      partial_update: true,
+    });
+    console.log("✅ Persisted image to Zilliz", { id: recipeId, url: driveUrl });
+  } catch (err) {
+    console.warn("⚠️ Failed to persist image to Zilliz", err.message);
+  }
+}
+
 async function generateMealImage(recipe) {
-  if (!hasKey()) {
-    throw new Error("Leonardo API key not configured");
+  if (!hasKey() && !hasSiliconKey()) {
+    throw new Error("No image provider API key configured");
   }
   const groqPrompt = await summarizePromptWithGroq(recipe);
   const prompt = truncatePrompt(groqPrompt || buildPrompt(recipe));
+
+      // Prefer SiliconFlow if configured
+      if (hasSiliconKey()) {
+        try {
+          console.log("🖼️ Generating meal image via SiliconFlow...");
+          const res = await fetch("https://api.siliconflow.com/v1/images/generations", {
+            method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SILICONFLOW_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: SILICONFLOW_MODEL,
+          prompt,
+          image_size: "768x768",
+          n: 1,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`SiliconFlow image gen failed ${res.status}: ${text}`);
+      }
+      const data = await res.json();
+      const url = data?.data?.[0]?.url || data?.data?.[0]?.b64_json;
+      if (url) {
+        console.log("✅ SiliconFlow image generated");
+        return url;
+      }
+    } catch (err) {
+      console.warn("⚠️ SiliconFlow image generation failed, falling back to Leonardo:", err.message);
+    }
+  }
+
+  if (!hasKey()) throw new Error("Leonardo API key not configured");
+  console.log("🖼️ Generating meal image via Leonardo...");
   const body = {
     prompt,
     modelId: LEONARDO_MODEL_ID,
@@ -177,8 +351,15 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
   try {
     if (!meal?.recipes?.length) return meal;
     const recipe = meal.recipes[0];
-    if (recipe.image || recipe.imageUrl) return meal;
-    if (!hasKey()) return meal;
+  // If recipe already has an image, ensure it is on the public R2 domain; if not, rehost and update ES/Zilliz
+  if (recipe.image || recipe.imageUrl) {
+    const current = recipe.imageUrl || recipe.image;
+    if (current && isPublicR2(current)) return meal;
+    // Not public: clear to force regeneration
+    recipe.image = null;
+    recipe.imageUrl = null;
+  }
+    if (!hasKey() && !hasSiliconKey()) return meal;
     const title = recipe.title || recipe.name;
 
     // Try to reuse an image from Elasticsearch if it exists for this recipe title
@@ -190,15 +371,17 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
           query: { match_phrase: { title } },
           _source: ["image", "imageUrl", "recipes.image", "recipes.imageUrl"],
         });
-        const hitSrc = search?.hits?.hits?.[0]?._source;
+        const hit = search?.hits?.hits?.[0];
+        const hitSrc = hit?._source;
         const esImg =
           hitSrc?.image ||
           hitSrc?.imageUrl ||
           (Array.isArray(hitSrc?.recipes) && (hitSrc.recipes[0]?.image || hitSrc.recipes[0]?.imageUrl));
-        if (esImg) {
-          recipe.image = esImg;
-          recipe.imageUrl = esImg;
-          console.log("✅ Reused image from ES", { title, index: recipeIndex });
+        if (esImg && isPublicR2(normalizeToPublicR2(esImg))) {
+          const finalUrl = normalizeToPublicR2(esImg);
+          recipe.image = finalUrl;
+          recipe.imageUrl = finalUrl;
+          console.log("✅ Reused image from ES", { title, index: recipeIndex, url: finalUrl });
           return meal;
         }
       } catch (err) {
@@ -206,14 +389,52 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
       }
     }
 
-    console.log("🖼️ Generating image via Leonardo for recipe:", {
+    const safeNameBase = (recipe.title || recipe.name || "meal").replace(/[^a-z0-9_-]+/gi, "_").slice(0, 60);
+    console.log("🖼️ Generating image for recipe:", {
       id: recipe.recipeId || recipe._id || recipe.id,
       title: recipe.title || recipe.name,
     });
     const url = await generateMealImage(recipe);
     if (url) {
-      recipe.image = url;
-      recipe.imageUrl = url;
+      const remoteUrl = url; // generator URL
+      const fileBase = (recipe.recipeId || recipe._id || recipe.id || safeNameBase || "meal").toString().replace(/[^a-z0-9_-]+/gi, "_") || "meal";
+      const fileName = `${fileBase}.png`;
+
+      // Upload to R2 for stable hosting
+      let r2Url = normalizeToPublicR2(remoteUrl);
+      if (hasR2()) {
+        try {
+          const resp = await fetch(remoteUrl);
+          if (!resp.ok) throw new Error(`Download failed ${resp.status}`);
+          const buf = Buffer.from(await resp.arrayBuffer());
+          r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, fileName));
+        } catch (err) {
+          console.warn("⚠️ Failed to upload to R2, falling back to generator URL:", err.message);
+          r2Url = normalizeToPublicR2(remoteUrl);
+        }
+      }
+
+      // Download to local for resilience (uses R2 URL if available)
+      try {
+        await downloadToLocal(r2Url, fileName);
+      } catch (err) {
+        console.warn("⚠️ Failed to cache image locally, using remote URL:", err.message);
+      }
+
+      // Serve from R2; keep generator URL only in logs
+      recipe.image = r2Url;
+      const localPath = `/meal-images/${fileName}`;
+      recipe.imageUrl = r2Url;
+      console.log("🖼️ Image set on recipe", {
+        id: recipe.recipeId || recipe._id || recipe.id,
+        title,
+        url: r2Url,
+        remote: remoteUrl,
+        r2: r2Url
+      });
+      let zillizId = null;
+      const primaryIdRaw = recipe.recipeId || recipe._id || recipe.id;
+      if (primaryIdRaw) zillizId = String(primaryIdRaw);
       // If this recipe is already in Elasticsearch, persist the image URL there too
       const esIds = [recipe.recipeId, recipe._id, recipe.id].filter(Boolean);
       let persisted = false;
@@ -222,11 +443,12 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
           await esClient.update({
             index: recipeIndex,
             id: esId,
-            doc: { image: url, imageUrl: url },
+            doc: { image: r2Url, imageUrl: r2Url },
             doc_as_upsert: false,
           });
           console.log("✅ Persisted image to ES", { id: esId, index: recipeIndex });
           persisted = true;
+          zillizId = String(esId);
           break; // success
         } catch (err) {
           if (err?.meta?.statusCode !== 404) {
@@ -247,11 +469,12 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
             await esClient.update({
               index: recipeIndex,
               id: hitId,
-              doc: { image: url, imageUrl: url },
+              doc: { image: r2Url, imageUrl: r2Url },
               doc_as_upsert: false,
             });
             console.log("✅ Persisted image to ES via title lookup", { title, id: hitId, index: recipeIndex });
             persisted = true;
+            zillizId = String(hitId);
           } else {
             console.log("ℹ️ No ES hit found by title for image persistence", { title });
           }
@@ -263,6 +486,9 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
       } else if (!esIds.length && !title) {
         console.log("ℹ️ Skipped ES persistence: no recipe IDs and no title found on recipe");
       }
+
+      // Try to persist image to Zilliz as partial update
+      await upsertImageToZilliz(zillizId, r2Url, r2Url);
     }
     return meal;
   } catch (err) {

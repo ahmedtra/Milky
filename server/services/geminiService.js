@@ -254,6 +254,45 @@ class GeminiService {
     );
   }
 
+  async fetchWeatherContext() {
+    const lat = process.env.WEATHER_LAT;
+    const lon = process.env.WEATHER_LON;
+    if (!lat || !lon) return null;
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,precipitation,weathercode&timezone=UTC`;
+      const res = await fetch(url, { timeout: 5000 });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const current = data?.current;
+      if (!current) return null;
+      const temp = current.temperature_2m;
+      const feels = current.apparent_temperature;
+      const precip = current.precipitation;
+      const code = current.weathercode;
+      const describeCode = (c) => {
+        if (c === undefined || c === null) return '';
+        if ([0].includes(c)) return 'clear';
+        if ([1, 2, 3].includes(c)) return 'partly cloudy';
+        if ([45, 48].includes(c)) return 'foggy';
+        if ([51, 53, 55, 56, 57].includes(c)) return 'drizzle';
+        if ([61, 63, 65, 66, 67].includes(c)) return 'rain';
+        if ([71, 73, 75, 77, 85, 86].includes(c)) return 'snow';
+        if ([80, 81, 82].includes(c)) return 'showers';
+        if ([95, 96, 99].includes(c)) return 'thunderstorms';
+        return 'mixed';
+      };
+      const parts = [];
+      if (temp !== undefined) parts.push(`temp ${temp}°C`);
+      if (feels !== undefined) parts.push(`feels ${feels}°C`);
+      if (precip !== undefined) parts.push(precip > 0 ? `precip ${precip} mm` : 'dry');
+      const desc = describeCode(code);
+      if (desc) parts.push(desc);
+      return parts.filter(Boolean).join(', ');
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Fetch candidate recipes from Elasticsearch for a given meal type and preferences.
    * This keeps the LLM grounded on existing recipes rather than inventing new ones.
@@ -712,6 +751,7 @@ class GeminiService {
       duration,
       randomSeed
     });
+    const weatherContext = await this.fetchWeatherContext();
 
     const fallbackPlan = this.buildFallbackMealPlan({
       blueprint: ingredientBlueprint,
@@ -843,6 +883,7 @@ class GeminiService {
         Disliked Foods: ${userPreferences.dislikedFoods?.join(', ') || 'None'}
         Preferred ingredients (try to use at least ONE when relevant; skip if none fit): ${Array.isArray(userPreferences.includeIngredients) && userPreferences.includeIngredients.length ? userPreferences.includeIngredients.join(', ') : 'None specified'}
         Context: Month ${monthLabel}, Weekday ${weekdayLabel}. Adjust variety accordingly (e.g., lighter on busy weekdays, seasonal feel by month). If you infer current weather from context, reflect it subtly; otherwise ignore.
+        Weather snapshot (from open-meteo): ${weatherContext || 'unknown/skip if not useful'}.
         
         Generate ONLY these meals (skip all others): ${mealTypes.join(', ')}.
 

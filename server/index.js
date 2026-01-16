@@ -16,6 +16,7 @@ const adminLogRoutes = require('./routes/adminLogs');
 const requestLogger = require('./middleware/requestLogger');
 const { initializeTelegramBot } = require('./services/telegramBot');
 const { initializeNotificationScheduler } = require('./services/notificationScheduler');
+const { initializeImageMaintenance } = require('./services/imageMaintenance');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -36,7 +37,8 @@ app.use(limiter);
 app.use((req, res, next) => {
   const csp = [
     "default-src 'self'",
-    "img-src 'self' data: https: https://cdn.leonardo.ai https://*.leonardo.ai",
+    // Allow Leonardo CDN, Drive public URLs, and SiliconFlow/S3 image URLs
+    "img-src 'self' data: https: https://cdn.leonardo.ai https://*.leonardo.ai https://*.amazonaws.com https://*.r2.cloudflarestorage.com https://*.r2.dev",
     "style-src 'self' 'unsafe-inline' https:",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
     "connect-src 'self' https: http:",
@@ -87,6 +89,7 @@ if (process.env.DISABLE_TELEGRAM_BOT !== 'true') {
 
 // Initialize notification scheduler
 initializeNotificationScheduler();
+initializeImageMaintenance();
 
 // Routes
 app.use('/api/gemini', geminiRoutes);
@@ -106,6 +109,10 @@ app.get('/api/health', (req, res) => {
 // Serve React build
 const path = require('path');
 const buildPath = path.resolve(__dirname, '../frontend/dist');
+
+// Serve locally cached meal images
+const imagesPath = path.resolve(__dirname, '../public');
+app.use(express.static(imagesPath));
 
 app.use(express.static(buildPath));
 

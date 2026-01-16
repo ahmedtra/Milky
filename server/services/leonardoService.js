@@ -81,37 +81,29 @@ function sanitizePromptText(text) {
 
 function buildPrompt(recipe) {
   const name = recipe?.name || "meal";
-  const ingList = Array.isArray(recipe?.ingredients) ? recipe.ingredients.slice(0, 6) : [];
-  // Keep prompt tight to avoid moderation and length issues
-  const instructionsList = Array.isArray(recipe?.instructions) ? recipe.instructions.slice(0, 2) : [];
-
+  const ingList = Array.isArray(recipe?.ingredients) ? recipe.ingredients.slice(0, 8) : [];
   const ingredients = ingList
     .map((ing) => (typeof ing === "string" ? ing : ing?.name))
     .filter(Boolean)
     .slice(0, 8)
     .join(", ");
-  const instructions = instructionsList
-    .map((s) => (typeof s === "string" ? s : null))
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(". ");
 
-  const details = [];
-  if (ingredients) details.push(`Key ingredients: ${ingredients}.`);
-  if (instructions) details.push(`Cooking steps: ${instructions}.`);
+  const heroDetail = ingredients ? `Hero details: ${ingredients}.` : "";
 
   const prompt = [
-    "Ultra-realistic, appetizing food photo of the finished dish on a plate, inviting to eat.",
-    "Plated like a modern bistro: clean white plate, gentle highlights, natural daylight, shallow depth of field.",
-    "Warm tones, light steam if hot, fresh herbs or citrus for brightness, no text or watermarks.",
-    `Dish: ${name}.`,
-    details.join(" "),
-    "Emphasize texture and juiciness; keep background uncluttered."
+    `Commercial food photography of ${name}, freshly plated and truly appetizing.`,
+    "Modern bistro plating on a clean white ceramic plate; intentional negative space; neat portions.",
+    "45-degree angle, 85mm lens look, f/2.8 shallow depth of field; soft natural window light from the left with gentle shadows and warm, accurate color.",
+    "Textures look real: glossy sauce or dressing, juicy interior, crisp edges where appropriate; fresh garnish (herbs or citrus zest); subtle steam only if served hot.",
+    "Uncluttered neutral table, no distracting props.",
+    heroDetail,
+    "Avoid: plastic, waxy, rubbery, dry, burnt, soggy, greasy puddle, messy plating, dirty plate, crumbs, low contrast, flat lighting, gray cast, oversaturated, blurry, noise, jpeg artifacts, deformed shapes, extra utensils, text, watermark, logo."
   ]
+    .filter(Boolean)
     .join(" ")
     .trim();
 
-  return sanitizePromptText(prompt);
+  return truncatePrompt(sanitizePromptText(prompt), 1400);
 }
 
 function truncatePrompt(prompt, maxLen = 1400) {
@@ -219,11 +211,11 @@ async function summarizePromptWithGroq(recipe) {
     {
       role: "system",
       content:
-        "You are crafting a concise prompt (<=1400 characters) for a food photo generator. Describe a ready-to-eat plated dish. Avoid raw/skimpy terms. Keep it simple, appetizing, and photogenic.",
+        "You write a single vivid prompt (<=800 characters) for a food photo generator. Describe the finished plated dish only—no cooking steps. Focus on what the camera sees: hero ingredients, textures (glossy sauce, juicy interior, crisp edges), garnish, plate style, lighting, angle, lens. Keep it appetizing, modern, and realistic. No markdown, no bullet points, no instructions, no watermarks/text.",
     },
     {
       role: "user",
-      content: `Build a single prompt for a plated food photo. Use this recipe data: ${JSON.stringify(userPayload)}. Keep it short and safe.`,
+      content: `Craft one photogenic food-photo prompt for: ${name}. Use these hints: ${JSON.stringify(userPayload)}. Describe plating, camera angle (~45 degrees), soft natural light, shallow depth of field, clean white plate, neat portions, fresh garnish, accurate warm color. Mention 1-2 visible hero ingredients. Do NOT include cooking verbs or steps.`,
     },
   ];
   try {
@@ -277,7 +269,9 @@ async function generateMealImage(recipe) {
     throw new Error("No image provider API key configured");
   }
   const groqPrompt = await summarizePromptWithGroq(recipe);
-  const prompt = truncatePrompt(groqPrompt || buildPrompt(recipe));
+  // Combine Groq description with our safety/negative prompt for robustness
+  const promptParts = [groqPrompt, buildPrompt(recipe)].filter(Boolean);
+  const prompt = truncatePrompt(promptParts.join(" "), 1400);
 
       // Prefer SiliconFlow if configured
       if (hasSiliconKey()) {
@@ -292,7 +286,7 @@ async function generateMealImage(recipe) {
         body: JSON.stringify({
           model: SILICONFLOW_MODEL,
           prompt,
-          image_size: "768x768",
+          image_size: "1024x1024",
           n: 1,
         }),
       });
@@ -317,8 +311,8 @@ async function generateMealImage(recipe) {
     prompt,
     modelId: LEONARDO_MODEL_ID,
     num_images: 1,
-    width: 768,
-    height: 768,
+    width: 1024,
+    height: 1024,
     guidance_scale: 7,
     alchemy: true,
     presetStyle: "FOOD",

@@ -108,9 +108,8 @@ export default function Dashboard() {
   };
 
   const resolveTodayContext = () => {
-    const planByRange = activePlans.find(planCoversToday);
-    const plan = planByRange || (planCoversToday(activePlan) ? activePlan : activePlans[0] || activePlan);
-    if (!plan?.days) return { plan: plan || activePlan, day: undefined, index: -1 };
+    const plan = activePlans.find(planCoversToday) || (planCoversToday(activePlan) ? activePlan : null);
+    if (!plan?.days) return { plan: null, day: undefined, index: -1 };
 
     // Direct match on stored date
     let idx = plan.days.findIndex((d: any) => normalizeDate(d.date) === todayStr);
@@ -128,7 +127,8 @@ export default function Dashboard() {
       }
     }
 
-    return { plan, day: plan.days[0], index: 0 };
+    // No active plan covering today
+    return { plan: null, day: undefined, index: -1 };
   };
 
   const { plan: todayPlan, day: todayDay, index: todayDayIndex } = resolveTodayContext();

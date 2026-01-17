@@ -10,6 +10,48 @@ const LOG_MEALPLAN = process.env.LOG_MEALPLAN === 'true';
 const logMealplan = (...args) => {
   if (LOG_MEALPLAN) console.log(...args);
 };
+
+// Summarize a user recipe request into a concise search text using Groq (if available)
+const summarizeSearchText = async (message, intent, conversationHistory = []) => {
+  if (!groqChat || !process.env.GROQ_API_KEY) return message;
+  try {
+    const recentContext = (() => {
+      const lastAssistant = [...conversationHistory].reverse().find((m) => m.role === 'assistant')?.content || '';
+      const lastUser = [...conversationHistory].reverse().find((m) => m.role === 'user')?.content || '';
+      return { lastAssistant, lastUser };
+    })();
+    const prompt = [
+      "You rewrite the user's request into a concise recipe search query (one short sentence).",
+      "Focus on dish type, meal type, cuisine, diet, and key include/exclude ingredients.",
+      "Do NOT add opinions, instructions, or numbers; keep it 10-25 words, plain text.",
+      "If the conversation already lists recipes, infer style/meal type from the latest assistant reply."
+    ].join(" ");
+    const hints = {
+      message,
+      mealType: intent?.mealType || null,
+      diet: intent?.diet || null,
+      include: intent?.includeIngredients || null,
+      exclude: intent?.excludeIngredients || null,
+      cuisine: intent?.cuisine || null,
+      lastAssistant: recentContext.lastAssistant,
+      lastUser: recentContext.lastUser
+    };
+    const { content } = await groqChat({
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: `Request: ${message}. Hints: ${JSON.stringify(hints)}` }
+      ],
+      maxTokens: 80,
+      temperature: 0.2
+    });
+    const cleaned = (content || "").replace(/[\n\r]+/g, " ").trim();
+    return cleaned.length ? cleaned : message;
+  } catch (err) {
+    console.warn("ℹ️ Groq search summarizer failed; using raw message", err.message);
+    return message;
+  }
+};
+
 const buildQueryVector = async (text) => {
   if (!text) return null;
 
@@ -1849,7 +1891,8 @@ ${mealSchemas}
       }
 
       if (intent?.intent === 'recipe_search') {
-        const vectorInput = intent.recipeTitle || message;
+        const searchText = await summarizeSearchText(message, intent, conversationHistory);
+        const vectorInput = intent.recipeTitle || searchText;
         const queryVector = await buildQueryVector(vectorInput);
         const cleanVal = (v) => (v && String(v).toLowerCase() !== 'null' ? v : null);
         const cleanList = (arr = []) =>
@@ -1857,7 +1900,7 @@ ${mealSchemas}
             .map((v) => (typeof v === 'string' ? v.toLowerCase().trim() : v))
             .filter((v) => v && v !== 'null');
         const filters = {
-          text: message,
+          text: searchText,
           diet_tags: cleanList(intent.diet ? [intent.diet] : []),
           include_ingredients: cleanList(intent.includeIngredients || []),
           exclude_ingredients: cleanList(intent.excludeIngredients || []),
@@ -1868,7 +1911,7 @@ ${mealSchemas}
           filters.query_vector = queryVector;
         }
         const { results } = await searchRecipes(filters, { size: 5, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-        const keyword = (intent.recipeTitle || message || '').toLowerCase().trim();
+        const keyword = intent.recipeTitle ? intent.recipeTitle.toLowerCase().trim() : '';
         const filtered = keyword
           ? (results || []).filter((r) => (r.title || '').toLowerCase().includes(keyword))
           : results || [];
@@ -1912,7 +1955,6 @@ ${mealSchemas}
           const candidateData = useResults.map((r, idx) => ({
             id: r.id || r._id || `c${idx}`,
             title: r.title || r.name,
-            ai: isAiGenerated(r),
             calories: r.nutrition?.calories ?? r.calories,
             protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
             time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes

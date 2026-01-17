@@ -504,7 +504,7 @@ export default function MealPlans() {
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
                 <TrendingUp className="h-6 w-6 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-lg font-bold text-foreground truncate">
                   {isLoading ? "—" : activePlan?.title || "No active plan"}
                 </p>
@@ -547,7 +547,7 @@ export default function MealPlans() {
               return (
                 <div key={planId} className="glass-card p-5">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="flex-1 cursor-pointer" onClick={() => {
+                    <div className="flex-1 cursor-pointer min-w-0" onClick={() => {
                       setExpandedPlanId(planId);
                       const desiredStart = computeFirstFreeStartDate(planId);
                       if (plan.startDate !== desiredStart) {
@@ -561,8 +561,8 @@ export default function MealPlans() {
                       setSelectedDay({ planId, dayIndex: 0 });
                       setSelectedMeal(null);
                     }}>
-                      <p className="text-base sm:text-lg font-semibold text-foreground">{plan.title}</p>
-                      {plan.description && <p className="text-xs sm:text-sm text-muted-foreground">{plan.description}</p>}
+                      <p className="text-base sm:text-lg font-semibold text-foreground truncate">{plan.title}</p>
+                      {plan.description && <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{plan.description}</p>}
                       <div className="flex gap-2 mt-2 flex-wrap text-xs">
                         <span className="px-3 py-1 rounded-full bg-primary/10 text-primary font-semibold">
                           {plan.status || "draft"}

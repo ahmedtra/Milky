@@ -93,7 +93,7 @@ const mapSearchHitToPlanRecipe = (hit) => {
   return {
     externalId: hit.id,
     name: hit.title || hit.name || 'Untitled recipe',
-    description: hit.description || '',
+    description: hit.description || hit.summary || '',
     prepTime: Number(hit.prep_time_minutes) || Number(hit.total_time_minutes) || undefined,
     cookTime: Number(hit.cook_time_minutes) || undefined,
     servings: 1,
@@ -194,11 +194,14 @@ router.post('/', auth, async (req, res) => {
 
     // Fill missing description and nutrition, prefer LLM-generated metadata
     const needsDescription = !planRecipe.description && !planRecipe.summary;
-    const hasNutrition =
-      planRecipe.nutrition &&
-      Number(planRecipe.nutrition.calories) > 0 &&
-      Number(planRecipe.nutrition.protein) > 0;
-    const needsNutrition = !hasNutrition;
+    const hasMacro = (value) => Number(value) > 0;
+    const macros = planRecipe.nutrition || {};
+    const needsNutrition = !(
+      hasMacro(macros.calories) &&
+      hasMacro(macros.protein) &&
+      hasMacro(macros.carbs) &&
+      hasMacro(macros.fat)
+    );
 
     if (needsDescription || needsNutrition) {
       try {
@@ -215,7 +218,13 @@ router.post('/', auth, async (req, res) => {
             }
           }
           if (needsNutrition) {
-            planRecipe.nutrition = ensureNutritionDefaults(llmMeta.nutrition);
+            const llmNutrition = ensureNutritionDefaults(llmMeta.nutrition);
+            planRecipe.nutrition = {
+              ...(planRecipe.nutrition || {}),
+              ...Object.fromEntries(
+                Object.entries(llmNutrition).filter(([key, val]) => !hasMacro(macros[key]) && Number(val) > 0)
+              )
+            };
           }
         }
       } catch (metaErr) {

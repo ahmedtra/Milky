@@ -201,7 +201,9 @@ export default function Chat() {
       .filter(Boolean);
     try {
       setSavingRecipe("editing");
+      const nutrition = latestRecipe?.nutrition || null;
       const saved = await saveFavoriteRecipe({
+        recipeId: latestRecipe?.id || undefined,
         recipe: {
           title: editTitle.trim(),
           name: editTitle.trim(),
@@ -209,6 +211,7 @@ export default function Chat() {
           instructions,
           imageUrl: latestRecipe?.imageUrl || null,
           source: latestRecipe?.source || "chat",
+          nutrition,
         },
       });
       let imageUrl = latestRecipe?.imageUrl || null;
@@ -230,6 +233,7 @@ export default function Chat() {
         source: latestRecipe?.source || "chat",
         id: favId,
         imageUrl,
+        nutrition,
       });
     } catch (err) {
       console.error(err);

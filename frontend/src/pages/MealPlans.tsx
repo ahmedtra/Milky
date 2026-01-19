@@ -368,7 +368,10 @@ export default function MealPlans() {
     const recipe = meal?.recipes?.[0];
     if (!meal || !recipe) return;
     try {
+      const recipeId = recipe.externalId || recipe.id || recipe._id;
+      const nutrition = recipe.nutrition || meal.totalNutrition || undefined;
       const saved = await saveFavoriteRecipe({
+        recipeId,
         recipe: {
           title: recipe.name || recipe.title || meal.type || "Recipe",
           name: recipe.name || recipe.title || meal.type || "Recipe",
@@ -376,6 +379,7 @@ export default function MealPlans() {
           instructions: recipe.instructions || [],
           imageUrl: recipe.imageUrl || recipe.image || null,
           source: "meal",
+          nutrition,
         },
       });
       const favId = saved?.favorite?._id || saved?.favorite?.id;

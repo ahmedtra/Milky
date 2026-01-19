@@ -27,6 +27,13 @@ export function useChat() {
     source?: string;
     id?: string | null;
     imageUrl?: string | null;
+    nutrition?: {
+      calories?: number | string;
+      protein?: number | string;
+      carbs?: number | string;
+      fat?: number | string;
+      time?: number | string;
+    } | null;
   } | null>(null);
   const [latestListIntent, setLatestListIntent] = useState<{
     title: string;
@@ -158,6 +165,7 @@ export function useChat() {
           source: recipePayload.source,
           id: recipePayload.id,
           imageUrl: recipePayload.imageUrl || null,
+          nutrition: recipePayload.nutrition || null,
         });
       }
       if (shoppingPayload?.type === 'shopping_list') {

@@ -50,7 +50,7 @@ if (!rateLimitDisabled) {
       return req.ip === '127.0.0.1' || req.ip === '::1';
     }
   });
-  app.use(limiter);
+  app.use('/api', limiter);
 }
 
 // Relaxed CSP to allow external images (e.g., Leonardo CDN) and APIs

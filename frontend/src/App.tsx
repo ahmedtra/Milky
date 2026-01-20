@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner"; // Using sonner for easy feedback
 import NoSleep from "nosleep.js";
@@ -80,6 +80,18 @@ const App = () => {
       }
       noSleepRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    // Pause React Query focus state when tab is hidden.
+    const onVisibility = () => {
+      const isVisible = !document.hidden;
+      focusManager.setFocused(isVisible);
+      onlineManager.setOnline(isVisible);
+    };
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   const WakeLockBar: React.FC = () => {

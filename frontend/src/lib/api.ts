@@ -17,6 +17,16 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     },
   });
 
+  if (response.status === 401 && typeof window !== 'undefined') {
+    // Auth expired or invalid; clear token and force login flow.
+    try {
+      localStorage.removeItem('token');
+    } catch {
+      // ignore storage errors
+    }
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+  }
+
   if (!response.ok) {
     const errorText = await response.text();
     console.error('API error', {

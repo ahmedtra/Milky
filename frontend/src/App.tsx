@@ -118,7 +118,19 @@ export default App;
 
 const AppRoutes = ({ WakeLockBar }: { WakeLockBar: React.FC }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const hideBar = ["/", "/launch", "/login", "/register"].includes(location.pathname);
+
+  useEffect(() => {
+    const handleExpired = () => {
+      logout();
+      toast.error("Session expired. Please log in again.");
+      navigate("/login");
+    };
+    window.addEventListener("auth:expired", handleExpired as EventListener);
+    return () => window.removeEventListener("auth:expired", handleExpired as EventListener);
+  }, [logout, navigate]);
 
   return (
     <>

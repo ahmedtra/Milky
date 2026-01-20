@@ -721,8 +721,8 @@ export default function MealPlans() {
         favorites={favorites.items}
         onFavorite={handleFavoriteMeal}
         onSwapOpen={(dayIdx, mealIdx) => selectedDay && handleSwapOpen(selectedDay.planId, dayIdx, mealIdx)}
-        onApplyAlternative={(dayIdx, mealIdx, recipeId) =>
-          selectedDay && handleApplyAlternative(selectedDay.planId, dayIdx, mealIdx, recipeId)
+        onApplyAlternative={(dayIdx, mealIdx, recipeId, recipe) =>
+          selectedDay && handleApplyAlternative(selectedDay.planId, dayIdx, mealIdx, recipeId, recipe)
         }
         onToggleMeal={(dayIdx, mealIdx, isCompleted) => {
           if (!selectedDay) return;

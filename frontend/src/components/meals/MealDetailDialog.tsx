@@ -63,31 +63,36 @@ export function MealDetailDialog({
     onOpenChange(val);
   };
 
+  const recipe = meal?.recipes?.[0] || {};
+  const img = recipe?.image || recipe?.imageUrl || meal?.image || meal?.imageUrl;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden" hideClose aria-describedby={undefined}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" hideClose aria-describedby={undefined}>
         <DialogTitle className="sr-only">Meal details</DialogTitle>
-        <div className="relative px-6 py-4 max-h-[90vh]">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background shadow-md"
-            onClick={onPrev}
-            aria-label="Previous meal"
-          >
-            ◀
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-background shadow-md"
-            onClick={onNext}
-            aria-label="Next meal"
-          >
-            ▶
-          </Button>
+        <div className="relative px-6 py-4">
+          <div className="sticky top-1/2 -translate-y-1/2 z-10 h-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute -left-3 rounded-full bg-background shadow-md"
+              onClick={onPrev}
+              aria-label="Previous meal"
+            >
+              ◀
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute -right-3 rounded-full bg-background shadow-md"
+              onClick={onNext}
+              aria-label="Next meal"
+            >
+              ▶
+            </Button>
+          </div>
 
-          <div className="space-y-4 overflow-y-auto max-h-[78vh] pr-1">
+          <div className="space-y-4 pr-1">
             <div className="flex items-start justify-between mb-2">
               <div>
                 <p className="text-sm text-primary font-semibold">Meal</p>
@@ -101,81 +106,57 @@ export function MealDetailDialog({
               </Button>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl border bg-white/70 space-y-2 w-full max-w-full md:max-w-[34rem]">
-                <h4 className="font-semibold text-foreground mb-2">Instructions</h4>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!instructionsArray.length}
-                    onClick={() => setCookMode(true)}
-                  >
-                    Start Cook Mode
-                  </Button>
+            {img ? (
+              <img
+                src={img}
+                alt={meal.recipes?.[0]?.name || meal.type || "Meal"}
+                className="w-full h-48 rounded-lg object-cover border border-border/60"
+              />
+            ) : null}
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {macros.calories ? `${macros.calories} cal` : "— cal"}{" "}
+              {macros.protein ? `• ${macros.protein}g protein` : ""}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Ingredients</p>
+              {ingredients.length ? (
+                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 break-words">
+                  {ingredients.map((ing, ingIdx) => (
+                    <li key={ingIdx} className="break-words break-all whitespace-pre-wrap">{ing}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Ingredients not available.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Instructions</p>
+              {instructionsArray.length ? (
+                <div className="space-y-1 text-sm text-muted-foreground break-words max-w-full overflow-hidden">
+                  {instructionsArray.map((step, stepIdx) => (
+                    <div key={stepIdx} className="flex items-start gap-2 text-left">
+                      <span className="text-primary font-semibold flex-shrink-0">{stepIdx + 1}.</span>
+                      <span className="flex-1 min-w-0 break-words break-all whitespace-pre-wrap">{step}</span>
+                    </div>
+                  ))}
                 </div>
-                {instructionsArray.length ? (
-                  <div className="space-y-1 text-sm text-muted-foreground break-words max-w-full overflow-hidden">
-                    {instructionsArray.map((step, stepIdx) => (
-                      <div key={stepIdx} className="flex items-start gap-2 text-left">
-                        <span className="text-primary font-semibold flex-shrink-0">{stepIdx + 1}.</span>
-                        <span className="flex-1 min-w-0 break-words break-all whitespace-pre-wrap">{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No instructions provided.</p>
-                )}
-              </div>
-              <div className="p-4 rounded-xl border bg-white/70 space-y-2 w-full max-w-full md:max-w-[34rem]">
-                <h4 className="font-semibold text-foreground mb-2">Ingredients</h4>
-                {ingredients.length ? (
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 break-words">
-                    {ingredients.map((ing, ingIdx) => (
-                      <li key={ingIdx} className="break-words break-all whitespace-pre-wrap">{ing}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Ingredients not available.</p>
-                )}
-              </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No instructions provided.</p>
+              )}
             </div>
 
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Protein: {macros.protein}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Carbs: {macros.carbs}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Fats: {macros.fats}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Fiber: {macros.fiber}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Sugar: {macros.sugar}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center">
-                Calories: {macros.calories}
-              </div>
-              <div className="p-3 rounded-lg bg-primary/10 text-primary font-semibold text-center col-span-2 md:col-span-3">
-                Time: {time || "--:--"}
-              </div>
-            </div>
-
-            <div className="mt-2 flex gap-2 flex-wrap justify-end">
-              <Button variant="secondary" size="sm" onClick={onSwap}>
-                Swap
+            <div className="mt-4 flex justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!instructionsArray.length}
+                onClick={() => setCookMode(true)}
+              >
+                Start Cook Mode
               </Button>
-              <Button variant="secondary" size="sm" onClick={onToggleComplete}>
-                {isCompleted ? "Completed" : "Complete"}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={onDelete}>
-                Delete
-              </Button>
-              {isCompleted && <Check className="h-4 w-4 text-primary" />}
             </div>
           </div>
         </div>

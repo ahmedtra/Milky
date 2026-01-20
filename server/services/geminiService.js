@@ -1,6 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { searchRecipes, getRecipeById } = require('./recipeSearch/searchService');
 const { logEvent } = require('../utils/logger');
+const { ensureMealImage } = require('./leonardoService');
 const { groqChat } = require('./groqClient');
 // Node 18+ has global fetch; no import required.
 
@@ -805,6 +806,7 @@ class GeminiService {
     try {
       // Generate one day at a time for better reliability
       const days = [];
+      const imageTasks = [];
       const startDate = new Date();
       const recentIds = []; // track recent recipe ids to avoid back-to-back repeats
       const usedRecipeIds = new Set(); // track all recipes used in the plan to avoid repeats
@@ -1021,15 +1023,28 @@ ${mealSchemas}
             recentIds.splice(0, recentIds.length, ...idsToday);
             idsToday.forEach((id) => usedRecipeIds.add(String(id)));
             days.push(dayData);
+            imageTasks.push(
+              Promise.allSettled((dayData.meals || []).map((meal) => ensureMealImage(meal)))
+            );
           } else {
             console.warn(`⚠️ Day ${dayIndex + 1} failed, using fallback`);
-            days.push(fallbackPlan.days[dayIndex]);
+            const fallbackDay = fallbackPlan.days[dayIndex];
+            days.push(fallbackDay);
+            imageTasks.push(
+              Promise.allSettled((fallbackDay?.meals || []).map((meal) => ensureMealImage(meal)))
+            );
           }
         } catch (dayError) {
           console.error(`❌ Error generating day ${dayIndex + 1}:`, dayError.message);
-          days.push(fallbackPlan.days[dayIndex]);
+          const fallbackDay = fallbackPlan.days[dayIndex];
+          days.push(fallbackDay);
+          imageTasks.push(
+            Promise.allSettled((fallbackDay?.meals || []).map((meal) => ensureMealImage(meal)))
+          );
         }
       }
+
+      await Promise.allSettled(imageTasks);
 
       // Generation complete
       logMealplan(`✅ Meal plan generation complete: ${days.length} days`);

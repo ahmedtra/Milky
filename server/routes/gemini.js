@@ -156,6 +156,15 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       sugar: Number(nut?.sugar) || 0
     });
 
+    const defaultMealTimes = {
+      breakfast: '08:00',
+      lunch: '12:30',
+      dinner: '19:00',
+      snack: '15:30',
+    };
+    const resolveMealTime = (mealType) =>
+      preferences.mealTimes?.[mealType] || defaultMealTimes[mealType] || '12:00';
+
     // Build sanitized days asynchronously to allow LLM-based ingredient normalization
     const sanitizedDays = [];
     for (const day of aiMealPlan.days || []) {
@@ -176,6 +185,7 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
           }
         mealsOut.push({
           ...meal,
+          scheduledTime: meal.scheduledTime || resolveMealTime(String(meal.type || '').toLowerCase()),
           totalNutrition: sanitizeNutrition(meal.totalNutrition),
           recipes: recipesOut
         });
@@ -183,7 +193,7 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
       sanitizedDays.push({ ...day, meals: mealsOut });
     }
 
-    // Create and save meal plan document to MongoDB
+    // Create meal plan document
     const mealPlan = new MealPlan({
       userId: req.user._id,
       title: aiMealPlan.title || `AI Generated Meal Plan - ${duration} days`,

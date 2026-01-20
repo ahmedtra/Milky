@@ -533,7 +533,7 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
       favoriteAlts = favorites.map((fav) => ({
         id: fav.externalId || fav._id,
         title: fav.title,
-        description: fav.summary || 'Favorite recipe',
+        description: '',
         calories: fav.calories,
         protein_grams: fav.protein,
         prep_time_minutes: fav.totalTime,
@@ -577,7 +577,8 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
       protein_grams: hit.protein_grams,
       prep_time_minutes: hit.prep_time_minutes,
       cook_time_minutes: hit.cook_time_minutes,
-      tags: hit.tags || hit.dietary_tags || hit.diet_tags || []
+      tags: hit.tags || hit.dietary_tags || hit.diet_tags || [],
+      recipe: mapSearchHitToPlanRecipe(hit)
     }));
 
     res.json({ alternatives: summarized, favorites: favoriteAlts, count: summarized.length });

@@ -24,7 +24,7 @@ interface DayDetailDialogProps {
   swapState: { key: string | null; options: any[]; loading: boolean; applying: boolean };
   swapKeyFor: (planId: string, dayIndex: number, mealIndex: number) => string;
   onSwapOpen: (dayIdx: number, mealIdx: number) => void;
-  onApplyAlternative: (dayIdx: number, mealIdx: number, recipeId: string) => void;
+  onApplyAlternative: (dayIdx: number, mealIdx: number, recipeId?: string, recipe?: any) => void;
   onToggleMeal: (dayIdx: number, mealIdx: number, isCompleted: boolean) => void;
   onDeleteMeal: (dayIdx: number, mealIdx: number) => void;
   startDate?: string;
@@ -207,6 +207,7 @@ export function DayDetailDialog({
                   <div className="space-y-3">
                     {(currentDay.meals || []).map((meal: Meal, mIdx: number) => {
                       const recipe = meal?.recipes?.[0] || {};
+                      const img = recipe?.image || recipe?.imageUrl || meal?.image || meal?.imageUrl;
                       const recipeName = recipe?.name || recipe?.title || "";
                       const isLlmFallback = Array.isArray(recipe?.tags) && recipe.tags.includes("llm-fallback");
                       const isSwapOpen = swapState.key === swapKeyFor(planId, safeIndex, mIdx);
@@ -221,6 +222,19 @@ export function DayDetailDialog({
                         onClick={() => onSelectMeal(safeIndex, mIdx)}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                          <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-border/60 bg-secondary">
+                            {img ? (
+                              <img
+                                src={img}
+                                alt={recipe.name || meal.type || "Meal"}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[11px] text-muted-foreground">
+                                No image
+                              </div>
+                            )}
+                          </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
                               {recipe.name || meal.type || "Meal"}
@@ -320,7 +334,8 @@ export function DayDetailDialog({
                                           onApplyAlternative(
                                             safeIndex,
                                             mIdx,
-                                            opt?.recipeId || opt?._id || opt?.id
+                                            opt?.recipeId || opt?._id || opt?.id,
+                                            opt?.recipe
                                           );
                                         }}
                                       >

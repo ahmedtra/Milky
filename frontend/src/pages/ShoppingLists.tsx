@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Plus, Check, ShoppingCart, Loader2, 
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { generateShoppingListFromPlan } from "@/lib/api";
+import { ShoppingMode } from "@/components/shopping/ShoppingMode";
 
 export default function ShoppingLists() {
   const { data: lists, isLoading } = useShoppingLists();
@@ -37,6 +38,7 @@ export default function ShoppingLists() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [quantityOverrides, setQuantityOverrides] = useState<Record<string, { amount: number; unit: string }>>({});
+  const [shoppingModeListId, setShoppingModeListId] = useState<string | null>(null);
   const touchStartX = useRef<number | null>(null);
   const swipeDetected = useRef(false);
   const sectionLabels: Record<string, string> = {
@@ -217,6 +219,25 @@ export default function ShoppingLists() {
   const filteredLists = (lists || []).filter(list => 
     (list.title || 'Untitled list').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const shoppingModeList = useMemo(() => {
+    if (!shoppingModeListId) return null;
+    return (lists || []).find((list) => getListId(list) === shoppingModeListId) || null;
+  }, [lists, shoppingModeListId]);
+
+  const buildSections = (items: any[]) => {
+    const grouped = items.reduce<Record<string, typeof items>>((acc, item) => {
+      const section = (item.category || item.storeSection || "other").toLowerCase();
+      acc[section] = acc[section] || [];
+      acc[section].push(item);
+      return acc;
+    }, {});
+    return Object.entries(grouped).map(([section, sectionItems]) => ({
+      section,
+      label: sectionLabels[section] || section,
+      items: sectionItems,
+    }));
+  };
 
   const activeCount = lists?.filter(l => l.status === 'active').length || 0;
   const completedCount = lists?.filter(l => l.status === 'completed').length || 0;
@@ -532,6 +553,16 @@ export default function ShoppingLists() {
                             )}>
                               {list.status}
                             </div>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShoppingModeListId(getListId(list));
+                              }}
+                            >
+                              Shopping Mode
+                            </Button>
                           </div>
 
                           {items.length > 0 && (
@@ -662,6 +693,24 @@ export default function ShoppingLists() {
           )}
         </div>
       </main>
+      {shoppingModeList && (
+        <ShoppingMode
+          title={shoppingModeList.title || "Shopping List"}
+          itemsBySection={buildSections(Array.isArray(shoppingModeList.items) ? shoppingModeList.items : [])}
+          sectionStyles={sectionStyles}
+          onToggleItem={(item) => {
+            updateItemMutation.mutate({
+              listId: getListId(shoppingModeList),
+              itemId: getItemId(item),
+              purchased: !item.purchased,
+            });
+          }}
+          getItemKey={getItemId}
+          normalizeDisplayQuantity={normalizeDisplayQuantity}
+          computeItemPrice={computeItemPrice}
+          onExit={() => setShoppingModeListId(null)}
+        />
+      )}
     </div>
   );
 }

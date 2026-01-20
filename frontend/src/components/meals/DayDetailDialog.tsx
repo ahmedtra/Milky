@@ -221,8 +221,8 @@ export function DayDetailDialog({
                         )}
                         onClick={() => onSelectMeal(safeIndex, mIdx)}
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                          <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-border/60 bg-secondary">
+                        <div className="flex items-stretch gap-3">
+                          <div className="w-24 sm:w-28 shrink-0 rounded-lg overflow-hidden border border-border/60 bg-secondary">
                             {img ? (
                               <img
                                 src={img}
@@ -235,75 +235,78 @@ export function DayDetailDialog({
                               </div>
                             )}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-foreground text-sm md:text-base leading-snug line-clamp-2">
-                              {recipe.name || meal.type || "Meal"}
-                            </p>
-                            <p className="text-xs sm:text-sm text-muted-foreground truncate flex items-center gap-2">
-                              <span>{meal.type || "Meal"}</span>
-                              {Array.isArray(recipe.tags) && recipe.tags.includes("llm-fallback") && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
-                                  <Sparkles className="h-3 w-3 text-primary" />
-                                  AI generated
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto sm:ml-auto sm:justify-end">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onSwapOpen(safeIndex, mIdx);
-                              }}
-                              className="flex items-center gap-1"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant={meal.isCompleted ? "outline" : "secondary"}
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleMeal(safeIndex, mIdx, !meal.isCompleted);
-                              }}
-                              className={cn(
-                                "flex items-center gap-1",
-                                meal.isCompleted ? "border-green-500 text-green-600" : ""
-                              )}
-                            >
-                              ✓
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onFavorite?.(safeIndex, mIdx);
-                              }}
-                              className={cn(
-                                "text-amber-500 hover:text-amber-600",
-                                isFavorite && "ring-2 ring-amber-200 shadow-sm"
-                              )}
-                            >
-                              <Star
-                                className={cn(
-                                  "h-5 w-5 fill-amber-400 text-amber-500",
-                                  isFavorite && "drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                          <div className="min-w-0 flex-1 flex flex-col justify-between">
+                            <div>
+                              <p className="font-semibold text-foreground text-base md:text-lg leading-snug line-clamp-2">
+                                {recipe.name || meal.type || "Meal"}
+                              </p>
+                              <p className="text-xs sm:text-sm text-muted-foreground truncate flex items-center gap-2">
+                                <span>{meal.type || "Meal"}</span>
+                                {Array.isArray(recipe.tags) && recipe.tags.includes("llm-fallback") && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                                    <Sparkles className="h-3 w-3 text-primary" />
+                                    AI generated
+                                  </span>
                                 )}
-                              />
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteMeal(safeIndex, mIdx);
-                              }}
-                            >
-                              ✕
-                            </Button>
+                              </p>
+                            </div>
+                            <div className="flex flex-nowrap items-center justify-end gap-2 w-full">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSwapOpen(safeIndex, mIdx);
+                                }}
+                                className="h-10 w-10 p-0 flex items-center justify-center"
+                              >
+                                <RefreshCw className="h-5 w-5" />
+                              </Button>
+                              <Button
+                                variant={meal.isCompleted ? "outline" : "secondary"}
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleMeal(safeIndex, mIdx, !meal.isCompleted);
+                                }}
+                                className={cn(
+                                  "h-10 w-10 p-0 flex items-center justify-center",
+                                  meal.isCompleted ? "border-green-500 text-green-600" : ""
+                                )}
+                              >
+                                ✓
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onFavorite?.(safeIndex, mIdx);
+                                }}
+                                className={cn(
+                                  "h-10 w-10 p-0 flex items-center justify-center text-amber-500 hover:text-amber-600",
+                                  isFavorite && "ring-2 ring-amber-200 shadow-sm"
+                                )}
+                              >
+                                <Star
+                                  className={cn(
+                                    "h-6 w-6 fill-amber-400 text-amber-500",
+                                    isFavorite && "drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                                  )}
+                                />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteMeal(safeIndex, mIdx);
+                                }}
+                                className="h-10 w-10 p-0 flex items-center justify-center"
+                              >
+                                ✕
+                              </Button>
+                            </div>
                           </div>
                         </div>
 

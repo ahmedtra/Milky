@@ -20,6 +20,11 @@ const { initializeNotificationScheduler } = require('./services/notificationSche
 const app = express();
 const PORT = process.env.PORT || 5002;
 
+// Allow real client IPs behind a proxy (e.g., Cloudflare/NGINX)
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 // Security middleware
 app.use(helmet());
 
@@ -33,7 +38,17 @@ if (!rateLimitDisabled) {
       (process.env.NODE_ENV === 'production' ? 100 : 1000)
     ),
     // Use request IP directly so we can run behind proxies without enabling trust proxy globally
-    keyGenerator: (req) => req.ip
+    keyGenerator: (req) => {
+      const forwarded = req.headers['x-forwarded-for'];
+      if (typeof forwarded === 'string' && forwarded.length) {
+        return forwarded.split(',')[0].trim();
+      }
+      return req.ip;
+    },
+    skip: (req) => {
+      if (process.env.NODE_ENV !== 'production') return true;
+      return req.ip === '127.0.0.1' || req.ip === '::1';
+    }
   });
   app.use(limiter);
 }

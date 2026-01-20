@@ -19,13 +19,16 @@ const auth = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
+    if (error?.name === 'TokenExpiredError') {
+      console.warn('Auth middleware: token expired');
+      return res.status(401).json({ message: 'Token expired' });
+    }
     console.error('Auth middleware error:', error);
     res.status(401).json({ message: 'Token is not valid' });
   }
 };
 
 module.exports = auth;
-
 
 
 

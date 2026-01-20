@@ -20,6 +20,7 @@ export default function Favorites() {
   const { data: favorites = [], isLoading, refetch } = useQuery({
     queryKey: ["favorites"],
     queryFn: getFavoriteRecipes,
+    refetchOnMount: "always",
   });
 
   const deleteMutation = useMutation({

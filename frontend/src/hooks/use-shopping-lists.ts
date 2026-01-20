@@ -5,7 +5,8 @@ export function useShoppingLists() {
   const query = useQuery({
     queryKey: ['shopping-lists'],
     queryFn: getShoppingLists,
-    initialData: [],
+    placeholderData: [],
+    refetchOnMount: 'always',
   });
 
   const list = (Array.isArray(query.data) ? query.data : []).map(list => ({

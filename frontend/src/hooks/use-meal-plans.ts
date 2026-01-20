@@ -6,7 +6,8 @@ export function useMealPlans() {
   return useQuery({
     queryKey: ['meal-plans'],
     queryFn: getMealPlans,
-    initialData: [],
+    placeholderData: [],
+    refetchOnMount: 'always',
   });
 }
 

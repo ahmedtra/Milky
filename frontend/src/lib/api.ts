@@ -6,11 +6,6 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const fullUrl = `${API_BASE}${url}`;
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  if (typeof document !== 'undefined' && document.hidden) {
-    const err = new Error('Tab hidden');
-    (err as any).code = 'TAB_HIDDEN';
-    throw err;
-  }
 
   const response = await fetch(fullUrl, {
     ...options,

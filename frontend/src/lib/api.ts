@@ -35,7 +35,10 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
       statusText: response.statusText,
       body: errorText,
     });
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    const err = new Error(`API Error: ${response.status} ${response.statusText}`);
+    (err as any).status = response.status;
+    (err as any).body = errorText;
+    throw err;
   }
 
   return response.json();

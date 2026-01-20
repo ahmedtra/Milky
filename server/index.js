@@ -23,14 +23,20 @@ const PORT = process.env.PORT || 5002;
 // Security middleware
 app.use(helmet());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  // Use request IP directly so we can run behind proxies without enabling trust proxy globally
-  keyGenerator: (req) => req.ip
-});
-app.use(limiter);
+// Rate limiting (disable or relax in dev to avoid local 429 loops)
+const rateLimitDisabled = process.env.RATE_LIMIT_DISABLED === 'true';
+if (!rateLimitDisabled) {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: Number(
+      process.env.RATE_LIMIT_MAX ||
+      (process.env.NODE_ENV === 'production' ? 100 : 1000)
+    ),
+    // Use request IP directly so we can run behind proxies without enabling trust proxy globally
+    keyGenerator: (req) => req.ip
+  });
+  app.use(limiter);
+}
 
 // Relaxed CSP to allow external images (e.g., Leonardo CDN) and APIs
 app.use((req, res, next) => {

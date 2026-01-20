@@ -30,6 +30,7 @@ const queryClient = new QueryClient({
       staleTime: 60 * 1000,
       retry: (failureCount, error: any) => {
         const status = error?.status;
+        if (error?.code === "TAB_HIDDEN") return false;
         if (status === 401 || status === 429) return false;
         return failureCount < 2;
       },

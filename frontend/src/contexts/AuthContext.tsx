@@ -47,6 +47,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return;
     }
+    if (typeof document !== "undefined" && document.hidden) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await apiRequest<{ user: User }>("/api/users/me");
       setUser(data.user);
@@ -61,6 +65,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     fetchMe();
   }, [fetchMe]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && token) {
+        fetchMe();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchMe, token]);
 
   const login = async (email: string, password: string) => {
     try {

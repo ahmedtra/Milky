@@ -130,9 +130,6 @@ export default function Favorites() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className={cn("text-sm text-muted-foreground line-clamp-3", !fav.summary && "italic")}>
-                      {fav.summary || "No description provided."}
-                    </p>
                     {fav.tags?.length ? (
                       <div className="flex flex-wrap gap-1">
                         {fav.tags.slice(0, 4).map((tag: string, tagIdx: number) => (
@@ -175,11 +172,26 @@ export default function Favorites() {
           </DialogHeader>
           {selected ? (
             <div className="space-y-3">
+              {(() => {
+                const img =
+                  selected?.planRecipe?.image ||
+                  selected?.planRecipe?.imageUrl ||
+                  selected?.image ||
+                  selected?.imageUrl ||
+                  selected?.recipe?.image ||
+                  selected?.recipe?.imageUrl;
+                return img ? (
+                  <img
+                    src={img}
+                    alt={selected?.title || "Favorite"}
+                    className="w-full h-48 rounded-lg object-cover border border-border/60"
+                  />
+                ) : null;
+              })()}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {selected.calories ? `${selected.calories} cal` : "— cal"}{" "}
                 {selected.protein ? `• ${selected.protein}g protein` : ""}
               </div>
-              <p className="text-sm text-muted-foreground">{selected.summary || "No description provided."}</p>
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Ingredients</p>
                 <div className="text-sm text-muted-foreground whitespace-pre-line">

@@ -79,6 +79,7 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
   let val = toNumber(amount, 1);
   let rawUnit = String(unit || 'unit').toLowerCase().trim();
   const cat = (category || '').toLowerCase();
+  const isGroundBeef = /ground\s+beef/i.test(String(name || ''));
 
   const toKgOrG = (kgVal) => {
     if (kgVal < 1) return { amount: Math.round(kgVal * 1000), unit: 'g' };
@@ -87,8 +88,10 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
 
   const toLiters = (lVal) => ({ amount: Number(lVal.toFixed(3)), unit: 'l' });
 
-  const liquidName = /(milk|juice|water|oil|broth|stock|sauce)/.test(String(name || '').toLowerCase());
-  const isLiquid = liquidName || cat === 'beverages' || cat === 'dairy';
+  const lowerName = String(name || '').toLowerCase();
+  const liquidName = /(milk|juice|water|oil|broth|stock|sauce)/.test(lowerName);
+  const dairyLiquid = /(milk|cream|yogurt|kefir|buttermilk|half[ -]?and[ -]?half)/.test(lowerName);
+  const isLiquid = liquidName || cat === 'beverages' || (cat === 'dairy' && dairyLiquid);
 
   const unitMap = {
     kg: () => toKgOrG(val),
@@ -114,30 +117,51 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
     oz: () => toKgOrG(val * 0.02835),
     ounce: () => toKgOrG(val * 0.02835),
     ounces: () => toKgOrG(val * 0.02835),
-    cup: () => (isLiquid ? toLiters(val * 0.24) : toKgOrG(val * 0.12)),
-    cups: () => (isLiquid ? toLiters(val * 0.24) : toKgOrG(val * 0.12)),
-    tbsp: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
-    tablespoon: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
-    tablespoons: () => (isLiquid ? toLiters(val * 0.015) : toKgOrG(val * 0.01)),
-    tsp: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
-    teaspoon: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
-    teaspoons: () => (isLiquid ? toLiters(val * 0.005) : toKgOrG(val * 0.003)),
+    cup: () => toLiters(val * 0.24),
+    cups: () => toLiters(val * 0.24),
+    tbsp: () => toLiters(val * 0.015),
+    tablespoon: () => toLiters(val * 0.015),
+    tablespoons: () => toLiters(val * 0.015),
+    tsp: () => toLiters(val * 0.005),
+    teaspoon: () => toLiters(val * 0.005),
+    teaspoons: () => toLiters(val * 0.005),
     'fl oz': () => toLiters(val * 0.03),
     floz: () => toLiters(val * 0.03)
   };
 
   if (unitMap[rawUnit]) {
-    return unitMap[rawUnit]();
+    const converted = unitMap[rawUnit]();
+    if (isGroundBeef) {
+      console.log('🧪 Ground beef [convertToStandardUnit]', {
+        from: { name, amount: val, unit: rawUnit, category },
+        to: { ...converted }
+      });
+    }
+    return converted;
   }
 
   // For piece-based produce/dairy/meat, estimate weight
   if (rawUnit === 'unit' && (cat === 'produce' || cat === 'meat' || cat === 'dairy' || cat === 'bakery')) {
     const perPieceKg = estimatePieceKg(name, cat);
-    return toKgOrG(perPieceKg * val);
+    const converted = toKgOrG(perPieceKg * val);
+    if (isGroundBeef) {
+      console.log('🧪 Ground beef [convertToStandardUnit-piece]', {
+        from: { name, amount: val, unit: rawUnit, category },
+        to: { ...converted }
+      });
+    }
+    return converted;
   }
 
   // Fallback: keep amount and default unit
-  return { amount: val, unit: rawUnit || 'unit' };
+  const fallback = { amount: val, unit: rawUnit || 'unit' };
+  if (isGroundBeef) {
+    console.log('🧪 Ground beef [convertToStandardUnit-fallback]', {
+      from: { name, amount: val, unit: rawUnit, category },
+      to: { ...fallback }
+    });
+  }
+  return fallback;
 };
 
 const computeTotal = (items = []) =>
@@ -156,6 +180,149 @@ const computeSectionTotals = (items = []) => {
   return totals;
 };
 
+const applyUnitPricingWithLLM = async (items) => {
+  const priced = Array.isArray(items) ? items : [];
+  if (!priced.length) return priced;
+  try {
+    const payload = priced.map((item, idx) => {
+      const unitRaw = String(item.unit || 'unit').toLowerCase().trim();
+      const amountRaw = toNumber(item.amount, null);
+      let standardUnit = 'unit';
+      let standardAmount = amountRaw;
+      if (amountRaw !== null) {
+        if (unitRaw === 'g') {
+          standardUnit = 'kg';
+          standardAmount = amountRaw / 1000;
+        } else if (unitRaw === 'kg') {
+          standardUnit = 'kg';
+          standardAmount = amountRaw;
+        } else if (unitRaw === 'ml') {
+          standardUnit = 'l';
+          standardAmount = amountRaw / 1000;
+        } else if (unitRaw === 'l') {
+          standardUnit = 'l';
+          standardAmount = amountRaw;
+        } else {
+          standardUnit = unitRaw || 'unit';
+          standardAmount = amountRaw;
+        }
+      }
+      return {
+        index: idx,
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        standardAmount,
+        standardUnit,
+        category: item.category || 'other'
+      };
+    });
+    const prompt = `
+    Estimate a realistic price per standard unit for each ingredient.
+    Return ONLY JSON object:
+    { "items": [{ "index": number, "unitPrice": number }] }
+    Rules:
+    - unitPrice is in USD per standardUnit (kg for mass, l for volume, unit for count).
+    - Use the provided standardUnit for each item.
+    - Do NOT change names, amounts, or units.
+    - If unsure, provide a reasonable grocery estimate > 0.
+    Items: ${JSON.stringify(payload, null, 2)}
+    `;
+    const text = await geminiService.callTextModel(prompt, 0.2, 'json');
+    const objMatch = text && text.match(/\{[\s\S]*\}/);
+    const parsed = objMatch ? JSON.parse(objMatch[0]) : JSON.parse(text);
+    const items = Array.isArray(parsed?.items) ? parsed.items : [];
+    if (!items.length) return priced;
+    items.forEach((entry) => {
+      const idx = Number(entry?.index);
+      if (!Number.isInteger(idx) || !priced[idx]) return;
+      let unitPrice = toNumber(entry?.unitPrice, null);
+      const unitRaw = String(priced[idx].unit || 'unit').toLowerCase().trim();
+      const amountRaw = toNumber(priced[idx].amount, null);
+      if (unitPrice === null || amountRaw === null) return;
+      let standardAmount = amountRaw;
+      if (unitRaw === 'g') {
+        standardAmount = amountRaw / 1000;
+      } else if (unitRaw === 'kg') {
+        standardAmount = amountRaw;
+      } else if (unitRaw === 'ml') {
+        standardAmount = amountRaw / 1000;
+      } else if (unitRaw === 'l') {
+        standardAmount = amountRaw;
+      }
+      const total = Number((unitPrice * standardAmount).toFixed(2));
+      priced[idx] = { ...priced[idx], price: total, estimatedPrice: total };
+    });
+  } catch (err) {
+    console.warn('⚠️ Unit pricing with LLM failed:', err.message);
+  }
+  return priced;
+};
+
+const canonicalizeShoppingName = (name = '') => {
+  const base = String(name || '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\b\d+\s*%/g, '')
+    .replace(/\b\d+\s*\/\s*\d+\b/g, '')
+    .replace(/[-,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!base) return '';
+  if (/(seasoning|mix|spice)/.test(base) && /hamburger/.test(base)) return base;
+  if (/(ground|minced)\s+beef|hamburger/.test(base)) return 'ground beef';
+  if (/beef\s+mince|minced\s+beef/.test(base)) return 'ground beef';
+  if (/beef\s+ground/.test(base)) return 'ground beef';
+  if (/chinese\s+tofu/.test(base)) return 'tofu';
+  if (/^tofu$/.test(base)) return 'tofu';
+  return base;
+};
+
+const normalizeToBaseUnit = (item) => {
+  const unitRaw = String(item.unit || 'unit').toLowerCase().trim();
+  const val = toNumber(item.amount, null);
+  if (val === null) return { ...item, unit: unitRaw };
+  if (unitRaw === 'kg') return { ...item, amount: Math.round(val * 1000), unit: 'g' };
+  if (unitRaw === 'g') return { ...item, amount: Math.round(val), unit: 'g' };
+  if (unitRaw === 'l') return { ...item, amount: Math.round(val * 1000), unit: 'ml' };
+  if (unitRaw === 'ml') return { ...item, amount: Math.round(val), unit: 'ml' };
+  return { ...item, unit: unitRaw };
+};
+
+const mergeShoppingItems = (items = []) => {
+  const merged = {};
+  items.forEach((raw) => {
+    if (!raw || !raw.name) return;
+    const named = { ...raw, name: canonicalizeShoppingName(raw.name) || raw.name };
+    const base = normalizeToBaseUnit(named);
+    const key = `${String(base.name || '').toLowerCase().trim()}__${String(base.unit || 'unit').toLowerCase().trim()}`;
+    if (!key.trim()) return;
+    if (!merged[key]) {
+      merged[key] = { ...base };
+      return;
+    }
+    const a = toNumber(merged[key].amount, null);
+    const b = toNumber(base.amount, null);
+    if (a !== null && b !== null) {
+      merged[key].amount = a + b;
+    }
+    const priceA = toNumber(merged[key].estimatedPrice ?? merged[key].price, 0);
+    const priceB = toNumber(base.estimatedPrice ?? base.price, 0);
+    const summedPrice = priceA + priceB;
+    merged[key].estimatedPrice = summedPrice;
+    merged[key].price = summedPrice;
+  });
+
+  return Object.values(merged).map((item) => {
+    const unit = String(item.unit || 'unit').toLowerCase().trim();
+    const amount = toNumber(item.amount, null);
+    if (amount === null) return item;
+    if (unit === 'g' && amount >= 1000) return { ...item, amount: Number((amount / 1000).toFixed(3)), unit: 'kg' };
+    if (unit === 'ml' && amount >= 1000) return { ...item, amount: Number((amount / 1000).toFixed(3)), unit: 'l' };
+    return { ...item, amount: Number(amount.toFixed(3)) };
+  });
+};
+
 // Ask LLM to enrich missing category/price when heuristics leave "other" or price is missing
 const enrichWithLLM = async (items) => {
   const needsEnrichment = items.map((item, idx) => ({ item, idx }));
@@ -171,24 +338,10 @@ const enrichWithLLM = async (items) => {
     const prompt = `
     Infer shopping metadata for these items. Return ONLY JSON array with objects:
     [
-      { "name": "string", "amount": "number", "unit": "kg|g|l|unit", "category": "produce|meat|dairy|bakery|pantry|frozen|beverages|other", "price": number }
+      { "name": "string", "category": "produce|meat|dairy|bakery|pantry|frozen|beverages|other", "price": number }
     ]
-    Rules (convert EVERY item):
-    - Allowed output units ONLY: kg, g, l, or unit. Never output cups, tbsp, tsp, oz, lb, ml, etc.
-    - You MUST convert the provided amount/unit into the chosen unit using realistic cooking/grocery multipliers. Do not reuse the same numeric amount after changing units.
-      Common conversions to guide you (use closest realistic value):
-        • 1 lb ≈ 0.4536 kg
-        • 1 oz (weight) ≈ 0.02835 kg
-        • 1 cup liquid ≈ 0.24 l
-        • 1 tbsp ≈ 0.015 l
-        • 1 tsp ≈ 0.005 l
-        • 1 fl oz ≈ 0.03 l
-        • 1000 g = 1 kg, 1000 ml = 1 l
-        • Weights -> kg, volumes -> liters. If sold by piece (e.g., eggs, single items clearly each), use unit with the count.
-        • If the final weight is < 1 kg, return grams (unit = "g" and scale amount accordingly). Do NOT leave it as 0.x kg.
-        • Dry goods (beans, rice, pasta, flour, lentils, chickpeas, canned items) => kg (or unit if clearly per-piece/can). Never liters for dry goods.
-        • Liquids (water, juice, milk, oil, broth, stock, sauces) => liters.
-        • Fresh produce and dairy/cheese => kg (or g if <1 kg). Avoid "unit" unless truly sold per piece; convert dairy from unit to kg using a reasonable block/tub weight estimate.
+    Rules:
+    - Do NOT change or reinterpret amounts/units; only infer category and a reasonable price.
     - Set a realistic grocery price in USD (>0), only use 0 if unknown.
     Keep order. Items: ${JSON.stringify(payload, null, 2)}
     `;
@@ -200,25 +353,14 @@ const enrichWithLLM = async (items) => {
         const target = needsEnrichment[i];
         if (!target) return;
         const idx = target.idx;
-        const amtNum = toNumber(meta?.amount, items[idx].amount);
-        const normUnitRaw = String(meta?.unit || items[idx].unit || 'unit').toLowerCase().trim();
-        const allowedUnits = new Set(['kg', 'g', 'l', 'unit']);
-        const normUnit = allowedUnits.has(normUnitRaw) ? normUnitRaw : 'unit';
         items[idx] = {
           ...items[idx],
           category: meta?.category || items[idx].category || 'other',
           price: toNumber(meta?.price, items[idx].price || 0),
-          estimatedPrice: toNumber(meta?.price, items[idx].estimatedPrice || items[idx].price || 0),
-          amount: amtNum,
-          unit: normUnit
+          estimatedPrice: toNumber(meta?.price, items[idx].estimatedPrice || items[idx].price || 0)
         };
       });
-      console.log('LLM shopping enrichment result (price/category):', parsed.map((m) => ({
-        name: m?.name,
-        price: m?.price,
-        category: m?.category,
-        unit: m?.unit
-      })));
+      // intentionally no verbose logging
     }
   } catch (err) {
     console.warn('⚠️ LLM enrichment for shopping items failed:', err.message);
@@ -362,11 +504,10 @@ router.post('/', auth, async (req, res) => {
         };
       });
     }
-    console.log('Sanitized items:', sanitizedItems);
+    sanitizedItems = mergeShoppingItems(sanitizedItems);
+    sanitizedItems = await applyUnitPricingWithLLM(sanitizedItems);
     const allPurchased = sanitizedItems.length > 0 && sanitizedItems.every((i) => i.purchased);
-    const estimatedTotal = typeof totalEstimatedCost === 'number'
-      ? totalEstimatedCost
-      : computeTotal(sanitizedItems);
+    const estimatedTotal = computeTotal(sanitizedItems);
 
     const shoppingList = new ShoppingList({
       userId: req.user._id,
@@ -454,18 +595,17 @@ router.put('/:id', auth, async (req, res) => {
           };
         });
       }
-      shoppingList.items = mappedItems;
+      shoppingList.items = mergeShoppingItems(mappedItems);
+      shoppingList.items = await applyUnitPricingWithLLM(shoppingList.items);
     }
 
-    console.log('Updating shopping list:', shoppingList.items);
+    // intentionally no verbose logging
     if (status) shoppingList.status = status;
     if (store) shoppingList.store = store;
     if (notes) shoppingList.notes = notes;
-    if (totalEstimatedCost !== undefined && totalEstimatedCost !== null) {
-      shoppingList.totalEstimatedCost = totalEstimatedCost;
-    } else if (shoppingList.items) {
-      shoppingList.totalEstimatedCost = computeTotal(shoppingList.items);
-    }
+      if (shoppingList.items) {
+        shoppingList.totalEstimatedCost = computeTotal(shoppingList.items);
+      }
 
     await shoppingList.save();
 

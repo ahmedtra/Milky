@@ -1,0 +1,5615 @@
+{
+  "stamp": "2026-01-21T12:07:33.575Z",
+  "extractedIngredients": [
+    {
+      "name": "vegan margarine",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "chives",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "vegetarian bacon bits",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "soy protein",
+      "amount": "1",
+      "unit": "unit",
+      "category": "other"
+    },
+    {
+      "name": "nutritional yeast",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "asafoetida powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "chinese tofu",
+      "amount": "3",
+      "unit": "cups",
+      "category": "protein"
+    },
+    {
+      "name": "onion",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "bell pepper",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "chili powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "kabocha or butternut squash",
+      "amount": "2",
+      "unit": "pounds",
+      "category": "vegetable"
+    },
+    {
+      "name": "salt",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "balsamic vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "extra virgin olive oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "ginger",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "onion",
+      "amount": "1",
+      "unit": "half",
+      "category": "vegetable"
+    },
+    {
+      "name": "water",
+      "amount": "1",
+      "unit": "quart",
+      "category": "other"
+    },
+    {
+      "name": "sherry vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "red wine vinegar",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "Dijon mustard",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "flat leaf parsley",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "walnut oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "green pepper",
+      "amount": "0.25",
+      "unit": "c",
+      "category": "vegetable"
+    },
+    {
+      "name": "red kidney beans",
+      "amount": "2",
+      "unit": "20 oz can",
+      "category": "grain"
+    },
+    {
+      "name": "stewed tomatoes",
+      "amount": "1",
+      "unit": "can",
+      "category": "vegetable"
+    },
+    {
+      "name": "Shake 'N Bake seasoning for chicken",
+      "amount": "1",
+      "unit": "envelope",
+      "category": "spice"
+    },
+    {
+      "name": "water",
+      "amount": "0.5",
+      "unit": "c",
+      "category": "other"
+    },
+    {
+      "name": "vinegar",
+      "amount": "1",
+      "unit": "Tbsp",
+      "category": "other"
+    },
+    {
+      "name": "chili powder",
+      "amount": "2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "Frozen Seasoned Tater Tots",
+      "amount": "2",
+      "unit": "cups",
+      "category": "grain"
+    },
+    {
+      "name": "Canola Oil",
+      "amount": "0.5",
+      "unit": "teaspoons",
+      "category": "fat"
+    },
+    {
+      "name": "Eggs",
+      "amount": "6",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "Salt",
+      "amount": "0.25",
+      "unit": "teaspoons",
+      "category": "other"
+    },
+    {
+      "name": "Pepper",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "other"
+    },
+    {
+      "name": "Oregano",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "Half-and-half",
+      "amount": "0.25",
+      "unit": "cups",
+      "category": "dairy"
+    },
+    {
+      "name": "Baking Powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "Grated Cheddar Cheese",
+      "amount": "1",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "Diced Ham",
+      "amount": "1",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "Sorghum grain",
+      "amount": "170",
+      "unit": "grams",
+      "category": "grain"
+    },
+    {
+      "name": "Water",
+      "amount": "250",
+      "unit": "ml",
+      "category": "other"
+    },
+    {
+      "name": "Salt",
+      "amount": "1/4",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "Onion",
+      "amount": "200",
+      "unit": "grams",
+      "category": "vegetable"
+    },
+    {
+      "name": "Vegetable oil",
+      "amount": "1/2",
+      "unit": "tbsp",
+      "category": "fat"
+    },
+    {
+      "name": "Potatoes",
+      "amount": "150",
+      "unit": "grams",
+      "category": "vegetable"
+    },
+    {
+      "name": "White rice flour",
+      "amount": "30",
+      "unit": "grams",
+      "category": "grain"
+    },
+    {
+      "name": "Pepper",
+      "amount": "1",
+      "unit": "as required",
+      "category": "spice"
+    },
+    {
+      "name": "Nutmeg",
+      "amount": "1/2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "onion",
+      "amount": "1",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "hamburger",
+      "amount": "1 1/2 to 2 lb",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "hamburger seasoning mix",
+      "amount": "1 pkg",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "Mozzarella cheese",
+      "amount": "1 1/2 c",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "sour cream",
+      "amount": "1 c",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "tomato sauce",
+      "amount": "1 c",
+      "unit": "unit",
+      "category": "other"
+    },
+    {
+      "name": "crescent dinner rolls",
+      "amount": "1 can",
+      "unit": "unit",
+      "category": "grain"
+    },
+    {
+      "name": "Parmesan cheese",
+      "amount": "1/3 c",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "margarine",
+      "amount": "1/3 c",
+      "unit": "unit",
+      "category": "fat"
+    },
+    {
+      "name": "almond meal",
+      "amount": "1 1/2",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "eggs",
+      "amount": "3",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "almondmilk coconutmilk blend",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "maple syrup or sugar",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "other"
+    },
+    {
+      "name": "vanilla extract",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cinnamon",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "baking powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "1/4",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "light soy sauce",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "fat"
+    },
+    {
+      "name": "garlic",
+      "amount": "3",
+      "unit": "cloves",
+      "category": "spice"
+    },
+    {
+      "name": "ginger root",
+      "amount": "1",
+      "unit": "slice",
+      "category": "spice"
+    },
+    {
+      "name": "flank steak",
+      "amount": "1",
+      "unit": "12 ounce",
+      "category": "protein"
+    },
+    {
+      "name": "green mango",
+      "amount": "1",
+      "unit": "cup",
+      "category": "fruit"
+    },
+    {
+      "name": "salad greens",
+      "amount": "2",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "bean sprouts",
+      "amount": "1",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "carrot",
+      "amount": "1",
+      "unit": "shredded",
+      "category": "vegetable"
+    },
+    {
+      "name": "snow peas",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "chopped roasted peanuts",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "nut"
+    },
+    {
+      "name": "fresh mint",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "fresh cilantro",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "fresh Thai basil",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "green onion",
+      "amount": "1",
+      "unit": "slice",
+      "category": "vegetable"
+    },
+    {
+      "name": "lime juice",
+      "amount": "3",
+      "unit": "tablespoons",
+      "category": "fruit"
+    },
+    {
+      "name": "fish sauce",
+      "amount": "3",
+      "unit": "tablespoons",
+      "category": "dairy"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "brown sugar",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "grain"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "dairy"
+    },
+    {
+      "name": "minced shallot",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "vegetable"
+    },
+    {
+      "name": "Thai chile pepper",
+      "amount": "1",
+      "unit": "thinly sliced",
+      "category": "spice"
+    },
+    {
+      "name": "whole black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "yellow split peas",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "garlic",
+      "amount": "8",
+      "unit": "medium-size cloves",
+      "category": "vegetable"
+    },
+    {
+      "name": "ginger",
+      "amount": "2",
+      "unit": "lengthwise slices",
+      "category": "vegetable"
+    },
+    {
+      "name": "green Thai, cayenne, or serrano chiles",
+      "amount": "2 to 4",
+      "unit": "fresh",
+      "category": "vegetable"
+    },
+    {
+      "name": "cardamom pods",
+      "amount": "4",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "bay leaves",
+      "amount": "2",
+      "unit": "unit",
+      "category": "herb"
+    },
+    {
+      "name": "cinnamon sticks",
+      "amount": "2",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "Ghee or unsalted butter",
+      "amount": "4",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "red onion",
+      "amount": "1",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "crushed tomatoes or Tomato Sauce",
+      "amount": "1",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "coarse kosher or sea salt",
+      "amount": "2",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "cayenne (ground red pepper)",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cooked red kidney beans",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "heavy cream",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "cilantro leaves and tender stems",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "herb"
+    },
+    {
+      "name": "onion",
+      "amount": "0.5",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "baby spinach",
+      "amount": "1.5",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "Egg",
+      "amount": "1",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "egg whites",
+      "amount": "4",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "reduced fat cheese",
+      "amount": "0.25",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "pepper",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "spice"
+    },
+    {
+      "name": "Tarragon fresh",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "herb"
+    },
+    {
+      "name": "Basil fresh",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "herb"
+    },
+    {
+      "name": "Green Lentils",
+      "amount": "1.5",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "Bay Leaves",
+      "amount": "2",
+      "unit": "whole",
+      "category": "herb"
+    },
+    {
+      "name": "Carrot",
+      "amount": "1",
+      "unit": "whole",
+      "category": "vegetable"
+    },
+    {
+      "name": "Red Bell Pepper",
+      "amount": "1",
+      "unit": "whole",
+      "category": "vegetable"
+    },
+    {
+      "name": "Green Onions",
+      "amount": "0.25",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "Raisins",
+      "amount": "0.5",
+      "unit": "cups",
+      "category": "fruit"
+    },
+    {
+      "name": "Walnuts",
+      "amount": "1",
+      "unit": "cup",
+      "category": "nut"
+    },
+    {
+      "name": "Red Wine Vinegar",
+      "amount": "0.03",
+      "unit": "cups",
+      "category": "other"
+    },
+    {
+      "name": "Lemon Juice",
+      "amount": "0.01",
+      "unit": "cups",
+      "category": "fruit"
+    },
+    {
+      "name": "Maple Syrup",
+      "amount": "0.01",
+      "unit": "cups",
+      "category": "other"
+    },
+    {
+      "name": "Extra Virgin Olive Oil",
+      "amount": "0.25",
+      "unit": "cups",
+      "category": "fat"
+    },
+    {
+      "name": "Kosher Salt",
+      "amount": "0.0075",
+      "unit": "cups",
+      "category": "other"
+    },
+    {
+      "name": "Freshly Ground Black Pepper",
+      "amount": "0.0025",
+      "unit": "cups",
+      "category": "spice"
+    },
+    {
+      "name": "olive oil",
+      "amount": "4",
+      "unit": "tbsp",
+      "category": "fat"
+    },
+    {
+      "name": "shiitake mushrooms",
+      "amount": "3.5",
+      "unit": "oz",
+      "category": "vegetable"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "onions",
+      "amount": "2",
+      "unit": "None",
+      "category": "vegetable"
+    },
+    {
+      "name": "cherry tomatoes",
+      "amount": "7",
+      "unit": "oz",
+      "category": "fruit"
+    },
+    {
+      "name": "heavy cream",
+      "amount": "3/4",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "fusilli pasta",
+      "amount": "14",
+      "unit": "oz",
+      "category": "grain"
+    },
+    {
+      "name": "basil",
+      "amount": "2/3",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "bananas",
+      "amount": "2",
+      "unit": "unit",
+      "category": "fruit"
+    },
+    {
+      "name": "vanilla",
+      "amount": "2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "lemon juice",
+      "amount": "1",
+      "unit": "Tbsp",
+      "category": "fruit"
+    },
+    {
+      "name": "oil",
+      "amount": "1/2",
+      "unit": "c",
+      "category": "fat"
+    },
+    {
+      "name": "sugar",
+      "amount": "1",
+      "unit": "c",
+      "category": "grain"
+    },
+    {
+      "name": "salt",
+      "amount": "1/4",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "tofu",
+      "amount": "2 1/2",
+      "unit": "c",
+      "category": "protein"
+    },
+    {
+      "name": "dried red kidney beans",
+      "amount": "7 oz",
+      "unit": "oz",
+      "category": "grain"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "2 tbsp",
+      "unit": "tbsp",
+      "category": "fat"
+    },
+    {
+      "name": "brown mustard seeds",
+      "amount": "1/2 tsp",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1/2 tsp",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "fresh curry leaves",
+      "amount": "15",
+      "unit": "unit",
+      "category": "herb"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1/4 tsp",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "ground coriander",
+      "amount": "1 tsp",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "ground cumin",
+      "amount": "1 tsp",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "fresh long green chilies",
+      "amount": "2",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "garlic",
+      "amount": "3 cloves",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "fresh ginger",
+      "amount": "1 tsp",
+      "unit": "tsp",
+      "category": "vegetable"
+    },
+    {
+      "name": "sugar",
+      "amount": "2 tsp",
+      "unit": "tsp",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "1/2 tsp",
+      "unit": "tsp",
+      "category": "other"
+    },
+    {
+      "name": "fresh tomatoes",
+      "amount": "4",
+      "unit": "unit",
+      "category": "fruit"
+    },
+    {
+      "name": "vegetable stock",
+      "amount": "1 cup",
+      "unit": "cup",
+      "category": "broth"
+    },
+    {
+      "name": "frozen broad beans",
+      "amount": "5 oz",
+      "unit": "oz",
+      "category": "vegetable"
+    },
+    {
+      "name": "yogurt",
+      "amount": "None",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "fresh mint leaves",
+      "amount": "None",
+      "unit": "unit",
+      "category": "herb"
+    },
+    {
+      "name": "ground beef",
+      "amount": "7",
+      "unit": "pounds",
+      "category": "protein"
+    },
+    {
+      "name": "onions",
+      "amount": "6",
+      "unit": "medium",
+      "category": "vegetable"
+    },
+    {
+      "name": "celery",
+      "amount": "2",
+      "unit": "ribs",
+      "category": "vegetable"
+    },
+    {
+      "name": "garlic",
+      "amount": "3",
+      "unit": "cloves",
+      "category": "vegetable"
+    },
+    {
+      "name": "diced tomatoes",
+      "amount": "2",
+      "unit": "cans",
+      "category": "vegetable"
+    },
+    {
+      "name": "tomato paste",
+      "amount": "2",
+      "unit": "cans",
+      "category": "vegetable"
+    },
+    {
+      "name": "whole kernel corn",
+      "amount": "2",
+      "unit": "cans",
+      "category": "grain"
+    },
+    {
+      "name": "mushroom stems and pieces",
+      "amount": "2",
+      "unit": "cans",
+      "category": "vegetable"
+    },
+    {
+      "name": "sliced ripe olives",
+      "amount": "3",
+      "unit": "cans",
+      "category": "vegetable"
+    },
+    {
+      "name": "water",
+      "amount": "2 to 3",
+      "unit": "cups",
+      "category": "other"
+    },
+    {
+      "name": "chili powder",
+      "amount": "2 to 3",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "seasoned salt",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "spice"
+    },
+    {
+      "name": "crushed red pepper flakes",
+      "amount": "0.5 to 1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "pepper",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "tamales",
+      "amount": "3",
+      "unit": "jars",
+      "category": "grain"
+    },
+    {
+      "name": "cheddar cheese",
+      "amount": "2",
+      "unit": "cups",
+      "category": "dairy"
+    }
+  ],
+  "normalizedForList": [
+    {
+      "name": "vegan margarine",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "chives",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "vegetarian bacon bits",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "soy protein",
+      "amount": "1",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "nutritional yeast",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "asafoetida powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "tofu",
+      "amount": "3",
+      "unit": "cups",
+      "category": "protein"
+    },
+    {
+      "name": "onions",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "bell peppers",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "chili powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "squash",
+      "amount": "2",
+      "unit": "pounds",
+      "category": "vegetable"
+    },
+    {
+      "name": "salt",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "balsamic vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "olive oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "ginger",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "onions",
+      "amount": "1",
+      "unit": "half",
+      "category": "vegetable"
+    },
+    {
+      "name": "water",
+      "amount": "1",
+      "unit": "quart",
+      "category": "other"
+    },
+    {
+      "name": "sherry vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "red wine vinegar",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "mustard",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "parsley",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "walnut oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "green peppers",
+      "amount": "0.25",
+      "unit": "c",
+      "category": "vegetable"
+    },
+    {
+      "name": "red kidney beans",
+      "amount": "2",
+      "unit": "20 oz can",
+      "category": "grain"
+    },
+    {
+      "name": "tomatoes",
+      "amount": "1",
+      "unit": "can",
+      "category": "vegetable"
+    },
+    {
+      "name": "seasoning mix",
+      "amount": "1",
+      "unit": "envelope",
+      "category": "spice"
+    },
+    {
+      "name": "water",
+      "amount": "0.5",
+      "unit": "c",
+      "category": "other"
+    },
+    {
+      "name": "vinegar",
+      "amount": "1",
+      "unit": "Tbsp",
+      "category": "other"
+    },
+    {
+      "name": "chili powder",
+      "amount": "2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "potatoes",
+      "amount": "2",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "canola oil",
+      "amount": "0.5",
+      "unit": "teaspoons",
+      "category": "fat"
+    },
+    {
+      "name": "eggs",
+      "amount": "6",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "chives",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "vegetarian bacon bits",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "soy protein",
+      "amount": "1",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "nutritional yeast",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "asafoetida powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "tofu",
+      "amount": "3",
+      "unit": "cups",
+      "category": "protein"
+    },
+    {
+      "name": "onions",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "bell peppers",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "chili powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "squash",
+      "amount": "2",
+      "unit": "pounds",
+      "category": "vegetable"
+    },
+    {
+      "name": "salt",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "balsamic vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "olive oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "ginger",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "onions",
+      "amount": "1",
+      "unit": "half",
+      "category": "vegetable"
+    },
+    {
+      "name": "water",
+      "amount": "1",
+      "unit": "quart",
+      "category": "other"
+    },
+    {
+      "name": "sherry vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "red wine vinegar",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "mustard",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "parsley",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "walnut oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "green peppers",
+      "amount": "0.25",
+      "unit": "c",
+      "category": "vegetable"
+    },
+    {
+      "name": "red kidney beans",
+      "amount": "2",
+      "unit": "20 oz can",
+      "category": "grain"
+    },
+    {
+      "name": "tomatoes",
+      "amount": "1",
+      "unit": "can",
+      "category": "vegetable"
+    },
+    {
+      "name": "seasoning mix",
+      "amount": "1",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "water",
+      "amount": "0.5",
+      "unit": "c",
+      "category": "other"
+    },
+    {
+      "name": "vinegar",
+      "amount": "1",
+      "unit": "Tbsp",
+      "category": "other"
+    },
+    {
+      "name": "chili powder",
+      "amount": "2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "potatoes",
+      "amount": "2",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "canola oil",
+      "amount": "0.5",
+      "unit": "teaspoons",
+      "category": "fat"
+    },
+    {
+      "name": "eggs",
+      "amount": "6",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "salt",
+      "amount": "0.25",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "pepper",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "oregano",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "half-and-half",
+      "amount": "0.25",
+      "unit": "cups",
+      "category": "dairy"
+    },
+    {
+      "name": "baking powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "cheddar cheese",
+      "amount": "1",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "diced ham",
+      "amount": "1",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "sorghum grain",
+      "amount": "170",
+      "unit": "grams",
+      "category": "grain"
+    },
+    {
+      "name": "water",
+      "amount": "250",
+      "unit": "ml",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "1/4",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "onions",
+      "amount": "200",
+      "unit": "grams",
+      "category": "vegetable"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "1/2",
+      "unit": "tbsp",
+      "category": "fat"
+    },
+    {
+      "name": "potatoes",
+      "amount": "150",
+      "unit": "grams",
+      "category": "vegetable"
+    },
+    {
+      "name": "white rice flour",
+      "amount": "30",
+      "unit": "grams",
+      "category": "grain"
+    },
+    {
+      "name": "pepper",
+      "amount": "1",
+      "unit": "as required",
+      "category": "spice"
+    },
+    {
+      "name": "nutmeg",
+      "amount": "1/2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "onions",
+      "amount": "1",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1 1/2 to 2",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "mozzarella cheese",
+      "amount": "1 1/2",
+      "unit": "c",
+      "category": "dairy"
+    },
+    {
+      "name": "sour cream",
+      "amount": "1",
+      "unit": "c",
+      "category": "dairy"
+    },
+    {
+      "name": "tomato sauce",
+      "amount": "1",
+      "unit": "c",
+      "category": "other"
+    },
+    {
+      "name": "parmesan cheese",
+      "amount": "1/3",
+      "unit": "c",
+      "category": "dairy"
+    },
+    {
+      "name": "margarine",
+      "amount": "1/3",
+      "unit": "c",
+      "category": "fat"
+    },
+    {
+      "name": "almond meal",
+      "amount": "1 1/2",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "eggs",
+      "amount": "3",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "almond milk",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "maple syrup",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "other"
+    },
+    {
+      "name": "vanilla extract",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cinnamon",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "baking powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "1/4",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "fat"
+    },
+    {
+      "name": "garlic",
+      "amount": "3",
+      "unit": "cloves",
+      "category": "vegetable"
+    },
+    {
+      "name": "ginger",
+      "amount": "1",
+      "unit": "slice",
+      "category": "vegetable"
+    },
+    {
+      "name": "flank steak",
+      "amount": "1",
+      "unit": "12 ounce",
+      "category": "protein"
+    },
+    {
+      "name": "green mangoes",
+      "amount": "1",
+      "unit": "cup",
+      "category": "fruit"
+    },
+    {
+      "name": "salad greens",
+      "amount": "2",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "bean sprouts",
+      "amount": "1",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "carrots",
+      "amount": "1",
+      "unit": "shredded",
+      "category": "vegetable"
+    },
+    {
+      "name": "snow peas",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "peanuts",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "nut"
+    },
+    {
+      "name": "mint",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "herb"
+    },
+    {
+      "name": "cilantro",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "herb"
+    },
+    {
+      "name": "basil",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "herb"
+    },
+    {
+      "name": "green onions",
+      "amount": "1",
+      "unit": "slice",
+      "category": "vegetable"
+    }
+  ],
+  "normalizedSafe": [
+    {
+      "name": "vegan margarine",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "chives",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "vegetarian bacon bits",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "soy protein",
+      "amount": "1",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "nutritional yeast",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "asafoetida powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "tofu",
+      "amount": "3",
+      "unit": "cups",
+      "category": "protein"
+    },
+    {
+      "name": "onion",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "bell peppers",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "chili powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "squash",
+      "amount": "2",
+      "unit": "pounds",
+      "category": "vegetable"
+    },
+    {
+      "name": "salt",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "balsamic vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "olive oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "grain"
+    },
+    {
+      "name": "ginger",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "turmeric",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "onion",
+      "amount": "1",
+      "unit": "half",
+      "category": "vegetable"
+    },
+    {
+      "name": "water",
+      "amount": "1",
+      "unit": "quart",
+      "category": "other"
+    },
+    {
+      "name": "sherry vinegar",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "other"
+    },
+    {
+      "name": "red wine vinegar",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "mustard",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "parsley",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "walnut oil",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "fat"
+    },
+    {
+      "name": "ground beef",
+      "amount": "1",
+      "unit": "lb",
+      "category": "protein"
+    },
+    {
+      "name": "green peppers",
+      "amount": "0.25",
+      "unit": "c",
+      "category": "vegetable"
+    },
+    {
+      "name": "red kidney beans",
+      "amount": "2",
+      "unit": "20 oz can",
+      "category": "grain"
+    },
+    {
+      "name": "tomatoes",
+      "amount": "1",
+      "unit": "can",
+      "category": "vegetable"
+    },
+    {
+      "name": "seasoning mix",
+      "amount": "1",
+      "unit": "envelope",
+      "category": "spice"
+    },
+    {
+      "name": "water",
+      "amount": "0.5",
+      "unit": "c",
+      "category": "other"
+    },
+    {
+      "name": "vinegar",
+      "amount": "1",
+      "unit": "Tbsp",
+      "category": "other"
+    },
+    {
+      "name": "chili powder",
+      "amount": "2",
+      "unit": "tsp",
+      "category": "spice"
+    },
+    {
+      "name": "Frozen Seasoned Tater Tots",
+      "amount": "2",
+      "unit": "cups",
+      "category": "vegetable"
+    },
+    {
+      "name": "canola oil",
+      "amount": "0.5",
+      "unit": "teaspoons",
+      "category": "fat"
+    },
+    {
+      "name": "eggs",
+      "amount": "6",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "Salt",
+      "amount": "0.25",
+      "unit": "teaspoons",
+      "category": "herb"
+    },
+    {
+      "name": "Pepper",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "other"
+    },
+    {
+      "name": "Oregano",
+      "amount": "0.125",
+      "unit": "teaspoons",
+      "category": "protein"
+    },
+    {
+      "name": "Half-and-half",
+      "amount": "0.25",
+      "unit": "cups",
+      "category": "other"
+    },
+    {
+      "name": "Baking Powder",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "Grated Cheddar Cheese",
+      "amount": "1",
+      "unit": "cup",
+      "category": "spice"
+    },
+    {
+      "name": "Diced Ham",
+      "amount": "1",
+      "unit": "cup",
+      "category": "spice"
+    },
+    {
+      "name": "Sorghum grain",
+      "amount": "170",
+      "unit": "grams",
+      "category": "protein"
+    },
+    {
+      "name": "Water",
+      "amount": "250",
+      "unit": "ml",
+      "category": "vegetable"
+    },
+    {
+      "name": "Salt",
+      "amount": "1/4",
+      "unit": "tsp",
+      "category": "vegetable"
+    },
+    {
+      "name": "Onion",
+      "amount": "200",
+      "unit": "grams",
+      "category": "spice"
+    },
+    {
+      "name": "Vegetable oil",
+      "amount": "1/2",
+      "unit": "tbsp",
+      "category": "vegetable"
+    },
+    {
+      "name": "Potatoes",
+      "amount": "150",
+      "unit": "grams",
+      "category": "spice"
+    },
+    {
+      "name": "White rice flour",
+      "amount": "30",
+      "unit": "grams",
+      "category": "other"
+    },
+    {
+      "name": "Pepper",
+      "amount": "1",
+      "unit": "as required",
+      "category": "fat"
+    },
+    {
+      "name": "Nutmeg",
+      "amount": "1/2",
+      "unit": "tsp",
+      "category": "grain"
+    },
+    {
+      "name": "onion",
+      "amount": "1",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "hamburger",
+      "amount": "1 1/2 to 2 lb",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "hamburger seasoning mix",
+      "amount": "1 pkg",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "Mozzarella cheese",
+      "amount": "1 1/2 c",
+      "unit": "unit",
+      "category": "other"
+    },
+    {
+      "name": "sour cream",
+      "amount": "1 c",
+      "unit": "unit",
+      "category": "other"
+    },
+    {
+      "name": "tomato sauce",
+      "amount": "1 c",
+      "unit": "unit",
+      "category": "other"
+    },
+    {
+      "name": "crescent dinner rolls",
+      "amount": "1 can",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "Parmesan cheese",
+      "amount": "1/3 c",
+      "unit": "unit",
+      "category": "spice"
+    },
+    {
+      "name": "margarine",
+      "amount": "1/3 c",
+      "unit": "unit",
+      "category": "herb"
+    },
+    {
+      "name": "almond meal",
+      "amount": "1 1/2",
+      "unit": "cup",
+      "category": "fat"
+    },
+    {
+      "name": "eggs",
+      "amount": "3",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "almondmilk coconutmilk blend",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "maple syrup or sugar",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "grain"
+    },
+    {
+      "name": "vanilla extract",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "vegetable"
+    },
+    {
+      "name": "cinnamon",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "baking powder",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "1/4",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "light soy sauce",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "spice"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "garlic",
+      "amount": "3",
+      "unit": "cloves",
+      "category": "fat"
+    },
+    {
+      "name": "ginger root",
+      "amount": "1",
+      "unit": "slice",
+      "category": "protein"
+    },
+    {
+      "name": "flank steak",
+      "amount": "1",
+      "unit": "12 ounce",
+      "category": "spice"
+    },
+    {
+      "name": "green mango",
+      "amount": "1",
+      "unit": "cup",
+      "category": "spice"
+    },
+    {
+      "name": "salad greens",
+      "amount": "2",
+      "unit": "cups",
+      "category": "spice"
+    },
+    {
+      "name": "bean sprouts",
+      "amount": "1",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "carrot",
+      "amount": "1",
+      "unit": "shredded",
+      "category": "other"
+    },
+    {
+      "name": "snow peas",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "chopped roasted peanuts",
+      "amount": "1/4",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "fresh mint",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "grain"
+    },
+    {
+      "name": "fresh cilantro",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "other"
+    },
+    {
+      "name": "fresh Thai basil",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "green onion",
+      "amount": "1",
+      "unit": "slice",
+      "category": "vegetable"
+    },
+    {
+      "name": "lime juice",
+      "amount": "3",
+      "unit": "tablespoons",
+      "category": "fat"
+    },
+    {
+      "name": "fish sauce",
+      "amount": "3",
+      "unit": "tablespoons",
+      "category": "vegetable"
+    },
+    {
+      "name": "vegetable oil",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "grain"
+    },
+    {
+      "name": "brown sugar",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "spice"
+    },
+    {
+      "name": "soy sauce",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "spice"
+    },
+    {
+      "name": "minced shallot",
+      "amount": "1",
+      "unit": "tablespoon",
+      "category": "vegetable"
+    },
+    {
+      "name": "Thai chile pepper",
+      "amount": "1",
+      "unit": "thinly sliced",
+      "category": "protein"
+    },
+    {
+      "name": "whole black lentils",
+      "amount": "1",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "yellow split peas",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "dairy"
+    },
+    {
+      "name": "garlic",
+      "amount": "8",
+      "unit": "medium-size cloves",
+      "category": "other"
+    },
+    {
+      "name": "ginger",
+      "amount": "2",
+      "unit": "lengthwise slices",
+      "category": "dairy"
+    },
+    {
+      "name": "green Thai, cayenne, or serrano chiles",
+      "amount": "2 to 4",
+      "unit": "fresh",
+      "category": "fat"
+    },
+    {
+      "name": "cardamom pods",
+      "amount": "4",
+      "unit": "unit",
+      "category": "grain"
+    },
+    {
+      "name": "bay leaves",
+      "amount": "2",
+      "unit": "unit",
+      "category": "protein"
+    },
+    {
+      "name": "cinnamon sticks",
+      "amount": "2",
+      "unit": "unit",
+      "category": "dairy"
+    },
+    {
+      "name": "Ghee or unsalted butter",
+      "amount": "4",
+      "unit": "tablespoons",
+      "category": "other"
+    },
+    {
+      "name": "cumin seeds",
+      "amount": "1",
+      "unit": "teaspoon",
+      "category": "spice"
+    },
+    {
+      "name": "red onion",
+      "amount": "1",
+      "unit": "cup",
+      "category": "spice"
+    },
+    {
+      "name": "crushed tomatoes or Tomato Sauce",
+      "amount": "1",
+      "unit": "cup",
+      "category": "other"
+    },
+    {
+      "name": "salt",
+      "amount": "2",
+      "unit": "teaspoons",
+      "category": "spice"
+    },
+    {
+      "name": "cayenne (ground red pepper)",
+      "amount": "1/2",
+      "unit": "teaspoon",
+      "category": "other"
+    },
+    {
+      "name": "cooked red kidney beans",
+      "amount": "1",
+      "unit": "cup",
+      "category": "fat"
+    },
+    {
+      "name": "heavy cream",
+      "amount": "1/2",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "cilantro leaves and tender stems",
+      "amount": "2",
+      "unit": "tablespoons",
+      "category": "vegetable"
+    },
+    {
+      "name": "onion",
+      "amount": "0.5",
+      "unit": "cup",
+      "category": "protein"
+    },
+    {
+      "name": "baby spinach",
+      "amount": "1.5",
+      "unit": "cup",
+      "category": "fruit"
+    },
+    {
+      "name": "Egg",
+      "amount": "1",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "egg whites",
+      "amount": "4",
+      "unit": "unit",
+      "category": "vegetable"
+    },
+    {
+      "name": "reduced fat cheese",
+      "amount": "0.25",
+      "unit": "cup",
+      "category": "vegetable"
+    },
+    {
+      "name": "pepper",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "vegetable"
+    },
+    {
+      "name": "Tarragon fresh",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "nut"
+    },
+    {
+      "name": "Basil fresh",
+      "amount": "1",
+      "unit": "pinch",
+      "category": "herb"
+    },
+    {
+      "name": "Green Lentils",
+      "amount": "1.5",
+      "unit": "cup",
+      "category": "herb"
+    },
+    {
+      "name": "Bay Leaves",
+      "amount": "2",
+      "unit": "whole",
+      "category": "herb"
+    },
+    {
+      "name": "Carrot",
+      "amount": "1",
+      "unit": "whole",
+      "category": "vegetable"
+    }
+  ],
+  "pairs": [
+    {
+      "index": 0,
+      "original": {
+        "name": "vegan margarine",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "vegan margarine",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "vegan margarine",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 1,
+      "original": {
+        "name": "chives",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "chives",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "chives",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 2,
+      "original": {
+        "name": "vegetarian bacon bits",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "vegetarian bacon bits",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "vegetarian bacon bits",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 3,
+      "original": {
+        "name": "soy protein",
+        "amount": "1",
+        "unit": "unit",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "soy protein",
+        "amount": "1",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "soy protein",
+        "amount": "1",
+        "unit": "unit",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 4,
+      "original": {
+        "name": "nutritional yeast",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "nutritional yeast",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "other"
+      },
+      "safe": {
+        "name": "nutritional yeast",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "other"
+      }
+    },
+    {
+      "index": 5,
+      "original": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 6,
+      "original": {
+        "name": "asafoetida powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "asafoetida powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "asafoetida powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 7,
+      "original": {
+        "name": "turmeric",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "turmeric",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "turmeric",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 8,
+      "original": {
+        "name": "chinese tofu",
+        "amount": "3",
+        "unit": "cups",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "tofu",
+        "amount": "3",
+        "unit": "cups",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "tofu",
+        "amount": "3",
+        "unit": "cups",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 9,
+      "original": {
+        "name": "onion",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "onion",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 10,
+      "original": {
+        "name": "bell pepper",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "bell peppers",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "bell peppers",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 11,
+      "original": {
+        "name": "chili powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "chili powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "chili powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 12,
+      "original": {
+        "name": "kabocha or butternut squash",
+        "amount": "2",
+        "unit": "pounds",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "squash",
+        "amount": "2",
+        "unit": "pounds",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "squash",
+        "amount": "2",
+        "unit": "pounds",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 13,
+      "original": {
+        "name": "salt",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "salt",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "salt",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 14,
+      "original": {
+        "name": "balsamic vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "balsamic vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "balsamic vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 15,
+      "original": {
+        "name": "extra virgin olive oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "olive oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "olive oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 16,
+      "original": {
+        "name": "black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 17,
+      "original": {
+        "name": "ginger",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "ginger",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "ginger",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 18,
+      "original": {
+        "name": "turmeric",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "turmeric",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "turmeric",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 19,
+      "original": {
+        "name": "onion",
+        "amount": "1",
+        "unit": "half",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "1",
+        "unit": "half",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "onion",
+        "amount": "1",
+        "unit": "half",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 20,
+      "original": {
+        "name": "water",
+        "amount": "1",
+        "unit": "quart",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "water",
+        "amount": "1",
+        "unit": "quart",
+        "category": "other"
+      },
+      "safe": {
+        "name": "water",
+        "amount": "1",
+        "unit": "quart",
+        "category": "other"
+      }
+    },
+    {
+      "index": 21,
+      "original": {
+        "name": "sherry vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "sherry vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "sherry vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 22,
+      "original": {
+        "name": "red wine vinegar",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "red wine vinegar",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "red wine vinegar",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 23,
+      "original": {
+        "name": "Dijon mustard",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "mustard",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "mustard",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 24,
+      "original": {
+        "name": "cumin seeds",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "cumin seeds",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "cumin seeds",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 25,
+      "original": {
+        "name": "flat leaf parsley",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "parsley",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "parsley",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 26,
+      "original": {
+        "name": "walnut oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "walnut oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "walnut oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 27,
+      "original": {
+        "name": "ground beef",
+        "amount": "1",
+        "unit": "lb",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "ground beef",
+        "amount": "1",
+        "unit": "lb",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "ground beef",
+        "amount": "1",
+        "unit": "lb",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 28,
+      "original": {
+        "name": "green pepper",
+        "amount": "0.25",
+        "unit": "c",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "green peppers",
+        "amount": "0.25",
+        "unit": "c",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "green peppers",
+        "amount": "0.25",
+        "unit": "c",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 29,
+      "original": {
+        "name": "red kidney beans",
+        "amount": "2",
+        "unit": "20 oz can",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "red kidney beans",
+        "amount": "2",
+        "unit": "20 oz can",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "red kidney beans",
+        "amount": "2",
+        "unit": "20 oz can",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 30,
+      "original": {
+        "name": "stewed tomatoes",
+        "amount": "1",
+        "unit": "can",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "tomatoes",
+        "amount": "1",
+        "unit": "can",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "tomatoes",
+        "amount": "1",
+        "unit": "can",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 31,
+      "original": {
+        "name": "Shake 'N Bake seasoning for chicken",
+        "amount": "1",
+        "unit": "envelope",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "seasoning mix",
+        "amount": "1",
+        "unit": "envelope",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "seasoning mix",
+        "amount": "1",
+        "unit": "envelope",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 32,
+      "original": {
+        "name": "water",
+        "amount": "0.5",
+        "unit": "c",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "water",
+        "amount": "0.5",
+        "unit": "c",
+        "category": "other"
+      },
+      "safe": {
+        "name": "water",
+        "amount": "0.5",
+        "unit": "c",
+        "category": "other"
+      }
+    },
+    {
+      "index": 33,
+      "original": {
+        "name": "vinegar",
+        "amount": "1",
+        "unit": "Tbsp",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "vinegar",
+        "amount": "1",
+        "unit": "Tbsp",
+        "category": "other"
+      },
+      "safe": {
+        "name": "vinegar",
+        "amount": "1",
+        "unit": "Tbsp",
+        "category": "other"
+      }
+    },
+    {
+      "index": 34,
+      "original": {
+        "name": "chili powder",
+        "amount": "2",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "chili powder",
+        "amount": "2",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "chili powder",
+        "amount": "2",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 35,
+      "original": {
+        "name": "Frozen Seasoned Tater Tots",
+        "amount": "2",
+        "unit": "cups",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "potatoes",
+        "amount": "2",
+        "unit": "cups",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Frozen Seasoned Tater Tots",
+        "amount": "2",
+        "unit": "cups",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 36,
+      "original": {
+        "name": "Canola Oil",
+        "amount": "0.5",
+        "unit": "teaspoons",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "canola oil",
+        "amount": "0.5",
+        "unit": "teaspoons",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "canola oil",
+        "amount": "0.5",
+        "unit": "teaspoons",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 37,
+      "original": {
+        "name": "Eggs",
+        "amount": "6",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "eggs",
+        "amount": "6",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "eggs",
+        "amount": "6",
+        "unit": "unit",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 38,
+      "original": {
+        "name": "Salt",
+        "amount": "0.25",
+        "unit": "teaspoons",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "chives",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "Salt",
+        "amount": "0.25",
+        "unit": "teaspoons",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 39,
+      "original": {
+        "name": "Pepper",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "vegetarian bacon bits",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "other"
+      },
+      "safe": {
+        "name": "Pepper",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "other"
+      }
+    },
+    {
+      "index": 40,
+      "original": {
+        "name": "Oregano",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "soy protein",
+        "amount": "1",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "Oregano",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 41,
+      "original": {
+        "name": "Half-and-half",
+        "amount": "0.25",
+        "unit": "cups",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "nutritional yeast",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "other"
+      },
+      "safe": {
+        "name": "Half-and-half",
+        "amount": "0.25",
+        "unit": "cups",
+        "category": "other"
+      }
+    },
+    {
+      "index": 42,
+      "original": {
+        "name": "Baking Powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "Baking Powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 43,
+      "original": {
+        "name": "Grated Cheddar Cheese",
+        "amount": "1",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "asafoetida powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "Grated Cheddar Cheese",
+        "amount": "1",
+        "unit": "cup",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 44,
+      "original": {
+        "name": "Diced Ham",
+        "amount": "1",
+        "unit": "cup",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "turmeric",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "Diced Ham",
+        "amount": "1",
+        "unit": "cup",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 45,
+      "original": {
+        "name": "Sorghum grain",
+        "amount": "170",
+        "unit": "grams",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "tofu",
+        "amount": "3",
+        "unit": "cups",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "Sorghum grain",
+        "amount": "170",
+        "unit": "grams",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 46,
+      "original": {
+        "name": "Water",
+        "amount": "250",
+        "unit": "ml",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Water",
+        "amount": "250",
+        "unit": "ml",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 47,
+      "original": {
+        "name": "Salt",
+        "amount": "1/4",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "bell peppers",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Salt",
+        "amount": "1/4",
+        "unit": "tsp",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 48,
+      "original": {
+        "name": "Onion",
+        "amount": "200",
+        "unit": "grams",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "chili powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "Onion",
+        "amount": "200",
+        "unit": "grams",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 49,
+      "original": {
+        "name": "Vegetable oil",
+        "amount": "1/2",
+        "unit": "tbsp",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "squash",
+        "amount": "2",
+        "unit": "pounds",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Vegetable oil",
+        "amount": "1/2",
+        "unit": "tbsp",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 50,
+      "original": {
+        "name": "Potatoes",
+        "amount": "150",
+        "unit": "grams",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "salt",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "Potatoes",
+        "amount": "150",
+        "unit": "grams",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 51,
+      "original": {
+        "name": "White rice flour",
+        "amount": "30",
+        "unit": "grams",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "balsamic vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "White rice flour",
+        "amount": "30",
+        "unit": "grams",
+        "category": "other"
+      }
+    },
+    {
+      "index": 52,
+      "original": {
+        "name": "Pepper",
+        "amount": "1",
+        "unit": "as required",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "olive oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "Pepper",
+        "amount": "1",
+        "unit": "as required",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 53,
+      "original": {
+        "name": "Nutmeg",
+        "amount": "1/2",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "Nutmeg",
+        "amount": "1/2",
+        "unit": "tsp",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 54,
+      "original": {
+        "name": "onion",
+        "amount": "1",
+        "unit": "unit",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "ginger",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "onion",
+        "amount": "1",
+        "unit": "unit",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 55,
+      "original": {
+        "name": "hamburger",
+        "amount": "1 1/2 to 2 lb",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "turmeric",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "hamburger",
+        "amount": "1 1/2 to 2 lb",
+        "unit": "unit",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 56,
+      "original": {
+        "name": "hamburger seasoning mix",
+        "amount": "1 pkg",
+        "unit": "unit",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "1",
+        "unit": "half",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "hamburger seasoning mix",
+        "amount": "1 pkg",
+        "unit": "unit",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 57,
+      "original": {
+        "name": "Mozzarella cheese",
+        "amount": "1 1/2 c",
+        "unit": "unit",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "water",
+        "amount": "1",
+        "unit": "quart",
+        "category": "other"
+      },
+      "safe": {
+        "name": "Mozzarella cheese",
+        "amount": "1 1/2 c",
+        "unit": "unit",
+        "category": "other"
+      }
+    },
+    {
+      "index": 58,
+      "original": {
+        "name": "sour cream",
+        "amount": "1 c",
+        "unit": "unit",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "sherry vinegar",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "sour cream",
+        "amount": "1 c",
+        "unit": "unit",
+        "category": "other"
+      }
+    },
+    {
+      "index": 59,
+      "original": {
+        "name": "tomato sauce",
+        "amount": "1 c",
+        "unit": "unit",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "red wine vinegar",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "tomato sauce",
+        "amount": "1 c",
+        "unit": "unit",
+        "category": "other"
+      }
+    },
+    {
+      "index": 60,
+      "original": {
+        "name": "crescent dinner rolls",
+        "amount": "1 can",
+        "unit": "unit",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "mustard",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "crescent dinner rolls",
+        "amount": "1 can",
+        "unit": "unit",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 61,
+      "original": {
+        "name": "Parmesan cheese",
+        "amount": "1/3 c",
+        "unit": "unit",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "cumin seeds",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "Parmesan cheese",
+        "amount": "1/3 c",
+        "unit": "unit",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 62,
+      "original": {
+        "name": "margarine",
+        "amount": "1/3 c",
+        "unit": "unit",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "parsley",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "margarine",
+        "amount": "1/3 c",
+        "unit": "unit",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 63,
+      "original": {
+        "name": "almond meal",
+        "amount": "1 1/2",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "walnut oil",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "almond meal",
+        "amount": "1 1/2",
+        "unit": "cup",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 64,
+      "original": {
+        "name": "eggs",
+        "amount": "3",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "ground beef",
+        "amount": "1",
+        "unit": "lb",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "eggs",
+        "amount": "3",
+        "unit": "unit",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 65,
+      "original": {
+        "name": "almondmilk coconutmilk blend",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "green peppers",
+        "amount": "0.25",
+        "unit": "c",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "almondmilk coconutmilk blend",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 66,
+      "original": {
+        "name": "maple syrup or sugar",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "red kidney beans",
+        "amount": "2",
+        "unit": "20 oz can",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "maple syrup or sugar",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 67,
+      "original": {
+        "name": "vanilla extract",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "tomatoes",
+        "amount": "1",
+        "unit": "can",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "vanilla extract",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 68,
+      "original": {
+        "name": "cinnamon",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "seasoning mix",
+        "amount": "1",
+        "unit": "unit",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "cinnamon",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 69,
+      "original": {
+        "name": "baking powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "water",
+        "amount": "0.5",
+        "unit": "c",
+        "category": "other"
+      },
+      "safe": {
+        "name": "baking powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 70,
+      "original": {
+        "name": "salt",
+        "amount": "1/4",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "normalized": {
+        "name": "vinegar",
+        "amount": "1",
+        "unit": "Tbsp",
+        "category": "other"
+      },
+      "safe": {
+        "name": "salt",
+        "amount": "1/4",
+        "unit": "teaspoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 71,
+      "original": {
+        "name": "light soy sauce",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "chili powder",
+        "amount": "2",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "light soy sauce",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 72,
+      "original": {
+        "name": "vegetable oil",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "potatoes",
+        "amount": "2",
+        "unit": "cups",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "vegetable oil",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 73,
+      "original": {
+        "name": "garlic",
+        "amount": "3",
+        "unit": "cloves",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "canola oil",
+        "amount": "0.5",
+        "unit": "teaspoons",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "garlic",
+        "amount": "3",
+        "unit": "cloves",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 74,
+      "original": {
+        "name": "ginger root",
+        "amount": "1",
+        "unit": "slice",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "eggs",
+        "amount": "6",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "ginger root",
+        "amount": "1",
+        "unit": "slice",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 75,
+      "original": {
+        "name": "flank steak",
+        "amount": "1",
+        "unit": "12 ounce",
+        "category": "protein"
+      },
+      "normalized": {
+        "name": "salt",
+        "amount": "0.25",
+        "unit": "teaspoons",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "flank steak",
+        "amount": "1",
+        "unit": "12 ounce",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 76,
+      "original": {
+        "name": "green mango",
+        "amount": "1",
+        "unit": "cup",
+        "category": "fruit"
+      },
+      "normalized": {
+        "name": "pepper",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "green mango",
+        "amount": "1",
+        "unit": "cup",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 77,
+      "original": {
+        "name": "salad greens",
+        "amount": "2",
+        "unit": "cups",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "oregano",
+        "amount": "0.125",
+        "unit": "teaspoons",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "salad greens",
+        "amount": "2",
+        "unit": "cups",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 78,
+      "original": {
+        "name": "bean sprouts",
+        "amount": "1",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "half-and-half",
+        "amount": "0.25",
+        "unit": "cups",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "bean sprouts",
+        "amount": "1",
+        "unit": "cup",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 79,
+      "original": {
+        "name": "carrot",
+        "amount": "1",
+        "unit": "shredded",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "baking powder",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "carrot",
+        "amount": "1",
+        "unit": "shredded",
+        "category": "other"
+      }
+    },
+    {
+      "index": 80,
+      "original": {
+        "name": "snow peas",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "cheddar cheese",
+        "amount": "1",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "snow peas",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 81,
+      "original": {
+        "name": "chopped roasted peanuts",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "nut"
+      },
+      "normalized": {
+        "name": "diced ham",
+        "amount": "1",
+        "unit": "cup",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "chopped roasted peanuts",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 82,
+      "original": {
+        "name": "fresh mint",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "sorghum grain",
+        "amount": "170",
+        "unit": "grams",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "fresh mint",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 83,
+      "original": {
+        "name": "fresh cilantro",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "water",
+        "amount": "250",
+        "unit": "ml",
+        "category": "other"
+      },
+      "safe": {
+        "name": "fresh cilantro",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "other"
+      }
+    },
+    {
+      "index": 84,
+      "original": {
+        "name": "fresh Thai basil",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "salt",
+        "amount": "1/4",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "fresh Thai basil",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 85,
+      "original": {
+        "name": "green onion",
+        "amount": "1",
+        "unit": "slice",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "200",
+        "unit": "grams",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "green onion",
+        "amount": "1",
+        "unit": "slice",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 86,
+      "original": {
+        "name": "lime juice",
+        "amount": "3",
+        "unit": "tablespoons",
+        "category": "fruit"
+      },
+      "normalized": {
+        "name": "vegetable oil",
+        "amount": "1/2",
+        "unit": "tbsp",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "lime juice",
+        "amount": "3",
+        "unit": "tablespoons",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 87,
+      "original": {
+        "name": "fish sauce",
+        "amount": "3",
+        "unit": "tablespoons",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "potatoes",
+        "amount": "150",
+        "unit": "grams",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "fish sauce",
+        "amount": "3",
+        "unit": "tablespoons",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 88,
+      "original": {
+        "name": "vegetable oil",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "white rice flour",
+        "amount": "30",
+        "unit": "grams",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "vegetable oil",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 89,
+      "original": {
+        "name": "brown sugar",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "pepper",
+        "amount": "1",
+        "unit": "as required",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "brown sugar",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 90,
+      "original": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "nutmeg",
+        "amount": "1/2",
+        "unit": "tsp",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "soy sauce",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 91,
+      "original": {
+        "name": "minced shallot",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "onions",
+        "amount": "1",
+        "unit": "unit",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "minced shallot",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 92,
+      "original": {
+        "name": "Thai chile pepper",
+        "amount": "1",
+        "unit": "thinly sliced",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "ground beef",
+        "amount": "1 1/2 to 2",
+        "unit": "lb",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "Thai chile pepper",
+        "amount": "1",
+        "unit": "thinly sliced",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 93,
+      "original": {
+        "name": "whole black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "mozzarella cheese",
+        "amount": "1 1/2",
+        "unit": "c",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "whole black lentils",
+        "amount": "1",
+        "unit": "cup",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 94,
+      "original": {
+        "name": "yellow split peas",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "sour cream",
+        "amount": "1",
+        "unit": "c",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "yellow split peas",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 95,
+      "original": {
+        "name": "garlic",
+        "amount": "8",
+        "unit": "medium-size cloves",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "tomato sauce",
+        "amount": "1",
+        "unit": "c",
+        "category": "other"
+      },
+      "safe": {
+        "name": "garlic",
+        "amount": "8",
+        "unit": "medium-size cloves",
+        "category": "other"
+      }
+    },
+    {
+      "index": 96,
+      "original": {
+        "name": "ginger",
+        "amount": "2",
+        "unit": "lengthwise slices",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "parmesan cheese",
+        "amount": "1/3",
+        "unit": "c",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "ginger",
+        "amount": "2",
+        "unit": "lengthwise slices",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 97,
+      "original": {
+        "name": "green Thai, cayenne, or serrano chiles",
+        "amount": "2 to 4",
+        "unit": "fresh",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "margarine",
+        "amount": "1/3",
+        "unit": "c",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "green Thai, cayenne, or serrano chiles",
+        "amount": "2 to 4",
+        "unit": "fresh",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 98,
+      "original": {
+        "name": "cardamom pods",
+        "amount": "4",
+        "unit": "unit",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "almond meal",
+        "amount": "1 1/2",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "safe": {
+        "name": "cardamom pods",
+        "amount": "4",
+        "unit": "unit",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 99,
+      "original": {
+        "name": "bay leaves",
+        "amount": "2",
+        "unit": "unit",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "eggs",
+        "amount": "3",
+        "unit": "unit",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "bay leaves",
+        "amount": "2",
+        "unit": "unit",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 100,
+      "original": {
+        "name": "cinnamon sticks",
+        "amount": "2",
+        "unit": "unit",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "almond milk",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "safe": {
+        "name": "cinnamon sticks",
+        "amount": "2",
+        "unit": "unit",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 101,
+      "original": {
+        "name": "Ghee or unsalted butter",
+        "amount": "4",
+        "unit": "tablespoons",
+        "category": "fat"
+      },
+      "normalized": {
+        "name": "maple syrup",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "other"
+      },
+      "safe": {
+        "name": "Ghee or unsalted butter",
+        "amount": "4",
+        "unit": "tablespoons",
+        "category": "other"
+      }
+    },
+    {
+      "index": 102,
+      "original": {
+        "name": "cumin seeds",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "vanilla extract",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "cumin seeds",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 103,
+      "original": {
+        "name": "red onion",
+        "amount": "1",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "cinnamon",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "red onion",
+        "amount": "1",
+        "unit": "cup",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 104,
+      "original": {
+        "name": "crushed tomatoes or Tomato Sauce",
+        "amount": "1",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "baking powder",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "other"
+      },
+      "safe": {
+        "name": "crushed tomatoes or Tomato Sauce",
+        "amount": "1",
+        "unit": "cup",
+        "category": "other"
+      }
+    },
+    {
+      "index": 105,
+      "original": {
+        "name": "coarse kosher or sea salt",
+        "amount": "2",
+        "unit": "teaspoons",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "salt",
+        "amount": "1/4",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "safe": {
+        "name": "salt",
+        "amount": "2",
+        "unit": "teaspoons",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 106,
+      "original": {
+        "name": "cayenne (ground red pepper)",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "soy sauce",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "other"
+      },
+      "safe": {
+        "name": "cayenne (ground red pepper)",
+        "amount": "1/2",
+        "unit": "teaspoon",
+        "category": "other"
+      }
+    },
+    {
+      "index": 107,
+      "original": {
+        "name": "cooked red kidney beans",
+        "amount": "1",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "vegetable oil",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "fat"
+      },
+      "safe": {
+        "name": "cooked red kidney beans",
+        "amount": "1",
+        "unit": "cup",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 108,
+      "original": {
+        "name": "heavy cream",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "garlic",
+        "amount": "3",
+        "unit": "cloves",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "heavy cream",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 109,
+      "original": {
+        "name": "cilantro leaves and tender stems",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "ginger",
+        "amount": "1",
+        "unit": "slice",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "cilantro leaves and tender stems",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 110,
+      "original": {
+        "name": "onion",
+        "amount": "0.5",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "flank steak",
+        "amount": "1",
+        "unit": "12 ounce",
+        "category": "protein"
+      },
+      "safe": {
+        "name": "onion",
+        "amount": "0.5",
+        "unit": "cup",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 111,
+      "original": {
+        "name": "baby spinach",
+        "amount": "1.5",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "green mangoes",
+        "amount": "1",
+        "unit": "cup",
+        "category": "fruit"
+      },
+      "safe": {
+        "name": "baby spinach",
+        "amount": "1.5",
+        "unit": "cup",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 112,
+      "original": {
+        "name": "Egg",
+        "amount": "1",
+        "unit": "unit",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "salad greens",
+        "amount": "2",
+        "unit": "cups",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Egg",
+        "amount": "1",
+        "unit": "unit",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 113,
+      "original": {
+        "name": "egg whites",
+        "amount": "4",
+        "unit": "unit",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "bean sprouts",
+        "amount": "1",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "egg whites",
+        "amount": "4",
+        "unit": "unit",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 114,
+      "original": {
+        "name": "reduced fat cheese",
+        "amount": "0.25",
+        "unit": "cup",
+        "category": "dairy"
+      },
+      "normalized": {
+        "name": "carrots",
+        "amount": "1",
+        "unit": "shredded",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "reduced fat cheese",
+        "amount": "0.25",
+        "unit": "cup",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 115,
+      "original": {
+        "name": "pepper",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "spice"
+      },
+      "normalized": {
+        "name": "snow peas",
+        "amount": "1/2",
+        "unit": "cup",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "pepper",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 116,
+      "original": {
+        "name": "Tarragon fresh",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "peanuts",
+        "amount": "1/4",
+        "unit": "cup",
+        "category": "nut"
+      },
+      "safe": {
+        "name": "Tarragon fresh",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "nut"
+      }
+    },
+    {
+      "index": 117,
+      "original": {
+        "name": "Basil fresh",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "mint",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "Basil fresh",
+        "amount": "1",
+        "unit": "pinch",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 118,
+      "original": {
+        "name": "Green Lentils",
+        "amount": "1.5",
+        "unit": "cup",
+        "category": "grain"
+      },
+      "normalized": {
+        "name": "cilantro",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "Green Lentils",
+        "amount": "1.5",
+        "unit": "cup",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 119,
+      "original": {
+        "name": "Bay Leaves",
+        "amount": "2",
+        "unit": "whole",
+        "category": "herb"
+      },
+      "normalized": {
+        "name": "basil",
+        "amount": "2",
+        "unit": "tablespoons",
+        "category": "herb"
+      },
+      "safe": {
+        "name": "Bay Leaves",
+        "amount": "2",
+        "unit": "whole",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 120,
+      "original": {
+        "name": "Carrot",
+        "amount": "1",
+        "unit": "whole",
+        "category": "vegetable"
+      },
+      "normalized": {
+        "name": "green onions",
+        "amount": "1",
+        "unit": "slice",
+        "category": "vegetable"
+      },
+      "safe": {
+        "name": "Carrot",
+        "amount": "1",
+        "unit": "whole",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 121,
+      "original": {
+        "name": "Red Bell Pepper",
+        "amount": "1",
+        "unit": "whole",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 122,
+      "original": {
+        "name": "Green Onions",
+        "amount": "0.25",
+        "unit": "cups",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 123,
+      "original": {
+        "name": "Raisins",
+        "amount": "0.5",
+        "unit": "cups",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 124,
+      "original": {
+        "name": "Walnuts",
+        "amount": "1",
+        "unit": "cup",
+        "category": "nut"
+      }
+    },
+    {
+      "index": 125,
+      "original": {
+        "name": "Red Wine Vinegar",
+        "amount": "0.03",
+        "unit": "cups",
+        "category": "other"
+      }
+    },
+    {
+      "index": 126,
+      "original": {
+        "name": "Lemon Juice",
+        "amount": "0.01",
+        "unit": "cups",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 127,
+      "original": {
+        "name": "Maple Syrup",
+        "amount": "0.01",
+        "unit": "cups",
+        "category": "other"
+      }
+    },
+    {
+      "index": 128,
+      "original": {
+        "name": "Extra Virgin Olive Oil",
+        "amount": "0.25",
+        "unit": "cups",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 129,
+      "original": {
+        "name": "Kosher Salt",
+        "amount": "0.0075",
+        "unit": "cups",
+        "category": "other"
+      }
+    },
+    {
+      "index": 130,
+      "original": {
+        "name": "Freshly Ground Black Pepper",
+        "amount": "0.0025",
+        "unit": "cups",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 131,
+      "original": {
+        "name": "olive oil",
+        "amount": "4",
+        "unit": "tbsp",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 132,
+      "original": {
+        "name": "shiitake mushrooms",
+        "amount": "3.5",
+        "unit": "oz",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 133,
+      "original": {
+        "name": "ground beef",
+        "amount": "1",
+        "unit": "lb",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 134,
+      "original": {
+        "name": "onions",
+        "amount": "2",
+        "unit": "None",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 135,
+      "original": {
+        "name": "cherry tomatoes",
+        "amount": "7",
+        "unit": "oz",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 136,
+      "original": {
+        "name": "heavy cream",
+        "amount": "3/4",
+        "unit": "cup",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 137,
+      "original": {
+        "name": "fusilli pasta",
+        "amount": "14",
+        "unit": "oz",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 138,
+      "original": {
+        "name": "basil",
+        "amount": "2/3",
+        "unit": "cup",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 139,
+      "original": {
+        "name": "bananas",
+        "amount": "2",
+        "unit": "unit",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 140,
+      "original": {
+        "name": "vanilla",
+        "amount": "2",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 141,
+      "original": {
+        "name": "lemon juice",
+        "amount": "1",
+        "unit": "Tbsp",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 142,
+      "original": {
+        "name": "oil",
+        "amount": "1/2",
+        "unit": "c",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 143,
+      "original": {
+        "name": "sugar",
+        "amount": "1",
+        "unit": "c",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 144,
+      "original": {
+        "name": "salt",
+        "amount": "1/4",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 145,
+      "original": {
+        "name": "tofu",
+        "amount": "2 1/2",
+        "unit": "c",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 146,
+      "original": {
+        "name": "dried red kidney beans",
+        "amount": "7 oz",
+        "unit": "oz",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 147,
+      "original": {
+        "name": "vegetable oil",
+        "amount": "2 tbsp",
+        "unit": "tbsp",
+        "category": "fat"
+      }
+    },
+    {
+      "index": 148,
+      "original": {
+        "name": "brown mustard seeds",
+        "amount": "1/2 tsp",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 149,
+      "original": {
+        "name": "cumin seeds",
+        "amount": "1/2 tsp",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 150,
+      "original": {
+        "name": "fresh curry leaves",
+        "amount": "15",
+        "unit": "unit",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 151,
+      "original": {
+        "name": "turmeric",
+        "amount": "1/4 tsp",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 152,
+      "original": {
+        "name": "ground coriander",
+        "amount": "1 tsp",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 153,
+      "original": {
+        "name": "ground cumin",
+        "amount": "1 tsp",
+        "unit": "tsp",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 154,
+      "original": {
+        "name": "fresh long green chilies",
+        "amount": "2",
+        "unit": "unit",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 155,
+      "original": {
+        "name": "garlic",
+        "amount": "3 cloves",
+        "unit": "unit",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 156,
+      "original": {
+        "name": "fresh ginger",
+        "amount": "1 tsp",
+        "unit": "tsp",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 157,
+      "original": {
+        "name": "sugar",
+        "amount": "2 tsp",
+        "unit": "tsp",
+        "category": "other"
+      }
+    },
+    {
+      "index": 158,
+      "original": {
+        "name": "salt",
+        "amount": "1/2 tsp",
+        "unit": "tsp",
+        "category": "other"
+      }
+    },
+    {
+      "index": 159,
+      "original": {
+        "name": "fresh tomatoes",
+        "amount": "4",
+        "unit": "unit",
+        "category": "fruit"
+      }
+    },
+    {
+      "index": 160,
+      "original": {
+        "name": "vegetable stock",
+        "amount": "1 cup",
+        "unit": "cup",
+        "category": "broth"
+      }
+    },
+    {
+      "index": 161,
+      "original": {
+        "name": "frozen broad beans",
+        "amount": "5 oz",
+        "unit": "oz",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 162,
+      "original": {
+        "name": "yogurt",
+        "amount": "None",
+        "unit": "unit",
+        "category": "dairy"
+      }
+    },
+    {
+      "index": 163,
+      "original": {
+        "name": "fresh mint leaves",
+        "amount": "None",
+        "unit": "unit",
+        "category": "herb"
+      }
+    },
+    {
+      "index": 164,
+      "original": {
+        "name": "ground beef",
+        "amount": "7",
+        "unit": "pounds",
+        "category": "protein"
+      }
+    },
+    {
+      "index": 165,
+      "original": {
+        "name": "onions",
+        "amount": "6",
+        "unit": "medium",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 166,
+      "original": {
+        "name": "celery",
+        "amount": "2",
+        "unit": "ribs",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 167,
+      "original": {
+        "name": "garlic",
+        "amount": "3",
+        "unit": "cloves",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 168,
+      "original": {
+        "name": "diced tomatoes",
+        "amount": "2",
+        "unit": "cans",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 169,
+      "original": {
+        "name": "tomato paste",
+        "amount": "2",
+        "unit": "cans",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 170,
+      "original": {
+        "name": "whole kernel corn",
+        "amount": "2",
+        "unit": "cans",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 171,
+      "original": {
+        "name": "mushroom stems and pieces",
+        "amount": "2",
+        "unit": "cans",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 172,
+      "original": {
+        "name": "sliced ripe olives",
+        "amount": "3",
+        "unit": "cans",
+        "category": "vegetable"
+      }
+    },
+    {
+      "index": 173,
+      "original": {
+        "name": "water",
+        "amount": "2 to 3",
+        "unit": "cups",
+        "category": "other"
+      }
+    },
+    {
+      "index": 174,
+      "original": {
+        "name": "chili powder",
+        "amount": "2 to 3",
+        "unit": "tablespoons",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 175,
+      "original": {
+        "name": "seasoned salt",
+        "amount": "1",
+        "unit": "tablespoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 176,
+      "original": {
+        "name": "crushed red pepper flakes",
+        "amount": "0.5 to 1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 177,
+      "original": {
+        "name": "pepper",
+        "amount": "1",
+        "unit": "teaspoon",
+        "category": "spice"
+      }
+    },
+    {
+      "index": 178,
+      "original": {
+        "name": "tamales",
+        "amount": "3",
+        "unit": "jars",
+        "category": "grain"
+      }
+    },
+    {
+      "index": 179,
+      "original": {
+        "name": "cheddar cheese",
+        "amount": "2",
+        "unit": "cups",
+        "category": "dairy"
+      }
+    }
+  ]
+}

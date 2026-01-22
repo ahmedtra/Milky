@@ -1974,6 +1974,30 @@ ${mealSchemas}
       }
 
       if (intent?.intent === 'recipe_search') {
+        const stripEmoji = (value = '') =>
+          String(value || '')
+            .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+            .replace(/[\u{FE0F}\u{200D}]/g, '')
+            .trim();
+        const buildRecipeSuggestionMessage = (recipes = [], introText = '') => {
+          const safeIntro = String(introText || '').trim();
+          const list = (recipes || []).map((r, idx) => {
+            const titleRaw = r.title || r.name || `Recipe ${idx + 1}`;
+            const title = stripEmoji(titleRaw);
+            const calories = r.nutrition?.calories ?? r.calories ?? null;
+            const protein = r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g ?? null;
+            const time = r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes ?? null;
+            const parts = [];
+            if (calories !== null && calories !== undefined) parts.push(`${calories} cal`);
+            if (protein !== null && protein !== undefined) parts.push(`${protein}g protein`);
+            if (time !== null && time !== undefined) parts.push(`${time} min`);
+            const meta = parts.length ? ` — ${parts.join(', ')}` : '';
+            return `<recipe>${title}</recipe>${meta}`;
+          }).join('\n');
+          if (!safeIntro) return list;
+          return list ? `${safeIntro}\n\n${list}` : safeIntro;
+        };
+
         const searchText = await summarizeSearchText(message, intent, conversationHistory);
         const vectorInput = intent.recipeTitle || searchText;
         const queryVector = await buildQueryVector(vectorInput);
@@ -2075,13 +2099,8 @@ ${mealSchemas}
         } catch (filterErr) {
           console.warn("⚠️ LLM candidate filter failed", filterErr?.message || filterErr);
         }
-        const summary = useResults.map((r, idx) => {
-          const title = r.title || r.name || `Recipe ${idx + 1}`;
-          const calories = r.nutrition?.calories ?? r.calories ?? 'n/a';
-          const protein = r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g ?? 'n/a';
-          const time = r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes ?? 'n/a';
-          return `${idx + 1}) <recipe>${title}</recipe>\n   • ${calories} cal, ${protein}g protein, ${time} min`;
-        }).join('\n\n');
+        const introLine = 'Here are a few recipes that match your request:';
+        const summary = buildRecipeSuggestionMessage(useResults, introLine);
 
         // Ask the LLM to validate/refresh the list to match the request (and invent if none match)
         try {
@@ -2095,13 +2114,16 @@ ${mealSchemas}
             time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes
           })), null, 2)}
 
-          Task: Return a concise plain-text reply with up to 3 recipes that truly match the request. Each line: "<recipe><title></recipe> – <cal> cal, <protein>g protein, <time> min".
+          Task: Return a concise plain-text reply with up to 3 recipes that truly match the request.
+          Each line MUST start with "- " and follow this exact pattern:
+          - <recipe><title></recipe> — <cal> cal, <protein>g protein, <time> min
           If none of the candidates match, invent up to 3 reasonable recipes that do (and still wrap titles in <recipe> tags).
           Do NOT include ids or JSON. Keep it readable with line breaks or bullet points.
           `;
           const llmAnswer = await this.callTextModel(recPrompt, 0.3, 'text');
           const hasRecipeTag = /<recipe>.*<\/recipe>/i.test(llmAnswer || '');
-          return llmAnswer && hasRecipeTag ? llmAnswer : summary;
+          const normalized = normalizeRecipeListText(llmAnswer);
+          return llmAnswer && hasRecipeTag ? normalized : summary;
         } catch (e) {
           return summary;
         }
@@ -2519,6 +2541,17 @@ ${mealSchemas}
         const parseSingle = (val) => {
           const raw = String(val || '').trim();
           if (!raw) return null;
+          const wordMap = {
+            half: 0.5,
+            halves: 0.5,
+            quarter: 0.25,
+            quarters: 0.25,
+            whole: 1
+          };
+          const lowered = raw.toLowerCase();
+          if (Object.prototype.hasOwnProperty.call(wordMap, lowered)) {
+            return wordMap[lowered];
+          }
           const unicodeFractions = {
             '¼': '1/4',
             '½': '1/2',
@@ -2563,6 +2596,21 @@ ${mealSchemas}
           });
           return next;
         };
+        if (['half', 'halves', 'quarter', 'quarters'].includes(unitRaw)) {
+          const unitFactor = unitRaw.startsWith('half') ? 0.5 : 0.25;
+          return logTransform({
+            ...ing,
+            amount: String(amountNum * unitFactor),
+            unit: 'unit'
+          });
+        }
+        if (unitRaw === 'whole') {
+          return logTransform({
+            ...ing,
+            amount: String(amountNum),
+            unit: 'unit'
+          });
+        }
         if ((unitRaw === 'unit' || unitRaw === '') && amountNum >= 50 && ['protein', 'meat', 'produce', 'vegetable', 'fruit', 'dairy'].includes(cat)) {
           return logTransform({ ...ing, amount: String(Math.round(amountNum)), unit: 'g' });
         }

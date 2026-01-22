@@ -116,6 +116,11 @@ const FormattedText = styled.div`
   ol li {
     list-style-type: decimal;
   }
+
+  .recipe-line {
+    margin: 0.5rem 0;
+    line-height: 1.6;
+  }
   
   strong, b {
     font-weight: 600;
@@ -303,16 +308,133 @@ const Chat = () => {
   };
 
   const formatMessageText = (text) => {
+    console.log('🧾 Chat message raw:', text);
+    const normalizeRecipeListText = (raw) => {
+      const content = String(raw || '');
+      const hasRecipeTags = /<recipe>.*<\/recipe>/i.test(content);
+      const lines = content.split(/\r?\n/);
+      const isEmojiOnly = (line) => !/[\w<]/.test(line);
+      const isSaveOnly = (line) => line.trim().toLowerCase() === 'save';
+      const isMacroLine = (line) =>
+        /^[-•*]\s*/.test(line) ||
+        /^—\s*|^–\s*/.test(line) ||
+        /(cal|protein|min)/i.test(line);
+      if (!hasRecipeTags) {
+        const hasMacros = lines.some((line) => /(cal|protein|min)/i.test(line));
+        if (!hasMacros) return content;
+        const preamble = [];
+        const items = [];
+        const postamble = [];
+        let lastTitle = '';
+        let started = false;
+        lines.forEach((rawLine) => {
+          const line = rawLine.trim();
+          if (!line) return;
+          if (isEmojiOnly(line) || isSaveOnly(line)) return;
+          if (isMacroLine(line)) {
+            if (lastTitle) {
+              const macro = line.replace(/^[-•*]\s*/, '').replace(/^—\s*|^–\s*/, '').trim();
+              items.push(`${lastTitle} — ${macro}`);
+              lastTitle = '';
+              started = true;
+            }
+            return;
+          }
+          if (!started) {
+            preamble.push(line);
+          } else {
+            if (lastTitle) {
+              items.push(`${lastTitle}`);
+            }
+            lastTitle = line;
+          }
+        });
+        if (lastTitle) {
+          items.push(`${lastTitle}`);
+        }
+        const blocks = [];
+        if (preamble.length) blocks.push(preamble.join('\n'));
+        if (items.length) blocks.push(items.join('\n'));
+        if (postamble.length) blocks.push(postamble.join('\n'));
+        return blocks.join('\n\n');
+      }
+      const output = [];
+      const preamble = [];
+      const postamble = [];
+      const firstRecipeIdx = lines.findIndex((l) => /<recipe>.*<\/recipe>/i.test(l));
+      let lastRecipeIdx = -1;
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        if (/<recipe>.*<\/recipe>/i.test(lines[i])) {
+          lastRecipeIdx = i;
+          break;
+        }
+      }
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        if (idx < firstRecipeIdx) preamble.push(trimmed);
+        else if (idx > lastRecipeIdx) postamble.push(trimmed);
+      });
+
+      for (let i = Math.max(firstRecipeIdx, 0); i <= lastRecipeIdx; i += 1) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (/^[-•*]\s*[^\w<]+$/.test(line)) {
+          continue;
+        }
+        const hasRecipe = /<recipe>.*<\/recipe>/i.test(line);
+        if (!hasRecipe) {
+          output.push(line);
+          continue;
+        }
+        let titleLine = line.replace(/^\s*[-•*]\s*/, '').trim();
+        let macro = '';
+        for (let j = i + 1; j < lines.length; j += 1) {
+          const nextLine = lines[j].trim();
+          if (!nextLine) continue;
+          if (/^[-•*]\s*[^\w<]+$/.test(nextLine)) {
+            continue;
+          }
+          if (/<recipe>.*<\/recipe>/i.test(nextLine)) break;
+          if (/(cal|protein|min)/i.test(nextLine)) {
+            macro = nextLine.replace(/^[-•*]\s*/, '').replace(/^—\s*|^–\s*/, '').trim();
+            i = j;
+            break;
+          }
+          break;
+        }
+        if (macro) {
+          titleLine = `${titleLine} — ${macro}`;
+        }
+        output.push(`${titleLine}`);
+      }
+      const blocks = [];
+      if (preamble.length) blocks.push(preamble.join('\n'));
+      if (output.length) blocks.push(output.join('\n'));
+      if (postamble.length) blocks.push(postamble.join('\n'));
+      return blocks.join('\n\n');
+    };
+
     // Convert line breaks to <br> tags and handle basic formatting
-    let formattedText = text
+    const mergedText = normalizeRecipeListText(text)
+      // Drop orphan '*' bullet lines
+      .replace(/^\*\s*$/gm, '');
+    let formattedText = mergedText
+      // Normalize numbered lists like "1)" to "1." so list parsing works
+      .replace(/^(\d+)\)\s+(.+)$/gm, '$1. $2')
+      // Treat recipe lines as standalone blocks (not list items)
+      .replace(/^(<recipe>.*<\/recipe>.*)$/gm, '<div class="recipe-line">$1</div>')
       // Handle headers first (# Header, ## Header, etc.)
       .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
       .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
       .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>')
       // Handle blockquotes (> text)
       .replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>')
-      // Handle bullet points (- or •)
-      .replace(/^[-•]\s+(.+)$/gm, '<li>$1</li>')
+      // Handle bullet points (-, •, or *), skip emoji-only bullets
+      .replace(/^[-•*]\s+(.+)$/gm, (match, content) => {
+        if (!/[\w<]/.test(content)) return '';
+        return `<li>${content}</li>`;
+      })
       // Handle numbered lists (1., 2., etc.)
       .replace(/^(\d+\.)\s+(.+)$/gm, '<li>$2</li>')
       // Handle bold text (**text** or __text__)
@@ -427,4 +549,3 @@ const Chat = () => {
 };
 
 export default Chat;
-

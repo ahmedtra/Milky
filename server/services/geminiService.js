@@ -2069,11 +2069,76 @@ ${mealSchemas}
             .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
             .replace(/[\u{FE0F}\u{200D}]/g, '')
             .trim();
+        const normalizeTitle = (value) =>
+          String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+        const levenshtein = (a = '', b = '') => {
+          const s = String(a);
+          const t = String(b);
+          if (s === t) return 0;
+          const rows = s.length + 1;
+          const cols = t.length + 1;
+          const dist = Array.from({ length: rows }, () => Array(cols).fill(0));
+          for (let i = 0; i < rows; i += 1) dist[i][0] = i;
+          for (let j = 0; j < cols; j += 1) dist[0][j] = j;
+          for (let i = 1; i < rows; i += 1) {
+            for (let j = 1; j < cols; j += 1) {
+              const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+              dist[i][j] = Math.min(
+                dist[i - 1][j] + 1,
+                dist[i][j - 1] + 1,
+                dist[i - 1][j - 1] + cost
+              );
+            }
+          }
+          return dist[rows - 1][cols - 1];
+        };
+        const alignRecipeTitlesToCandidates = (text, recipes = []) => {
+          const candidates = (recipes || [])
+            .map((r) => stripEmoji(r.title || r.name || ''))
+            .filter(Boolean);
+          if (!text || !candidates.length) return text;
+          const candidateNorms = candidates.map((c) => normalizeTitle(c));
+          return String(text).replace(/<recipe>(.*?)<\/recipe>/gi, (_match, inner) => {
+            const rawTitle = stripEmoji(inner);
+            const want = normalizeTitle(rawTitle);
+            if (!want) return `<recipe>${inner}</recipe>`;
+            let bestIdx = -1;
+            let bestScore = Infinity;
+            candidateNorms.forEach((cand, idx) => {
+              const score = levenshtein(want, cand);
+              if (score < bestScore) {
+                bestScore = score;
+                bestIdx = idx;
+              }
+            });
+            const bestTitle = candidates[bestIdx] || rawTitle;
+            const maxAllowed = Math.max(3, Math.round(bestTitle.length * 0.35));
+            if (bestScore > maxAllowed) return `<recipe>${inner}</recipe>`;
+            return `<recipe>${bestTitle}</recipe>`;
+          });
+        };
+        const normalizeRecipeListText = (text = '') => {
+          const lines = String(text).split('\n');
+          const cleaned = lines
+            .map((line) => line.trim())
+            .filter((line) => line && stripEmoji(line).replace(/[-•*]/g, '').trim().length);
+          const normalized = cleaned.map((line) => {
+            if (/<recipe>/.test(line)) {
+              const stripped = line.replace(/^[-•*]\s*/, '');
+              return `- ${stripped}`;
+            }
+            return line;
+          });
+          return normalized.join('\n');
+        };
         const buildRecipeSuggestionMessage = (recipes = [], introText = '') => {
           const safeIntro = String(introText || '').trim();
           const list = (recipes || []).map((r, idx) => {
             const titleRaw = r.title || r.name || `Recipe ${idx + 1}`;
-            const title = stripEmoji(titleRaw);
+            const title = String(titleRaw || '').trim();
             const calories = r.nutrition?.calories ?? r.calories ?? null;
             const protein = r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g ?? null;
             const time = r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes ?? null;
@@ -2121,6 +2186,9 @@ ${mealSchemas}
             sample: (results || []).slice(0, 3).map((r) => r.title || r.name)
           });
         }
+        if (LOG_SEARCH || LOG_MEALPLAN) {
+          console.log('🧾 recipe_search titles (raw)', (results || []).map((r) => r.title || r.name));
+        }
 
         const shouldForceLLM = keyword && !filtered.length;
         // If results are sparse or irrelevant, backfill with LLM-generated recipes
@@ -2147,7 +2215,7 @@ ${mealSchemas}
           return 'I could not find matching recipes right now. Try adjusting the ingredients or diet.';
         }
 
-        // Ask LLM to discard irrelevant candidates based on user intent
+        // Ask LLM to select relevant candidates by id (keeps titles exact)
         try {
           const candidateData = useResults.map((r, idx) => ({
             id: r.id || r._id || `c${idx}`,
@@ -2161,9 +2229,10 @@ ${mealSchemas}
           You have candidate recipes (JSON):
           ${JSON.stringify(candidateData, null, 2)}
 
-          Decide which candidates respect the user request (ingredients, meal type, etc.).
-          Respond with ONLY JSON: {"keepIds":["id1","id2"...]} using the ids provided above.
-          If unsure, keep all. Do NOT invent new ids or recipes.
+          Pick up to 3 candidates that best match the request (ingredients, meal type, etc.).
+          Respond with ONLY JSON: {"pickIds":["id1","id2","id3"]} using the ids provided above.
+          Order matters. If unsure, return all ids in their original order.
+          Do NOT invent new ids or recipes.
           `;
           const filterResp = await this.callTextModel(filterPrompt, 0.2, 'json');
           const parsedFilter = (() => {
@@ -2174,62 +2243,104 @@ ${mealSchemas}
               return null;
             }
           })();
-          const keepIds = Array.isArray(parsedFilter?.keepIds)
-            ? parsedFilter.keepIds.map((v) => String(v))
+          const pickIds = Array.isArray(parsedFilter?.pickIds)
+            ? parsedFilter.pickIds.map((v) => String(v))
             : null;
-          if (keepIds && keepIds.length) {
-            useResults = useResults.filter((r, idx) => {
-            const id = r.id || r._id || `c${idx}`;
-            return keepIds.includes(String(id));
-          });
-        }
-        if (!useResults.length) {
+          if (pickIds && pickIds.length) {
+            const byId = new Map(
+              useResults.map((r, idx) => [String(r.id || r._id || `c${idx}`), r])
+            );
+            useResults = pickIds.map((id) => byId.get(id)).filter(Boolean);
+          }
+          if (!useResults.length) {
             useResults = candidateData.map((c, idx) => useResults[idx]).filter(Boolean); // fallback to original
           }
         } catch (filterErr) {
           console.warn("⚠️ LLM candidate filter failed", filterErr?.message || filterErr);
         }
         const introLine = 'Here are a few recipes that match your request:';
-        const summary = buildRecipeSuggestionMessage(useResults, introLine);
-
-        // Ask the LLM to validate/refresh the list to match the request (and invent if none match)
-        try {
-          const recPrompt = `
-          User asked: "${message}"
-          You have candidate recipes (JSON):
-          ${JSON.stringify(useResults.map((r) => ({
-            title: r.title || r.name,
-            calories: r.nutrition?.calories ?? r.calories,
-            protein: r.nutrition?.protein ?? r.protein ?? r.protein_grams ?? r.protein_g,
-            time: r.total_time_min ?? r.total_time_minutes ?? r.prep_time_minutes
-          })), null, 2)}
-
-          Task: Return a concise plain-text reply with up to 3 recipes that truly match the request.
-          Each line MUST start with "- " and follow this exact pattern:
-          - <recipe><title></recipe> — <cal> cal, <protein>g protein, <time> min
-          If none of the candidates match, invent up to 3 reasonable recipes that do (and still wrap titles in <recipe> tags).
-          Do NOT include ids or JSON. Keep it readable with line breaks or bullet points.
-          `;
-          const llmAnswer = await this.callTextModel(recPrompt, 0.3, 'text');
-          const hasRecipeTag = /<recipe>.*<\/recipe>/i.test(llmAnswer || '');
-          const normalized = normalizeRecipeListText(llmAnswer);
-          return llmAnswer && hasRecipeTag ? normalized : summary;
-        } catch (e) {
-          return summary;
+        let finalResults = useResults;
+        if (finalResults.length < 3) {
+          const already = new Set(finalResults.map((r) => String(r.id || r._id || r.title || r.name)));
+          const remaining = (useResults || []).filter(
+            (r) => !already.has(String(r.id || r._id || r.title || r.name))
+          );
+          if (remaining.length) {
+            const needed = 3 - finalResults.length;
+            finalResults = finalResults.concat(remaining.slice(0, needed));
+          }
         }
+        if (!finalResults.length) {
+          try {
+            const inventPrompt = `
+            User asked: "${message}"
+            Invent up to 3 recipes that match the request.
+            Respond with ONLY JSON: {"recipes":[{"title":"...","calories":123,"protein":12,"time":15}]}
+            Use numbers for calories/protein/time when possible. Keep titles concise.
+            `;
+            const inventResp = await this.callTextModel(inventPrompt, 0.4, 'json');
+            const parsed = (() => {
+              try {
+                const cleaned = (inventResp || '').replace(/```json|```/gi, '').trim();
+                return JSON.parse(cleaned);
+              } catch {
+                return null;
+              }
+            })();
+            const invented = Array.isArray(parsed?.recipes) ? parsed.recipes : [];
+            if (invented.length) {
+              finalResults = invented.map((r) => ({
+                title: stripEmoji(r.title || 'Custom Recipe'),
+                nutrition: {
+                  calories: r.calories ?? null,
+                  protein: r.protein ?? null
+                },
+                total_time_min: r.time ?? null,
+                source: 'ai'
+              }));
+            }
+          } catch (inventErr) {
+            console.warn("⚠️ LLM invented recipes failed", inventErr?.message || inventErr);
+          }
+        }
+        if (LOG_SEARCH || LOG_MEALPLAN) {
+          console.log('🧾 recipe_search titles (final)', (finalResults || []).map((r) => r.title || r.name));
+        }
+        const summary = buildRecipeSuggestionMessage(finalResults, introLine);
+        if (LOG_SEARCH || LOG_MEALPLAN) {
+          console.log('🧾 recipe_search message', summary);
+        }
+        return summary;
       }
       if (intent?.intent === 'recipe_detail') {
         let recipe = null;
+        let isDbHit = false;
         // Try to propagate previous assistant list into the search context
         const lastAssistant = [...conversationHistory].reverse().find((m) => m.role === 'assistant')?.content || '';
 
         if (intent.recipeId) {
           recipe = await getRecipeById(intent.recipeId);
+          if (recipe) isDbHit = true;
         }
         if (!recipe && intent.recipeTitle) {
-          // Prefer exact title match only (no fuzzy)
-          const exact = await searchRecipes({ title_exact: intent.recipeTitle }, { size: 1, logSearch: LOG_SEARCH || LOG_MEALPLAN });
-          recipe = exact?.results?.[0] || null;
+          const titleQuery = String(intent.recipeTitle || '').trim();
+          const normalizeTitle = (value) =>
+            String(value || '')
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, ' ')
+              .trim();
+          if (titleQuery) {
+            const candidates = await searchRecipes(
+              { text: titleQuery, __textFallback: titleQuery },
+              { size: 5, logSearch: LOG_SEARCH || LOG_MEALPLAN }
+            );
+            const want = normalizeTitle(titleQuery);
+            recipe =
+              candidates?.results?.find((r) => normalizeTitle(r.title || r.name) === want) ||
+              candidates?.results?.[0] ||
+              null;
+            if (recipe) isDbHit = true;
+          }
         }
         if (!recipe) {
           // Invent a recipe via dedicated exact-title generator using user context
@@ -2279,7 +2390,7 @@ ${mealSchemas}
         const detail = {
           type: 'recipe_detail',
           title: recipe.title || recipe.name || intent.recipeTitle || 'Recipe',
-          source: recipe._id ? 'db' : (recipe.source || 'ai'),
+          source: isDbHit ? 'db' : (recipe.source || 'ai'),
           id: recipe._id || recipe.id || null,
           imageUrl: recipe.imageUrl || recipe.image || recipe.photo || null,
           ingredients: ingList,

@@ -110,10 +110,6 @@ const buildQuery = (filters = {}) => {
     });
   }
 
-  if (filters.title_exact) {
-    bool.filter.push({ term: { 'title.raw': filters.title_exact } });
-  }
-
   // Support both legacy dietary_tags and canonical diet_tags stored in the index
   const dietTags = cleanList(filters.dietary_tags || filters.diet_tags);
   if (dietTags?.length) {
@@ -271,13 +267,22 @@ const searchRecipes = async (filters = {}, options = {}) => {
 
 const getRecipeById = async (id) => {
   if (!id) return null;
-  const res = await searchRecipesZilliz({ title_exact: id }, { size: 1 });
-  if (!res || !res.length) return null;
-  const doc = res[0];
-  return {
-    ...doc,
-    nutrition: normalizeNutrition(doc)
-  };
+  const attempts = [
+    { id },
+    { recipe_id: id },
+    { text: id, __textFallback: id }
+  ];
+  for (const filters of attempts) {
+    const res = await searchRecipesZilliz(filters, { size: 1 });
+    if (res && res.length) {
+      const doc = res[0];
+      return {
+        ...doc,
+        nutrition: normalizeNutrition(doc)
+      };
+    }
+  }
+  return null;
 };
 
 const findAlternatives = async ({

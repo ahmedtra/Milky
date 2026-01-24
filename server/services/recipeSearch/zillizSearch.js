@@ -15,17 +15,42 @@ const normalizeCuisine = (value) => {
 
 // Rehydrate doc from payload or flattened fields
 const rehydrateDoc = (hit) => {
+  const hitId =
+    hit?.id ??
+    hit?.pk ??
+    hit?.primary_key ??
+    hit?.primaryKey ??
+    hit?.fields?.id ??
+    hit?.fields?.pk ??
+    hit?.fields?.primary_key ??
+    hit?.fields?.primaryKey ??
+    hit?.recipe_id ??
+    hit?.fields?.recipe_id ??
+    hit?.entity?.id ??
+    hit?.entity?.pk ??
+    hit?.entity?.primary_key ??
+    hit?.entity?.primaryKey ??
+    null;
+  if (!hitId) {
+    const topKeys = hit && typeof hit === "object" ? Object.keys(hit) : [];
+    const fieldsKeys = hit?.fields && typeof hit.fields === "object" ? Object.keys(hit.fields) : [];
+    const entityKeys = hit?.entity && typeof hit.entity === "object" ? Object.keys(hit.entity) : [];
+    console.log("⚠️ Zilliz hit missing id", { topKeys, fieldsKeys, entityKeys });
+  }
   // If payload is present, prefer it for full fidelity
   if (hit.payload) {
     try {
       const obj = JSON.parse(hit.payload);
-      if (obj && typeof obj === "object") return { ...obj, _id: hit.id };
+      if (obj && typeof obj === "object") {
+        const rawId = hitId ?? obj._id ?? obj.id ?? obj.recipe_id ?? obj.recipeId ?? null;
+        return { ...obj, _id: rawId ?? obj._id ?? null, id: obj.id ?? rawId ?? null };
+      }
     } catch (err) {
       // fallback below
     }
   }
   // Fallback: rebuild from flattened fields
-  const doc = { _id: hit.id };
+  const doc = { _id: hitId ?? null };
   const copy = (field, as) => {
     if (hit[field] !== undefined) doc[as || field] = hit[field];
   };
@@ -88,6 +113,9 @@ const rehydrateDoc = (hit) => {
       // ignore
     }
   }
+  if (!doc.id) {
+    doc.id = doc._id ?? doc.recipe_id ?? null;
+  }
   return doc;
 };
 
@@ -95,9 +123,19 @@ const rehydrateDoc = (hit) => {
 const buildScalarFilters = (filters = {}) => {
   const constraints = [];
 
-  // Exact title
-  if (filters.title_exact) {
-    constraints.push({ field: "title", operator: "==", value: String(filters.title_exact) });
+  if (filters.id) {
+    const id = String(filters.id).replace(/"/g, '\\"');
+    constraints.push({ raw: `id == "${id}"` });
+  }
+  if (Array.isArray(filters.ids) && filters.ids.length) {
+    const list = filters.ids
+      .map((v) => `"${String(v).replace(/"/g, '\\"')}"`)
+      .join(", ");
+    constraints.push({ raw: `id in [${list}]` });
+  }
+  if (filters.recipe_id) {
+    const recipeId = String(filters.recipe_id).replace(/"/g, '\\"');
+    constraints.push({ raw: `recipe_id == "${recipeId}"` });
   }
 
   // Diet tags
@@ -236,7 +274,7 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
     const res = await milvus.query({
       collection_name: ZILLIZ_COLLECTION,
       expr: filterStr,
-      output_fields: ["payload"],
+      output_fields: ["payload", "id", "recipe_id", "title"],
       limit: effectiveLimit,
       offset,
     });
@@ -254,12 +292,13 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
     filter: filterStr,
     limit: effectiveLimit,
     offset,
-    output_fields: ["payload"],
+    output_fields: ["payload", "id", "recipe_id", "title"],
     metric_type: "COSINE",
     params: { ef: 200, random_seed: seed },
   });
 
   const hits = res?.results || [];
+  console.log("hits id", hits[0].title);
   const docs = hits.map((h) => rehydrateDoc(h));
   const filtered = applyPostExcludes(docs);
   return excludeList.length ? filtered.slice(0, limit) : filtered;

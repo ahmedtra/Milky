@@ -166,12 +166,17 @@ router.post('/', auth, async (req, res) => {
       source = await getRecipeById(recipeId);
     }
     if (!source && title) {
-      // prefer exact title match, then fuzzy
-      const exact = await searchRecipes({ title_exact: title }, { size: 1 });
-      const fuzzy = !exact?.results?.length
-        ? await searchRecipes({ text: title }, { size: 1, randomize: false })
-        : null;
-      source = exact?.results?.[0] || fuzzy?.results?.[0];
+      const normalizeTitle = (value) =>
+        String(value || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const want = normalizeTitle(title);
+      const exact = await searchRecipes({ text: title, __textFallback: title }, { size: 5, randomize: false });
+      source =
+        exact?.results?.find((r) => normalizeTitle(r.title || r.name) === want) ||
+        exact?.results?.[0] ||
+        null;
     }
     if (!source && title) {
       try {

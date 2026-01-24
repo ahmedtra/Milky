@@ -452,14 +452,14 @@ export default function ShoppingLists() {
                                               });
                                             }}
                                             className={cn(
-                                              "flex items-center gap-2 text-center text-sm rounded-lg border px-3 py-2 min-w-[220px] max-w-[280px] flex-1 cursor-pointer transition",
+                                              "relative flex items-center gap-2 text-center text-sm rounded-lg border px-3 py-2 min-w-[220px] max-w-[280px] flex-1 cursor-pointer transition",
                                               purchased
                                                 ? "bg-primary/10 border-primary text-primary"
                                                 : "bg-card/80 border-border hover:border-primary/50"
                                             )}
                                           >
                                             {showVariants && (
-                                              <div className="shrink-0">
+                                              <div className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0">
                                                 <Select
                                                   value={selectedVariantIndex}
                                                   onValueChange={(value) => {
@@ -491,7 +491,7 @@ export default function ShoppingLists() {
                                                 </Select>
                                               </div>
                                             )}
-                                            <div className="flex-1 min-w-0 space-y-1 text-center">
+                                            <div className={cn("flex-1 min-w-0 space-y-1 text-center", showVariants && "pr-20")}>
                                               <p className={cn(
                                                 "font-semibold leading-tight break-words",
                                                 purchased ? "line-through" : "text-foreground"

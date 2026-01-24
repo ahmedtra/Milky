@@ -120,6 +120,18 @@ export default function ShoppingLists() {
     return { amount, unit };
   };
 
+  const getSelectedVariantIndex = (item: any, unitVariants: any[]) => {
+    const id = getItemId(item);
+    const override = quantityOverrides[id];
+    if (!override) return "0";
+    const idx = unitVariants.findIndex(
+      (variant) =>
+        String(variant.amount) === String(override.amount) &&
+        String(variant.unit).toLowerCase() === String(override.unit).toLowerCase()
+    );
+    return idx >= 0 ? String(idx) : "0";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -539,6 +551,14 @@ export default function ShoppingLists() {
           }}
           getItemKey={getItemId}
           normalizeDisplayQuantity={normalizeDisplayQuantity}
+          getSelectedVariantIndex={getSelectedVariantIndex}
+          onSelectVariant={(item, chosen) => {
+            const id = getItemId(item);
+            setQuantityOverrides((prev) => ({
+              ...prev,
+              [id]: { amount: chosen.amount, unit: chosen.unit }
+            }));
+          }}
           onExit={() => setShoppingModeListId(null)}
         />
       )}

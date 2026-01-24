@@ -3,6 +3,7 @@ import NoSleep from "nosleep.js";
 import { createPortal } from "react-dom";
 import { Check, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface ShoppingModeProps {
@@ -16,6 +17,8 @@ interface ShoppingModeProps {
   onToggleItem: (item: any) => void;
   getItemKey: (item: any) => string;
   normalizeDisplayQuantity: (item: any) => { amount: string | number; unit: string };
+  getSelectedVariantIndex: (item: any, unitVariants: any[]) => string;
+  onSelectVariant: (item: any, variant: any) => void;
   onExit: () => void;
 }
 
@@ -26,6 +29,8 @@ export function ShoppingMode({
   onToggleItem,
   getItemKey,
   normalizeDisplayQuantity,
+  getSelectedVariantIndex,
+  onSelectVariant,
   onExit,
 }: ShoppingModeProps) {
   const noSleepRef = useRef<NoSleep | null>(null);
@@ -90,6 +95,11 @@ export function ShoppingMode({
                   const purchased = !!item.purchased;
                   const { amount, unit } = normalizeDisplayQuantity(item);
                   const quantity = [amount, unit].filter(Boolean).join(" ");
+                  const unitVariants = Array.isArray(item.unitVariants) ? item.unitVariants : [];
+                  const showVariants = unitVariants.length > 1;
+                  const selectedVariantIndex = showVariants
+                    ? getSelectedVariantIndex(item, unitVariants)
+                    : "0";
                   return (
                     <button
                       key={key}
@@ -110,6 +120,36 @@ export function ShoppingMode({
                           {quantity && <span>{quantity}</span>}
                         </div>
                       </div>
+                      {showVariants && (
+                        <div className="shrink-0">
+                          <Select
+                            value={selectedVariantIndex}
+                            onValueChange={(value) => {
+                              const chosen = unitVariants[Number(value)];
+                              if (!chosen) return;
+                              onSelectVariant(item, chosen);
+                            }}
+                          >
+                            <SelectTrigger
+                              className="h-7 w-20 text-xs px-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="z-[400]">
+                              {unitVariants.map((variant, idx) => (
+                                <SelectItem
+                                  key={`${variant.amount}-${variant.unit}-${idx}`}
+                                  value={String(idx)}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {`${variant.amount} ${variant.unit}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       {purchased && <Check className="h-4 w-4 shrink-0 text-emerald-200" />}
                     </button>
                   );

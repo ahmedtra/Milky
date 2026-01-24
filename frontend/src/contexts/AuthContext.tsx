@@ -13,7 +13,7 @@ type AuthContextValue = {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, username?: string) => Promise<boolean>;
+  register: (email: string, password: string, username?: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
 };
 
@@ -36,6 +36,31 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+const parseErrorMessage = (err: unknown) => {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  const trimmed = msg.trim();
+  const extractMessage = () => {
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed?.message) return String(parsed.message);
+      } catch {
+        return msg;
+      }
+    }
+    return msg;
+  };
+  const raw = extractMessage();
+  const minLengthMatch = raw.match(/Path `password`.*minimum allowed length \((\d+)\)/i);
+  if (minLengthMatch) {
+    return `Password must be at least ${minLengthMatch[1]} characters.`;
+  }
+  if (/password/i.test(raw) && /short/i.test(raw)) {
+    return "Password is too short.";
+  }
+  return raw;
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -105,10 +130,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (typeof window !== "undefined") {
         localStorage.setItem("token", data.token);
       }
-      return true;
+      return { success: true };
     } catch (err) {
       console.error("Register failed", err);
-      return false;
+      return { success: false, message: parseErrorMessage(err) };
     }
   };
 

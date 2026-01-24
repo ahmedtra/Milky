@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChefHat, ShoppingCart, MessageCircle, Menu, X, LayoutDashboard, Soup, Heart, BarChart3 } from "lucide-react";
+import { ChefHat, ShoppingCart, MessageCircle, Menu, X, LayoutDashboard, Soup, Heart, BarChart3, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Logo from "@/assets/logo-milky.svg";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { path: "/app", label: "Dashboard", icon: LayoutDashboard },
@@ -18,6 +19,7 @@ const navItems = [
 export function Navigation({ showLinks = true }: { showLinks?: boolean }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
@@ -31,30 +33,42 @@ export function Navigation({ showLinks = true }: { showLinks?: boolean }) {
 
             {/* Desktop Navigation */}
             {showLinks && (
-              <div className="hidden md:flex items-center gap-1">
-                {navItems.map((item) => {
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <Link key={item.path} to={item.path}>
-                      <motion.div
-                        className={cn(
-                          "relative flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300",
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-soft"
-                            : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                        )}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        <span className="font-medium text-sm">{item.label}</span>
-                        {isActive && (
-                          <span className="absolute inset-x-2 -bottom-1 h-0.5 rounded-full bg-primary-foreground/80" />
-                        )}
-                      </motion.div>
-                    </Link>
-                  );
-                })}
+              <div className="hidden md:flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {navItems.map((item) => {
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <Link key={item.path} to={item.path}>
+                        <motion.div
+                          className={cn(
+                            "relative flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300",
+                            isActive
+                              ? "bg-primary text-primary-foreground shadow-soft"
+                              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                          )}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span className="font-medium text-sm">{item.label}</span>
+                          {isActive && (
+                            <span className="absolute inset-x-2 -bottom-1 h-0.5 rounded-full bg-primary-foreground/80" />
+                          )}
+                        </motion.div>
+                      </Link>
+                    );
+                  })}
+                </div>
+                {user && (
+                  <Button
+                    variant="ghost"
+                    className="gap-2 text-muted-foreground hover:text-foreground"
+                    onClick={logout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Disconnect
+                  </Button>
+                )}
               </div>
             )}
 
@@ -100,6 +114,19 @@ export function Navigation({ showLinks = true }: { showLinks?: boolean }) {
                     </Link>
                   );
                 })}
+                {user && (
+                  <Button
+                    variant="ghost"
+                    className="justify-start gap-3 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      logout();
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <LogOut className="h-5 w-5" />
+                    Disconnect
+                  </Button>
+                )}
               </div>
             </motion.div>
           )}

@@ -4,6 +4,7 @@ const { logEvent } = require('../utils/logger');
 const { ensureMealImage } = require('./leonardoService');
 const { groqChat } = require('./groqClient');
 const FavoriteRecipe = require('../models/FavoriteRecipe');
+const baseUnits = require('../config/baseUnits.json');
 // Node 18+ has global fetch; no import required.
 
 const EMBED_HOST = process.env.EMBEDDING_HOST || process.env.OLLAMA_HOST || 'http://localhost:11434';
@@ -792,7 +793,7 @@ class GeminiService {
       - Keep descriptors that change the actual item (e.g., "olive oil" vs "vegetable oil"; "red wine vinegar" vs "apple cider vinegar").
       - Remove prep adjectives like "chopped", "diced", "sliced", "fresh", "large/small".
       - Preserve amount/unit as provided; if missing, set amount "1" and unit "unit".
-      - Treat unit "c" as "cup" (never output "c" as a unit; use full unit names like cup, tbsp, tsp, g, ml, lb, oz).
+      - If unit is "c", infer whether it means "cup" or "unit" from the ingredient context; never output "c" as a unit. Use full unit names like cup, tbsp, tsp, g, ml, lb, oz, unit.
       - Category must be one of the allowed values above.
       Examples:
       - "ground beef 80/20" -> name "ground beef"
@@ -820,10 +821,21 @@ class GeminiService {
   }
 
   async convertVolumeToWeightWithModel(items = []) {
-    const volumeUnits = new Set(['ml', 'l', 'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons', 'c']);
+    const baseUnitSet = new Set(
+      [
+        ...(baseUnits?.weight || []),
+        ...(baseUnits?.volume || []),
+        ...(baseUnits?.count || []),
+        ...(baseUnits?.baseUnits || [])
+      ].map((u) => String(u).toLowerCase().trim())
+    );
     const candidates = items
       .map((item, idx) => ({ item, idx }))
-      .filter(({ item }) => item && volumeUnits.has(String(item.unit || '').toLowerCase().trim()));
+      .filter(({ item }) => {
+        if (!item) return false;
+        const unit = String(item.unit || '').toLowerCase().trim();
+        return unit && !baseUnitSet.has(unit);
+      });
     if (!candidates.length) return items;
 
     const payload = candidates.map(({ item, idx }) => ({
@@ -835,13 +847,18 @@ class GeminiService {
     }));
 
     const prompt = `
-    Convert volume-based ingredient amounts into weight (grams) when appropriate.
+    Normalize all ingredient units into the base units listed below.
     Return ONLY a JSON array of:
-    [{ "index": number, "amount": number, "unit": "g|ml" }]
+    [{ "index": number, "amount": number, "unit": "${(baseUnits?.baseUnits || ['g', 'ml', 'unit']).join('|')}" }]
+    Base units JSON:
+    ${JSON.stringify(baseUnits, null, 2)}
     Rules:
-    - Use these volume conversions: 1 cup = 240 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml, 1000 ml = 1 l.
-    - For liquids (water, milk, cream, juice, broth, stock, oils, sauces), keep unit "ml" and convert the amount to ml.
-    - For non-liquids (powders, grains, spices, herbs, cheeses, produce), convert to grams using a reasonable ingredient-specific density.
+    - Only output units from baseUnits.baseUnits.
+    - Convert weight units (kg, lb, oz) to grams.
+    - Convert volume units (l, cup, tbsp, tsp) to milliliters using: 1 cup = 240 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml, 1000 ml = 1 l.
+    - For liquids (water, milk, cream, juice, broth, stock, oils, sauces), keep unit "ml".
+    - For non-liquids (powders, grains, spices, herbs, cheeses, produce), convert volume to grams using a reasonable ingredient-specific density.
+    - For count-like units (piece, clove, slice), convert to "unit" with a numeric amount.
     - Do NOT change ingredient names or indices; keep the list order.
     Items: ${JSON.stringify(payload, null, 2)}
     `;
@@ -2615,7 +2632,7 @@ ${mealSchemas}
 
   async generateShoppingList(mealPlan) {
     try {
-      const extractedIngredients = this.extractIngredientsFromMealPlan(mealPlan);
+      const extractedIngredients = await this.extractIngredientsFromMealPlan(mealPlan);
 
       if (extractedIngredients.length === 0) {
         throw new Error('Meal plan does not contain any ingredients to convert into a shopping list');
@@ -2882,7 +2899,7 @@ ${mealSchemas}
     }
   }
 
-  extractIngredientsFromMealPlan(mealPlan = {}) {
+  async extractIngredientsFromMealPlan(mealPlan = {}) {
     const ingredients = [];
     const onionLog = [];
 
@@ -2890,16 +2907,54 @@ ${mealSchemas}
       return ingredients;
     }
 
-    mealPlan.days.forEach(day => {
+    for (const day of mealPlan.days) {
       const meals = Array.isArray(day?.meals) ? day.meals : [];
 
-      meals.forEach(meal => {
+      for (const meal of meals) {
         const recipes = Array.isArray(meal?.recipes) ? meal.recipes : [];
 
         if (recipes.length > 0) {
-          recipes.forEach(recipe => {
-            const recipeIngredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+          for (const recipe of recipes) {
+            let rawText = typeof recipe?.ingredients_raw === 'string' ? recipe.ingredients_raw.trim() : '';
+            if (!rawText) {
+              const recipeId = recipe?.id || recipe?._id || recipe?.recipe_id;
+              if (recipeId) {
+                try {
+                  const fetched = await getRecipeById(String(recipeId));
+                  if (fetched?.ingredients_raw && typeof fetched.ingredients_raw === 'string') {
+                    rawText = fetched.ingredients_raw.trim();
+                    console.log(`🧺 Hydrated ingredients_raw from DB for ${recipe?.name || 'recipe'} (${rawText.length} chars)`);
+                  }
+                } catch (err) {
+                  console.warn('⚠️ Failed to hydrate ingredients_raw for recipe', recipeId, err.message);
+                }
+              }
+            }
+            if (rawText) {
+              console.log(`🧺 Using ingredients_raw for ${recipe?.name || 'recipe'} (${rawText.length} chars)`);
+              rawText
+                .split(',')
+                .map((s) => this.parseRawIngredient(s))
+                .filter(Boolean)
+                .forEach((ingredient) => {
+                  const normalised = this.normalizeIngredient(ingredient);
+                  if (normalised) {
+                    ingredients.push(normalised);
+                    const lower = normalised.name.toLowerCase();
+                    if (lower.includes('onion')) {
+                      onionLog.push({ source: 'recipe_raw', recipe: recipe.name, ingredient: normalised });
+                    }
+                  }
+                });
+              continue;
+            }
+            console.log(`🧺 Missing ingredients_raw for ${recipe?.name || 'recipe'}; falling back to parsed ingredients`, {
+              hasIngredients: Array.isArray(recipe?.ingredients) && recipe.ingredients.length > 0,
+              hasIngredientsParsed: Array.isArray(recipe?.ingredients_parsed) && recipe.ingredients_parsed.length > 0,
+              hasIngredientsNorm: Array.isArray(recipe?.ingredients_norm) && recipe.ingredients_norm.length > 0
+            });
 
+            const recipeIngredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
             recipeIngredients.forEach(ingredient => {
               const normalised = this.normalizeIngredient(ingredient);
               if (normalised) {
@@ -2910,8 +2965,8 @@ ${mealSchemas}
                 }
               }
             });
-          });
-          return;
+          }
+          continue;
         }
 
         const mealLevelIngredients = Array.isArray(meal?.ingredients) ? meal.ingredients : [];
@@ -2925,8 +2980,8 @@ ${mealSchemas}
             }
           }
         });
-      });
-    });
+      }
+    }
 
     if (onionLog.length && process.env.LOG_MEALPLAN === 'true') {
       logMealplan('🧅 Onion entries collected for shopping list:', onionLog);

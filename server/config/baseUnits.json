@@ -1,0 +1,6 @@
+{
+  "weight": ["g"],
+  "volume": ["ml"],
+  "count": ["unit"],
+  "baseUnits": ["g", "ml", "unit"]
+}

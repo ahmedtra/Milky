@@ -20,12 +20,12 @@ export default function Register() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const success = await register(email, password, username);
+    const result = await register(email, password, username);
     setLoading(false);
-    if (success) {
+    if (result.success) {
       navigate("/dashboard", { replace: true });
     } else {
-      setError("Registration failed. Try again.");
+      setError(result.message || "Registration failed. Try again.");
     }
   };
 

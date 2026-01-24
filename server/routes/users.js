@@ -80,6 +80,14 @@ router.post('/register', async (req, res) => {
           : 'Duplicate value provided';
       return res.status(400).json({ message });
     }
+    if (error?.name === 'ValidationError') {
+      const passwordMsg = error?.errors?.password?.message;
+      console.warn('Registration validation error:', {
+        message: error.message,
+        password: passwordMsg
+      });
+      return res.status(400).json({ message: passwordMsg || 'Invalid registration data' });
+    }
 
     console.error('Registration error:', error);
     res.status(500).json({ message: 'Server error during registration' });
@@ -261,7 +269,6 @@ router.delete('/unlink-telegram', auth, async (req, res) => {
 });
 
 module.exports = router;
-
 
 
 

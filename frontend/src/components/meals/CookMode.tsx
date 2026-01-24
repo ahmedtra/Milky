@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 interface CookModeProps {
   title?: string;
   steps: string[];
+  ingredients?: string[];
   onExit: () => void;
 }
 
-export function CookMode({ title = "Cook Mode", steps, onExit }: CookModeProps) {
+export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit }: CookModeProps) {
   const [index, setIndex] = useState(0);
   const [voiceOn, setVoiceOn] = useState(false);
   const touchStartX = useRef<number | null>(null);
@@ -27,6 +28,38 @@ export function CookMode({ title = "Cook Mode", steps, onExit }: CookModeProps) 
 
   const goNext = () => setIndex((prev) => Math.min(prev + 1, safeSteps.length - 1));
   const goPrev = () => setIndex((prev) => Math.max(prev - 1, 0));
+
+  const safeIngredients = Array.isArray(ingredients)
+    ? ingredients.map((ing) => (typeof ing === "string" ? ing.trim() : "")).filter(Boolean)
+    : [];
+
+  const escapeRegExp = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const ingredientKey = (ingredient: string) => {
+    let cleaned = ingredient.toLowerCase();
+    cleaned = cleaned.replace(/\([^)]*\)/g, " ");
+    cleaned = cleaned.replace(/[¼½¾⅓⅔]/g, " ");
+    cleaned = cleaned.replace(/[\d/.,]+/g, " ");
+    cleaned = cleaned.replace(
+      /\b(cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|kg|ml|l|lb|oz|unit|units|cloves?|slice|slices|can|cans|jar|jars|pkg|package|packages|pinch|dash|large|medium|small|x-large|xl)\b/g,
+      " "
+    );
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    return cleaned;
+  };
+
+  const stepIngredients = (() => {
+    if (!safeIngredients.length) return [];
+    const step = String(safeSteps[index] || "").toLowerCase();
+    return safeIngredients.filter((ingredient) => {
+      const key = ingredientKey(ingredient);
+      if (!key) return false;
+      if (step.includes(key)) return true;
+      const words = key.split(" ").filter((w) => w.length > 3);
+      return words.some((w) => new RegExp(`\\b${escapeRegExp(w)}\\b`, "i").test(step));
+    });
+  })();
 
   useEffect(() => {
     // Keep screen awake
@@ -135,8 +168,20 @@ export function CookMode({ title = "Cook Mode", steps, onExit }: CookModeProps) 
           handleTouchEnd(e);
         }}
       >
+        {stepIngredients.length > 0 && (
+          <div className="w-full max-w-5xl bg-white/10 rounded-lg px-4 py-3 text-left">
+            <p className="text-xs uppercase tracking-wide text-white/70 mb-2">Ingredients for this step</p>
+            <ul className="text-base text-white/90 space-y-1">
+              {stepIngredients.map((ingredient, idx) => (
+                <li key={`${ingredient}-${idx}`} className="break-words">
+                  {ingredient}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="text-sm uppercase tracking-wide text-white/70">{title}</div>
-        <div className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug whitespace-pre-wrap max-w-5xl">
+        <div className="text-3xl sm:text-4xl md:text-5xl font-semibold leading-snug whitespace-pre-wrap max-w-5xl">
           {safeSteps[index]}
         </div>
         <div className="flex items-center gap-3 text-white/80 text-sm">

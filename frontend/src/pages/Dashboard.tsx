@@ -141,7 +141,7 @@ export default function Dashboard() {
     instructions: string[];
     instructionsArray: string[];
   } | null>(null);
-  const [cookMode, setCookMode] = useState<{ title: string; steps: string[] } | null>(null);
+  const [cookMode, setCookMode] = useState<{ title: string; steps: string[]; ingredients: string[] } | null>(null);
 
   const historyData = useMemo(() => {
     const groups: Record<string, { planId: string; dayIndex: number; planTitle: string; dayLabel: string; meals: any[]; createdAt: number; overlap: boolean }> = {};
@@ -826,6 +826,7 @@ export default function Dashboard() {
                       setCookMode({
                         title: expandedMeal.recipe?.name || expandedMeal.meal?.type || "Recipe",
                         steps: expandedMeal.instructionsArray,
+                        ingredients: expandedMeal.ingredients,
                       })
                     }
                   >
@@ -841,6 +842,7 @@ export default function Dashboard() {
         <CookMode
           title={cookMode.title}
           steps={cookMode.steps}
+          ingredients={cookMode.ingredients}
           onExit={() => setCookMode(null)}
         />
       )}

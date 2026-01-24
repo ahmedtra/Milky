@@ -165,6 +165,7 @@ export function MealDetailDialog({
         <CookMode
           title={meal.recipes?.[0]?.name || meal.type || "Recipe"}
           steps={instructionsArray}
+          ingredients={ingredients}
           onExit={() => setCookMode(false)}
         />
       )}

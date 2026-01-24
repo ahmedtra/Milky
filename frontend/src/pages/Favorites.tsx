@@ -260,6 +260,21 @@ export default function Favorites() {
                   ? selected.planRecipe.instructions.split(/\r?\n/).map((s: string) => s.trim()).filter(Boolean)
                   : []
             }
+            ingredients={
+              (() => {
+                const raw = selected.planRecipe?.ingredients;
+                const arr = Array.isArray(raw)
+                  ? raw
+                  : typeof raw === "string"
+                    ? raw.split(/\r?\n+/).map((s: string) => s.trim()).filter(Boolean)
+                    : [];
+                return arr.map((ing: any) =>
+                  typeof ing === "string"
+                    ? ing
+                    : [ing.amount, ing.unit, ing.name].filter(Boolean).join(" ")
+                );
+              })()
+            }
             onExit={() => setCookMode(false)}
           />
         )}

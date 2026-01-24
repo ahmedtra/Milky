@@ -398,6 +398,7 @@ export default function Dashboard() {
           instructions: recipe.instructions || [],
           imageUrl: recipe.imageUrl || recipe.image || null,
           source: "meal",
+          meal_type: meal?.type ? [String(meal.type).toLowerCase()] : recipe?.meal_type,
           nutrition,
         },
       });

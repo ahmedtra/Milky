@@ -332,6 +332,10 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
   try {
     if (!meal?.recipes?.length) return meal;
     const recipe = meal.recipes[0];
+    const isFavorite = recipe?.source === 'favorite' || String(recipe?.id || '').startsWith('favorite-');
+    if (isFavorite && (recipe.image || recipe.imageUrl)) {
+      return meal;
+    }
     // If recipe already has an image, ensure it is on the public R2 domain; if not, clear to force regeneration
     if (recipe.image || recipe.imageUrl) {
       const current = recipe.imageUrl || recipe.image;

@@ -211,6 +211,7 @@ export default function Chat() {
           instructions,
           imageUrl: latestRecipe?.imageUrl || null,
           source: latestRecipe?.source || "chat",
+          meal_type: latestRecipe?.meal_type || latestRecipe?.mealType || [],
           nutrition,
         },
       });

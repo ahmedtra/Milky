@@ -91,6 +91,7 @@ export default function MealPlans() {
           activityLevel: formData.activityLevel,
           difficulty: formData.difficulty,
           quickMeal: formData.quickMeal,
+          includeFavorites: formData.includeFavorites,
           includeIngredients: normalizeList(formData.includeIngredients),
           allergies: normalizeList(formData.allergies),
           dislikedFoods: normalizeList(formData.dislikedFoods),
@@ -381,6 +382,7 @@ export default function MealPlans() {
           instructions: recipe.instructions || [],
           imageUrl: recipe.imageUrl || recipe.image || null,
           source: "meal",
+          meal_type: meal?.type ? [String(meal.type).toLowerCase()] : recipe?.meal_type,
           nutrition,
         },
       });

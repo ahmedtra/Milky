@@ -78,6 +78,7 @@ export interface GenerateMealPlanRequest {
     goals?: string;
     activityLevel?: string;
     quickMeal?: boolean;
+    includeFavorites?: boolean;
     includeIngredients?: string | string[];
     allergies?: string | string[];
     dislikedFoods?: string | string[];

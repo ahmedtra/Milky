@@ -82,6 +82,7 @@ export async function generateMealPlan(request: GenerateMealPlanRequest): Promis
     goals: request.preferences?.goals || 'maintain_weight',
     activityLevel: request.preferences?.activityLevel || 'moderate',
     quick: request.preferences?.quickMeal ?? false,
+    includeFavorites: request.preferences?.includeFavorites ?? false,
     includeIngredients,
     allergies,
     dislikedFoods: dislikes,

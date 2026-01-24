@@ -33,6 +33,7 @@ export interface GeneratePlanFormData {
   difficulty: string;
   duration: number;
   quickMeal: boolean;
+  includeFavorites: boolean;
   includeIngredients: string;
   allergies: string;
   dislikedFoods: string;
@@ -180,6 +181,7 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
     difficulty: "any",
     duration: 5,
     quickMeal: false,
+    includeFavorites: false,
     includeIngredients: "",
     allergies: "",
     dislikedFoods: "",
@@ -443,12 +445,23 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                             <Label htmlFor="quickMeal">Prefer quick recipes</Label>
                             <p className="text-sm text-muted-foreground">Aim for meals under ~30 minutes</p>
                           </div>
-                          <Switch
-                            id="quickMeal"
-                            checked={formData.quickMeal}
-                            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quickMeal: checked }))}
-                          />
+                        <Switch
+                          id="quickMeal"
+                          checked={formData.quickMeal}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quickMeal: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between py-2">
+                        <div>
+                          <Label htmlFor="includeFavorites">Include favorites</Label>
+                          <p className="text-sm text-muted-foreground">Mix saved favorites into meal options</p>
                         </div>
+                        <Switch
+                          id="includeFavorites"
+                          checked={formData.includeFavorites}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, includeFavorites: checked }))}
+                        />
+                      </div>
 
                         {/* Activity Level */}
                         <div className="space-y-2">
@@ -797,6 +810,17 @@ export function GeneratePlanModal({ isOpen, onClose, onSubmit, isLoading }: Gene
                         id="quickMeal"
                         checked={formData.quickMeal}
                         onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quickMeal: checked }))}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <Label htmlFor="includeFavorites">Include favorites</Label>
+                        <p className="text-sm text-muted-foreground">Mix saved favorites into meal options</p>
+                      </div>
+                      <Switch
+                        id="includeFavorites"
+                        checked={formData.includeFavorites}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, includeFavorites: checked }))}
                       />
                     </div>
 

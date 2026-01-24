@@ -3,6 +3,7 @@ const { searchRecipes, getRecipeById } = require('./recipeSearch/searchService')
 const { logEvent } = require('../utils/logger');
 const { ensureMealImage } = require('./leonardoService');
 const { groqChat } = require('./groqClient');
+const FavoriteRecipe = require('../models/FavoriteRecipe');
 // Node 18+ has global fetch; no import required.
 
 const EMBED_HOST = process.env.EMBEDDING_HOST || process.env.OLLAMA_HOST || 'http://localhost:11434';
@@ -645,16 +646,17 @@ class GeminiService {
     });
   }
 
-  formatCandidatesForPrompt(candidateMap) {
+  formatCandidatesForPrompt(candidateMap, label = 'candidates') {
     const sections = Object.entries(candidateMap).map(([mealType, list]) => {
       // Guard against oversized lists; keep prompt short and lightly shuffle to avoid same ordering
       const limited = Array.isArray(list) ? this.shuffle(list).slice(0, 20) : [];
       const lines = limited.map(c => {
         const time = c.total_time_min ? `, time ~${c.total_time_min} min` : '';
         const cals = c.calories ? `, cal ~${c.calories}` : '';
-        return `- ${c.title} (id: ${c.id}, cuisine: ${c.cuisine || 'n/a'}${time}${cals})`;
+        const source = c.source ? `, source: ${c.source}` : '';
+        return `- ${c.title} (id: ${c.id}${source}, cuisine: ${c.cuisine || 'n/a'}${time}${cals})`;
       }).join('\n');
-      return `${mealType.toUpperCase()} candidates:\n${lines || '- none found'}`;
+      return `${mealType.toUpperCase()} ${label}:\n${lines || '- none found'}`;
     });
     return sections.join('\n\n');
   }
@@ -890,6 +892,46 @@ class GeminiService {
       const startDate = new Date();
       const recentIds = []; // track recent recipe ids to avoid back-to-back repeats
       const usedRecipeIds = new Set(); // track all recipes used in the plan to avoid repeats
+      const includeFavorites = !!userPreferences?.includeFavorites;
+      let favoritePool = [];
+      if (includeFavorites && user?._id) {
+        try {
+          const favorites = await FavoriteRecipe.find({ userId: user._id }).sort({ updatedAt: -1 }).limit(20);
+          favoritePool = favorites.map((fav) => {
+            const base = fav.planRecipe || {};
+            const nutrition = base.nutrition || {};
+            const id = `favorite-${fav._id}`;
+            const title = fav.title || base.title || base.name || 'Favorite recipe';
+            const ingredients = base.ingredients || base.ingredients_parsed || [];
+            const instructions = base.instructions || [];
+            return {
+              id,
+              externalId: fav.externalId || base.id || null,
+              title,
+              name: base.name || title,
+              source: 'favorite',
+              cuisine: base.cuisine || null,
+              meal_type: base.meal_type || base.mealType || base.type || [],
+              total_time_min: base.total_time_min || base.total_time_minutes || base.totalTime || fav.totalTime || null,
+              calories: nutrition.calories ?? fav.calories ?? null,
+              protein: nutrition.protein ?? fav.protein ?? null,
+              carbs: nutrition.carbs ?? null,
+              fat: nutrition.fat ?? null,
+              fiber: nutrition.fiber ?? null,
+              sugar: nutrition.sugar ?? null,
+              nutrition: Object.keys(nutrition).length ? nutrition : null,
+              image: base.image || fav.image || null,
+              imageUrl: base.imageUrl || fav.imageUrl || null,
+              summary: base.summary || fav.summary || null,
+              ingredients,
+              ingredients_parsed: base.ingredients_parsed || [],
+              instructions
+            };
+          }).filter((item) => item?.id && item?.title);
+        } catch (favErr) {
+          logMealplan('⚠️ Failed to load favorites for meal plan generation', favErr?.message || favErr);
+        }
+      }
 
       // Build candidate pools once per meal type, then reuse across days to reduce repeats
     const padWithLLM = async (mealType, list, targetSize = 6) => {
@@ -902,16 +944,22 @@ class GeminiService {
       }
       return output;
     };
+      const mergeUniqueById = (list = []) => {
+        const map = new Map();
+        list.forEach((item) => {
+          const id = item?.id ? String(item.id) : '';
+          if (!id) return;
+          if (!map.has(id)) map.set(id, item);
+        });
+        return Array.from(map.values());
+      };
       const baseCandidateMap = {};
       for (const mealType of mealTypes) {
         // Keep pools small to avoid prompt bloat
         const sizeByType = mealType === 'snack' ? 12 : mealType === 'breakfast' ? 20 : 30;
         const targetSize = mealType === 'snack' ? 10 : mealType === 'breakfast' ? 16 : 24;
-        baseCandidateMap[mealType] = await padWithLLM(
-          mealType,
-          await this.fetchCandidatesForMeal(mealType, userPreferences, sizeByType),
-          targetSize
-        );
+        const searchCandidates = await this.fetchCandidatesForMeal(mealType, userPreferences, sizeByType);
+        baseCandidateMap[mealType] = await padWithLLM(mealType, searchCandidates, targetSize);
       }
 
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
@@ -928,10 +976,31 @@ class GeminiService {
           const filtered = list.filter((r) => r?.id && !usedRecipeIds.has(String(r.id)));
           return filtered.length ? filtered : list;
         };
-        const candidateMap = mealTypes.reduce((acc, mealType) => {
+        const searchCandidateMap = mealTypes.reduce((acc, mealType) => {
           const pool = this.shuffle(filterUsed(baseCandidateMap[mealType] || []));
           // keep a small random subset per day to force variety across days
           acc[mealType] = pool.slice(0, 5);
+          return acc;
+        }, {});
+        const favoritesCandidateMap = mealTypes.reduce((acc, mealType) => {
+          if (!includeFavorites || !favoritePool.length) {
+            acc[mealType] = [];
+            return acc;
+          }
+          const typed = favoritePool.filter((f) => {
+            const types = Array.isArray(f.meal_type) ? f.meal_type : [];
+            if (!types.length) return false;
+            return types.map((t) => String(t).toLowerCase()).includes(String(mealType).toLowerCase());
+          });
+          const pool = this.shuffle(filterUsed(typed));
+          acc[mealType] = pool.slice(0, 5);
+          return acc;
+        }, {});
+        const candidateMap = mealTypes.reduce((acc, mealType) => {
+          acc[mealType] = mergeUniqueById([
+            ...(favoritesCandidateMap[mealType] || []),
+            ...(searchCandidateMap[mealType] || [])
+          ]);
           return acc;
         }, {});
         logMealplan(`🎲 Shuffled candidates for day ${dayIndex + 1}`, {
@@ -965,7 +1034,9 @@ class GeminiService {
           const sample = (list || []).slice(0, 3).map(r => `${r.title || 'untitled'} (${r.id})`);
           logMealplan(`  • ${mealType}: ${sample.join(' | ') || 'none'}`);
         });
-        const candidateText = this.formatCandidatesForPrompt(candidateMap);
+        const favoritesText = this.formatCandidatesForPrompt(favoritesCandidateMap, 'FAVORITES');
+        const searchText = this.formatCandidatesForPrompt(searchCandidateMap, 'SEARCH');
+        const candidateText = [favoritesText, searchText].filter(Boolean).join('\n\n');
         const mealTimesText = mealTypes
           .map((mt) => `- ${this.capitalize(mt)}: ${userPreferences.mealTimes?.[mt] || this.defaultMealTimes()[mt] || ''}`)
           .join('\n');
@@ -1014,8 +1085,9 @@ class GeminiService {
         Meal Times:
         ${mealTimesText}
 
-        Here are EXISTING recipes you must prefer and pick from (by id and title).
-        You MUST select only from these; do not invent ids or titles. If none fits, pick the closest candidate instead of leaving empty.
+        You have TWO separate pools. Favorites are user-saved recipes; search results are from our recipe index.
+        You MUST select only from these pools; do not invent ids or titles. Treat favorites and search results equally and mix them when reasonable.
+        If none fits, pick the closest candidate instead of leaving empty.
         ${candidateText}
 
         IMPORTANT:
@@ -1285,6 +1357,9 @@ ${mealSchemas}
             instructions: src.instructions || r?.instructions || [],
             nutrition,
             ai_generated: src.ai_generated || r.ai_generated || false,
+            image: src.image || src.imageUrl || r.image || r.imageUrl || null,
+            imageUrl: src.imageUrl || src.image || r.imageUrl || r.image || null,
+            source: src.source || r.source || null,
             tags: Array.from(new Set([...(Array.isArray(r.tags) ? r.tags : []), ...(Array.isArray(src.tags) ? src.tags : [])]))
           };
         }
@@ -1316,6 +1391,9 @@ ${mealSchemas}
           cookTime,
           total_time_min: totalTime || (normalizedPrep + cookTime) || null,
           ai_generated: first?.ai_generated || r?.ai_generated || false,
+          image: first?.image || first?.imageUrl || r?.image || r?.imageUrl || null,
+          imageUrl: first?.imageUrl || first?.image || r?.imageUrl || r?.image || null,
+          source: first?.source || r?.source || null,
           tags: Array.from(new Set([...(Array.isArray(r?.tags) ? r.tags : []), ...(Array.isArray(first?.tags) ? first.tags : []), first?.cuisine].filter(Boolean))),
           ingredients,
           instructions: first?.instructions || r?.instructions || [],

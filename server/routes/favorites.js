@@ -99,6 +99,7 @@ const mapSearchHitToPlanRecipe = (hit) => {
     servings: 1,
     image: hit.image || hit.imageUrl,
     imageUrl: hit.image || hit.imageUrl,
+    meal_type: hit.meal_type || hit.mealType || hit.type || [],
     ingredients,
     instructions,
     nutrition,

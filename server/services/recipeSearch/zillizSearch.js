@@ -173,6 +173,8 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
   const limit = Number(options.size || 10);
   const offset = Number(options.offset || 0);
   const seed = options.randomSeed || Math.floor(Math.random() * 1_000_000);
+  const excludeList = cleanList(filters.exclude_ingredients);
+  const effectiveLimit = excludeList.length ? Math.min(Math.max(limit * 5, limit), 200) : limit;
 
   let queryVec = null;
   if (filters.text) {
@@ -235,12 +237,13 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
       collection_name: ZILLIZ_COLLECTION,
       expr: filterStr,
       output_fields: ["payload"],
-      limit,
+      limit: effectiveLimit,
       offset,
     });
     const hits = res?.data || [];
     const docs = hits.map((h) => rehydrateDoc(h));
-    return applyPostExcludes(docs);
+    const filtered = applyPostExcludes(docs);
+    return excludeList.length ? filtered.slice(0, limit) : filtered;
   }
 
   // Vector search (kNN)
@@ -249,7 +252,7 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
     anns_field: VECTOR_FIELD,
     data: [queryVec],
     filter: filterStr,
-    limit,
+    limit: effectiveLimit,
     offset,
     output_fields: ["payload"],
     metric_type: "COSINE",
@@ -258,7 +261,8 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
 
   const hits = res?.results || [];
   const docs = hits.map((h) => rehydrateDoc(h));
-  return applyPostExcludes(docs);
+  const filtered = applyPostExcludes(docs);
+  return excludeList.length ? filtered.slice(0, limit) : filtered;
 };
 
 module.exports = {

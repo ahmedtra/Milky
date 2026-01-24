@@ -28,6 +28,8 @@ export default function MealPlans() {
     loading: false,
     applying: false,
   });
+  const seenByKeyRef = useRef<Record<string, string[]>>({});
+  const seenTitlesByKeyRef = useRef<Record<string, string[]>>({});
   const [favorites, setFavorites] = useState<{ items: any[]; loading: boolean }>({ items: [], loading: false });
   const { data: plans, isLoading } = useMealPlans();
   const { data: activePlan, plans: sortedPlans } = useActiveMealPlan();
@@ -405,8 +407,51 @@ export default function MealPlans() {
     const key = swapKeyFor(planId, dayIndex, mealIndex);
     setSwapState({ key, options: [], loading: true, applying: false });
     try {
-      const { alternatives, favorites: favsFromApi } = await getMealAlternatives({ planId, dayIndex, mealIndex, limit: 3 });
+      const plan = getPlanById(planId);
+      const meal = plan?.days?.[dayIndex]?.meals?.[mealIndex];
+      const currentRecipes = meal?.recipes || [];
+      const existingOptions = swapState.key === key ? swapState.options : [];
+      const seenIds = [
+        ...(seenByKeyRef.current?.[key] || []),
+        ...existingOptions.map((opt) => opt?.id)
+      ]
+        .map((id) => String(id))
+        .filter(Boolean);
+      const seenTitles = [
+        ...(seenTitlesByKeyRef.current?.[key] || []),
+        ...existingOptions.map((opt) => opt?.title)
+      ]
+        .map((title) => String(title).toLowerCase().trim())
+        .filter(Boolean);
+      currentRecipes.forEach((recipe: any) => {
+        const recipeId = recipe?.externalId || recipe?.id;
+        if (recipeId) seenIds.push(String(recipeId));
+        const recipeTitle = recipe?.title || recipe?.name;
+        if (recipeTitle) seenTitles.push(String(recipeTitle).toLowerCase().trim());
+      });
+      if (meal?.id) seenIds.push(String(meal.id));
+      if (meal?.title) seenTitles.push(String(meal.title).toLowerCase().trim());
+      const uniqueExcludeIds = Array.from(new Set(seenIds));
+      const uniqueExcludeTitles = Array.from(new Set(seenTitles)).filter(Boolean);
+
+      const { alternatives, favorites: favsFromApi } = await getMealAlternatives({
+        planId,
+        dayIndex,
+        mealIndex,
+        limit: 3,
+        excludeIds: uniqueExcludeIds,
+        excludeTitles: uniqueExcludeTitles,
+      });
       const limited = Array.isArray(alternatives) ? alternatives.slice(0, 3) : [];
+      const nextSeen = Array.from(new Set([...uniqueExcludeIds, ...limited.map((opt: any) => String(opt?.id))])).filter(Boolean);
+      const nextSeenTitles = Array.from(
+        new Set([
+          ...uniqueExcludeTitles,
+          ...limited.map((opt: any) => String(opt?.title || '').toLowerCase().trim())
+        ])
+      ).filter(Boolean);
+      seenByKeyRef.current = { ...(seenByKeyRef.current || {}), [key]: nextSeen };
+      seenTitlesByKeyRef.current = { ...(seenTitlesByKeyRef.current || {}), [key]: nextSeenTitles };
       setSwapState({ key, options: limited, loading: false, applying: false });
       if (!limited.length) toast("No alternatives found right now.");
       // hydrate favorites either from API or fallback endpoint
@@ -446,6 +491,20 @@ export default function MealPlans() {
       await applyMealAlternative({ planId, dayIndex, mealIndex, recipeId, recipe });
       toast.success("Meal swapped");
       queryClient.invalidateQueries({ queryKey: ['meal-plans'] });
+      const key = swapKeyFor(planId, dayIndex, mealIndex);
+      const idToStore = recipeId || recipe?.id || recipe?.externalId;
+      if (idToStore) {
+        const existing = seenByKeyRef.current?.[key] || [];
+        seenByKeyRef.current = { ...(seenByKeyRef.current || {}), [key]: Array.from(new Set([...existing, String(idToStore)])) };
+      }
+      const titleToStore = recipe?.title || recipe?.name;
+      if (titleToStore) {
+        const existingTitles = seenTitlesByKeyRef.current?.[key] || [];
+        seenTitlesByKeyRef.current = {
+          ...(seenTitlesByKeyRef.current || {}),
+          [key]: Array.from(new Set([...existingTitles, String(titleToStore).toLowerCase().trim()])).filter(Boolean)
+        };
+      }
       setSwapState({ key: null, options: [], loading: false, applying: false });
     } catch (err) {
       console.error("Error applying swap", err);

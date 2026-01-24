@@ -384,6 +384,22 @@ const SwapActions = styled.div`
   gap: 0.5rem;
 `;
 
+const PreferFavoritesButton = styled.button`
+  border: 1px solid ${props => props.$active ? props.theme.colors.primary[500] : props.theme.colors.gray[300]};
+  background: ${props => props.$active ? props.theme.colors.primary[50] : 'white'};
+  color: ${props => props.$active ? props.theme.colors.primary[700] : props.theme.colors.gray[700]};
+  padding: 0.35rem 0.6rem;
+  border-radius: ${props => props.theme.borderRadius.md};
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: ${props => props.theme.colors.primary[400]};
+  }
+`;
+
 const SwapCloseButton = styled.button`
   border: 1px solid ${props => props.theme.colors.gray[300]};
   background: white;
@@ -605,8 +621,12 @@ const MealPlanDetail = () => {
     key: null,
     options: [],
     loading: false,
-    applying: false
+    applying: false,
+    seenByKey: {}
   });
+  const [preferFavorites, setPreferFavorites] = useState(false);
+  const seenByKeyRef = useRef({});
+  const seenTitlesByKeyRef = useRef({});
 
   // Fetch the actual meal plan data from database
   React.useEffect(() => {
@@ -836,47 +856,138 @@ const MealPlanDetail = () => {
   const swapKeyFor = (dayIndex, mealIndex) => `${dayIndex}-${mealIndex}`;
 
   const handleFetchAlternatives = React.useCallback(
-    async (dayIndex, mealIndex) => {
+    async (dayIndex, mealIndex, preferOverride = null) => {
       if (!mealPlan?._id) {
         toast.error('Swap requires a saved meal plan. Generate or save first.');
         return;
       }
 
       const key = swapKeyFor(dayIndex, mealIndex);
-      setSwapState({ key, options: [], loading: true, applying: false });
+      console.log('🧪 Swap fetch start', {
+        key,
+        dayIndex,
+        mealIndex,
+        preferFavorites,
+        preferOverride,
+        swapStateKey: swapState.key,
+        swapStateOptions: swapState.options?.length || 0,
+        swapStateSeen: swapState.seenByKey?.[key] || []
+      });
+      const preferValue = typeof preferOverride === 'boolean' ? preferOverride : preferFavorites;
+      setSwapState(prev => ({
+        key,
+        options: [],
+        loading: true,
+        applying: false,
+        seenByKey: prev.seenByKey || {}
+      }));
 
       try {
+        const existingOptions = swapState.key === key ? swapState.options : [];
+        const stateSeenIds = swapState.seenByKey?.[key] || [];
+        console.log('🧪 Swap exclude pre-build', {
+          key,
+          existingOptions: existingOptions.map((opt) => ({ id: opt?.id, title: opt?.title })),
+          stateSeenIds,
+          refSeenIds: seenByKeyRef.current?.[key] || [],
+          refSeenTitles: seenTitlesByKeyRef.current?.[key] || []
+        });
+        const seenIds = [
+          ...stateSeenIds,
+          ...(seenByKeyRef.current?.[key] || []),
+          ...existingOptions.map((opt) => opt?.id)
+        ]
+          .map((id) => String(id))
+          .filter(Boolean);
+        const seenTitles = [
+          ...(seenTitlesByKeyRef.current?.[key] || []),
+          ...existingOptions.map((opt) => opt?.title)
+        ]
+          .map((title) => String(title).toLowerCase().trim())
+          .filter(Boolean);
+        const currentMeal = mealPlan?.days?.[dayIndex]?.meals?.[mealIndex];
+        const currentRecipes = currentMeal?.recipes || [];
+        console.log('🧪 Swap current meal', {
+          key,
+          currentMealId: currentMeal?.id || currentMeal?._id,
+          currentMealTitle: currentMeal?.title,
+          currentRecipes: currentRecipes.map((recipe) => ({
+            id: recipe?.externalId || recipe?.id,
+            title: recipe?.title || recipe?.name
+          }))
+        });
+        currentRecipes.forEach((recipe) => {
+          const recipeId = recipe?.externalId || recipe?.id;
+          if (recipeId) seenIds.push(String(recipeId));
+          const recipeTitle = recipe?.title || recipe?.name;
+          if (recipeTitle) seenTitles.push(String(recipeTitle).toLowerCase().trim());
+        });
+        if (currentMeal?.id) seenIds.push(String(currentMeal.id));
+        if (currentMeal?.title) seenTitles.push(String(currentMeal.title).toLowerCase().trim());
+        const uniqueExcludeIds = Array.from(new Set(seenIds));
+        const uniqueExcludeTitles = Array.from(new Set(seenTitles)).filter(Boolean);
+        console.log('🧪 Swap exclude final', {
+          key,
+          uniqueExcludeIds,
+          uniqueExcludeTitles
+        });
         const { data } = await axios.get(
           `/api/meal-plans/${mealPlan._id}/days/${dayIndex}/meals/${mealIndex}/alternatives`,
-          { params: { limit: 3 } }
+          {
+            params: {
+              limit: 3,
+              excludeIds: uniqueExcludeIds.join(','),
+              excludeTitles: JSON.stringify(uniqueExcludeTitles),
+              preferFavorites: preferValue
+            }
+          }
         );
+        const nextOptions = data?.alternatives || [];
+        const nextSeen = Array.from(new Set([...seenIds, ...nextOptions.map((opt) => String(opt.id))]));
+        const nextSeenTitles = Array.from(
+          new Set([
+            ...seenTitles,
+            ...nextOptions.map((opt) => String(opt.title || '').toLowerCase().trim())
+          ])
+        ).filter(Boolean);
+        seenByKeyRef.current = { ...(seenByKeyRef.current || {}), [key]: nextSeen };
+        seenTitlesByKeyRef.current = { ...(seenTitlesByKeyRef.current || {}), [key]: nextSeenTitles };
         setSwapState({
           key,
-          options: data?.alternatives || [],
+          options: nextOptions,
           loading: false,
-          applying: false
+          applying: false,
+          seenByKey: { ...(swapState.seenByKey || {}), [key]: nextSeen }
         });
 
-        if (!data?.alternatives?.length) {
+        if (!nextOptions.length) {
           toast('No alternatives found right now.');
         }
       } catch (error) {
         console.error('Error fetching alternatives:', error);
         toast.error('Failed to load alternatives');
-        setSwapState({ key: null, options: [], loading: false, applying: false });
+        setSwapState(prev => ({
+          key: null,
+          options: [],
+          loading: false,
+          applying: false,
+          seenByKey: prev.seenByKey || {}
+        }));
       }
     },
-    [mealPlan]
+    [mealPlan, preferFavorites, swapState.seenByKey]
   );
 
   const handleApplyAlternative = React.useCallback(
-    async (dayIndex, mealIndex, recipeId) => {
+    async (dayIndex, mealIndex, option) => {
       if (!mealPlan?._id) {
         toast.error('Swap requires a saved meal plan. Generate or save first.');
         return;
       }
 
+      const recipeId = option?.id;
       if (!recipeId) return;
+      const key = swapKeyFor(dayIndex, mealIndex);
       setSwapState(prev => ({ ...prev, applying: true }));
 
       try {
@@ -901,7 +1012,25 @@ const MealPlanDetail = () => {
         });
 
         toast.success('Meal swapped');
-        setSwapState({ key: null, options: [], loading: false, applying: false });
+        setSwapState(prev => {
+          const seen = prev.seenByKey?.[key] || [];
+          const nextSeen = Array.from(new Set([...seen, String(recipeId)]));
+          seenByKeyRef.current = { ...(seenByKeyRef.current || {}), [key]: nextSeen };
+          if (option?.title) {
+            const seenTitles = seenTitlesByKeyRef.current?.[key] || [];
+            const nextSeenTitles = Array.from(
+              new Set([...seenTitles, String(option.title).toLowerCase().trim()])
+            ).filter(Boolean);
+            seenTitlesByKeyRef.current = { ...(seenTitlesByKeyRef.current || {}), [key]: nextSeenTitles };
+          }
+          return {
+            key: null,
+            options: [],
+            loading: false,
+            applying: false,
+            seenByKey: { ...(prev.seenByKey || {}), [key]: nextSeen }
+          };
+        });
       } catch (error) {
         console.error('Error applying alternative:', error);
         toast.error('Failed to swap meal');
@@ -912,7 +1041,14 @@ const MealPlanDetail = () => {
   );
 
   const handleCloseSwap = React.useCallback(() => {
-    setSwapState({ key: null, options: [], loading: false, applying: false });
+    setSwapState(prev => ({
+      key: null,
+      options: [],
+      loading: false,
+      applying: false,
+      seenByKey: prev.seenByKey || {}
+    }));
+    setPreferFavorites(false);
   }, []);
 
   if (loading) {
@@ -1288,6 +1424,18 @@ const MealPlanDetail = () => {
                           Meal alternatives
                           <SwapActions>
                             {swapState.loading && <SpinnerIcon size={16} />}
+                            <PreferFavoritesButton
+                              type="button"
+                              $active={preferFavorites}
+                              onClick={() => {
+                                const next = !preferFavorites;
+                                setPreferFavorites(next);
+                                handleFetchAlternatives(index, mealIndex, next);
+                              }}
+                              title="Prefer favorites"
+                            >
+                              Favorites
+                            </PreferFavoritesButton>
                             <SwapCloseButton type="button" onClick={handleCloseSwap}>
                               Close
                             </SwapCloseButton>
@@ -1302,7 +1450,7 @@ const MealPlanDetail = () => {
                                 <AlternativeCard
                                   key={option.id}
                                   type="button"
-                                  onClick={() => handleApplyAlternative(index, mealIndex, option.id)}
+                                  onClick={() => handleApplyAlternative(index, mealIndex, option)}
                                   disabled={swapState.applying}
                                 >
                                   <AlternativeTitle>

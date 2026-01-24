@@ -161,9 +161,18 @@ export async function getMealAlternatives(params: {
   dayIndex: number;
   mealIndex: number;
   limit?: number;
+  excludeIds?: string[];
+  excludeTitles?: string[];
+  preferFavorites?: boolean;
 }): Promise<{ alternatives: any[]; favorites?: any[] }> {
-  const { planId, dayIndex, mealIndex, limit = 3 } = params;
-  const data = await fetchJson<any>(`/api/meal-plans/${planId}/days/${dayIndex}/meals/${mealIndex}/alternatives?limit=${limit}`);
+  const { planId, dayIndex, mealIndex, limit = 3, excludeIds = [], excludeTitles = [], preferFavorites } = params;
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (excludeIds.length) query.set('excludeIds', excludeIds.join(','));
+  if (excludeTitles.length) query.set('excludeTitles', JSON.stringify(excludeTitles));
+  if (typeof preferFavorites === 'boolean') query.set('preferFavorites', String(preferFavorites));
+  const data = await fetchJson<any>(
+    `/api/meal-plans/${planId}/days/${dayIndex}/meals/${mealIndex}/alternatives?${query.toString()}`
+  );
   return {
     alternatives: data?.alternatives || [],
     favorites: data?.favorites || [],

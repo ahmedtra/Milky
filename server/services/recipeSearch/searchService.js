@@ -71,6 +71,24 @@ const buildQuery = (filters = {}) => {
     (Array.isArray(arr) ? arr : [arr])
       .map((v) => (typeof v === 'string' ? v.toLowerCase().trim() : v))
       .filter((v) => v && v !== 'null');
+  const expandExcludeIngredients = (items = []) => {
+    const base = new Set(cleanList(items));
+    const expanded = new Set(base);
+    base.forEach((term) => {
+      if (term.includes('pork')) {
+        ['pork', 'ham', 'bacon', 'sausage', 'prosciutto', 'chorizo', 'lard', 'pancetta'].forEach((t) => expanded.add(t));
+      }
+      if (term.includes('shellfish')) {
+        ['shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel'].forEach((t) => expanded.add(t));
+      }
+      if (term.includes('potato')) {
+        ['potato', 'potatoes', 'russet', 'yukon gold', 'sweet potato', 'yam', 'fries', 'chips', 'hash brown', 'wedges'].forEach((t) =>
+          expanded.add(t)
+        );
+      }
+    });
+    return Array.from(expanded);
+  };
 
   const addRangeFilter = (fields = [], range = {}) => {
     if (!fields.length || !Object.keys(range).length) return;
@@ -134,7 +152,7 @@ const buildQuery = (filters = {}) => {
     }
   }
 
-  const excludeIngredients = cleanList(filters.exclude_ingredients);
+  const excludeIngredients = expandExcludeIngredients(filters.exclude_ingredients);
   if (excludeIngredients.length) {
     bool.must_not.push({ terms: { ingredients_norm: excludeIngredients } });
     bool.must_not.push({ terms: { allergens: excludeIngredients } });
@@ -271,9 +289,32 @@ const findAlternatives = async ({
   excludeIds = [],
   size = 3
 } = {}) => {
+  const expandExcludeIngredients = (items = []) => {
+    const base = new Set(
+      (Array.isArray(items) ? items : [items])
+        .map((v) => v && String(v).toLowerCase().trim())
+        .filter(Boolean)
+    );
+    const expanded = new Set(base);
+    base.forEach((term) => {
+      if (term.includes('pork')) {
+        ['pork', 'ham', 'bacon', 'sausage', 'prosciutto', 'chorizo', 'lard', 'pancetta'].forEach((t) => expanded.add(t));
+      }
+      if (term.includes('shellfish')) {
+        ['shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel'].forEach((t) => expanded.add(t));
+      }
+      if (term.includes('potato')) {
+        ['potato', 'potatoes', 'russet', 'yukon gold', 'sweet potato', 'yam', 'fries', 'chips', 'hash brown', 'wedges'].forEach((t) =>
+          expanded.add(t)
+        );
+      }
+    });
+    return Array.from(expanded);
+  };
+
   const exclusionSet = new Set(
-    [...allergies, ...dislikedFoods]
-      .map((item) => item && String(item).toLowerCase())
+    expandExcludeIngredients([...allergies, ...dislikedFoods])
+      .map((item) => item && String(item).toLowerCase().trim())
       .filter(Boolean)
   );
 

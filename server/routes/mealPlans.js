@@ -11,7 +11,16 @@ const { ensureMealImage } = require('../services/leonardoService');
 const parseListQuery = (value) => {
   if (Array.isArray(value)) return value;
   if (!value) return [];
-  return String(value)
+  const raw = String(value).trim();
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // fall through to comma parsing
+    }
+  }
+  return raw
     .split(',')
     .map((v) => v.trim())
     .filter(Boolean);
@@ -21,6 +30,9 @@ const allowedIngredientCategories = new Set([
   'protein', 'vegetable', 'fruit', 'grain', 'dairy', 'fat',
   'spice', 'nut', 'seed', 'broth', 'herb', 'other'
 ]);
+
+const getHitTitle = (hit) => hit?.title || hit?.name || hit?.recipe?.title || hit?.recipe?.name || '';
+const normalizeTitle = (value) => String(value || '').toLowerCase().trim();
 
 const sanitizeCategory = (cat) => {
   if (!cat || typeof cat !== 'string') return 'other';
@@ -481,6 +493,7 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
   try {
     const { id, dayIndex, mealIndex } = req.params;
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 3, 10));
+    const preferFavorites = String(req.query.preferFavorites || '').toLowerCase() === 'true';
 
     const mealPlan = await MealPlan.findOne({
       _id: id,
@@ -497,9 +510,26 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
       return res.status(404).json({ message: 'Meal not found at specified indices' });
     }
 
-    const excludeIds = (meal.recipes || [])
+    const mealRecipeIds = (meal.recipes || [])
       .map((r) => r.externalId || r.id)
       .filter(Boolean);
+    const mealRecipeTitles = (meal.recipes || [])
+      .map((r) => r.title || r.name)
+      .filter(Boolean);
+    const requestExcludeIds = parseListQuery(req.query.excludeIds);
+    const requestExcludeTitles = parseListQuery(req.query.excludeTitles);
+    console.log('🔁 Alternatives excludeIds', {
+      mealPlanId: id,
+      dayIndex,
+      mealIndex,
+      excludeIds: requestExcludeIds,
+      excludeTitles: requestExcludeTitles
+    });
+    const excludeIds = [...mealRecipeIds, ...requestExcludeIds].filter(Boolean);
+    const excludeTitles = [...mealRecipeTitles, ...requestExcludeTitles]
+      .map((t) => normalizeTitle(t))
+      .filter(Boolean);
+    const excludeTitleSet = new Set(excludeTitles);
 
     const preferences = {
       // Request-level overrides
@@ -526,6 +556,7 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
     };
 
     let alternatives = [];
+    let candidatePool = [];
     // Pull recent favorites for this user to surface as quick picks
     let favoriteAlts = [];
     try {
@@ -550,11 +581,19 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
     try {
       console.log(`🔍 Fetching alternatives for ${meal.type} (day ${dayIndex}) with prefs:`, mergedPrefs);
       const candidates = await geminiService.fetchCandidatesForMeal(meal.type, mergedPrefs, limit * 2);
+      candidatePool = candidates || [];
       const excludeSet = new Set(excludeIds.filter(Boolean).map(String));
-      alternatives = (candidates || []).filter((c) => !excludeSet.has(String(c.id))).slice(0, limit);
+      const filtered = (candidatePool || []).filter((c) => {
+        const title = normalizeTitle(getHitTitle(c));
+        return !excludeSet.has(String(c.id)) && (!title || !excludeTitleSet.has(title));
+      });
+      alternatives = filtered.slice(0, limit);
+      if (!alternatives.length && excludeSet.size) {
+        alternatives = (candidatePool || []).slice(0, limit);
+      }
     } catch (err) {
       console.warn('⚠️ Alternative fetch via Gemini failed, falling back to ES:', err.message);
-      alternatives = await findAlternatives({
+      candidatePool = await findAlternatives({
         mealType: meal.type,
         cuisine: mergedPrefs.cuisine,
         dietType: mergedPrefs.dietType,
@@ -565,11 +604,115 @@ router.get('/:id/days/:dayIndex/meals/:mealIndex/alternatives', auth, async (req
         goal_fit: mergedPrefs.goals,
         activity_fit: mergedPrefs.activityLevel
       });
+      alternatives = candidatePool.filter((c) => {
+        const title = normalizeTitle(getHitTitle(c));
+        return !excludeSet.has(String(c.id)) && (!title || !excludeTitleSet.has(title));
+      });
+      if (!alternatives.length && excludeIds.length) {
+        candidatePool = await findAlternatives({
+          mealType: meal.type,
+          cuisine: mergedPrefs.cuisine,
+          dietType: mergedPrefs.dietType,
+          allergies: mergedPrefs.allergies,
+          dislikedFoods: mergedPrefs.dislikedFoods,
+          excludeIds: [],
+          size: limit,
+          goal_fit: mergedPrefs.goals,
+          activity_fit: mergedPrefs.activityLevel
+        });
+        alternatives = candidatePool.filter((c) => {
+          const title = normalizeTitle(getHitTitle(c));
+          return !excludeSet.has(String(c.id)) && (!title || !excludeTitleSet.has(title));
+        });
+      }
+    }
+
+    if (preferFavorites) {
+      const excludeSet = new Set(excludeIds.filter(Boolean).map(String));
+      const favoritePool = (favoriteAlts || []).map((fav) => ({
+        id: String(fav.id),
+        source: 'favorite',
+        title: fav.title,
+        calories: fav.calories,
+        protein_grams: fav.protein_grams,
+        prep_time_minutes: fav.prep_time_minutes,
+        hit: fav
+      }));
+      const candidateList = (candidatePool || alternatives || []).map((hit) => ({
+        id: String(hit.id),
+        source: 'candidate',
+        title: getHitTitle(hit),
+        calories: hit.calories,
+        protein_grams: hit.protein_grams,
+        prep_time_minutes: hit.prep_time_minutes,
+        hit
+      }));
+      const availableFavorites = favoritePool.filter((f) => {
+        const title = normalizeTitle(f.title);
+        return !excludeSet.has(f.id) && (!title || !excludeTitleSet.has(title));
+      });
+      const availableCandidates = candidateList.filter((c) => {
+        const title = normalizeTitle(c.title);
+        return !excludeSet.has(c.id) && (!title || !excludeTitleSet.has(title));
+      });
+
+      let picked = [];
+      try {
+        const prompt = `
+        Choose up to ${limit} recipe ids from the two pools below.
+        Prefer favorites whenever possible, but fill with candidates if needed.
+        Return ONLY JSON: { "picks": [{ "id": "string", "source": "favorite|candidate" }] }
+        Favorites: ${JSON.stringify(availableFavorites.map((f) => ({
+          id: f.id,
+          title: f.title,
+          calories: f.calories,
+          protein_grams: f.protein_grams,
+          prep_time_minutes: f.prep_time_minutes
+        })), null, 2)}
+        Candidates: ${JSON.stringify(availableCandidates.map((c) => ({
+          id: c.id,
+          title: c.title,
+          calories: c.calories,
+          protein_grams: c.protein_grams,
+          prep_time_minutes: c.prep_time_minutes
+        })), null, 2)}
+        `;
+        const pickText = await geminiService.callTextModel(prompt, 0.2, 'json');
+        const pickJson = (() => {
+          try {
+            const cleaned = (pickText || '').replace(/```json|```/gi, '').trim();
+            return JSON.parse(cleaned);
+          } catch {
+            return null;
+          }
+        })();
+        const picks = Array.isArray(pickJson?.picks) ? pickJson.picks : [];
+        if (picks.length) {
+          const favMap = new Map(availableFavorites.map((f) => [`favorite:${f.id}`, f]));
+          const candMap = new Map(availableCandidates.map((c) => [`candidate:${c.id}`, c]));
+          picked = picks
+            .map((p) => {
+              const key = `${p.source}:${p.id}`;
+              return p.source === 'favorite' ? favMap.get(key) : candMap.get(key);
+            })
+            .filter(Boolean);
+        }
+      } catch (err) {
+        console.warn('⚠️ Alternative pick via LLM failed:', err.message);
+      }
+
+      if (!picked.length) {
+        picked = [...availableFavorites, ...availableCandidates].slice(0, limit);
+      }
+      if (!picked.length && excludeSet.size) {
+        picked = [...favoritePool, ...candidateList].slice(0, limit);
+      }
+      alternatives = picked.map((p) => p.hit);
     }
 
     const summarized = alternatives.map((hit) => ({
       id: hit.id,
-      title: hit.title,
+      title: getHitTitle(hit),
       description: hit.description,
       cuisine: hit.cuisine,
       meal_type: hit.meal_type,

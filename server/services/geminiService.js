@@ -355,23 +355,30 @@ class GeminiService {
     const cuisinePref = preferences?.cuisine
       || preferences?.preferredCuisine
       || this.detectCuisineFromNotes(preferences?.additionalNotes);
+    const expandExcludeIngredients = (items = []) => {
+      const base = new Set(
+        (Array.isArray(items) ? items : [items])
+          .map((v) => v && String(v).toLowerCase().trim())
+          .filter(Boolean)
+      );
+      const expanded = new Set(base);
+      base.forEach((term) => {
+        if (term.includes('pork')) {
+          ['pork', 'ham', 'bacon', 'sausage', 'prosciutto', 'chorizo', 'lard', 'pancetta'].forEach((t) => expanded.add(t));
+        }
+        if (term.includes('shellfish')) {
+          ['shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel'].forEach((t) => expanded.add(t));
+        }
+        if (term.includes('potato')) {
+          ['potato', 'potatoes', 'russet', 'yukon gold', 'sweet potato', 'yam', 'fries', 'chips', 'hash brown', 'wedges'].forEach((t) =>
+            expanded.add(t)
+          );
+        }
+      });
+      return Array.from(expanded);
+    };
     // Expand disliked/allergy terms with common synonyms (e.g., pork family)
-    const baseExcludes = new Set([...(preferences?.allergies || []), ...(preferences?.dislikedFoods || [])].map((v) => v && v.toLowerCase()).filter(Boolean));
-    const excludeExpanded = new Set(baseExcludes);
-    baseExcludes.forEach((term) => {
-      if (term.includes('pork')) {
-        ['pork', 'ham', 'bacon', 'sausage', 'prosciutto', 'chorizo', 'lard', 'pancetta'].forEach((t) => excludeExpanded.add(t));
-      }
-      if (term.includes('shellfish')) {
-        ['shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel'].forEach((t) => excludeExpanded.add(t));
-      }
-      if (term.includes('potato')) {
-        ['potato', 'potatoes', 'russet', 'yukon gold', 'sweet potato', 'yam', 'fries', 'chips', 'hash brown', 'wedges'].forEach((t) =>
-          excludeExpanded.add(t)
-        );
-      }
-    });
-    const excludeList = Array.from(excludeExpanded);
+    const excludeList = expandExcludeIngredients([...(preferences?.allergies || []), ...(preferences?.dislikedFoods || [])]);
     const tFiltersStart = Date.now();
     // Build filters via LLM; fallback to deterministic if it fails
     let filters = await this.buildEsFiltersWithGemini(mealType, preferences);
@@ -416,6 +423,11 @@ class GeminiService {
       if ((!filters.include_ingredients || !filters.include_ingredients.length) && seasonalByMonth[month]) {
         filters.include_ingredients = seasonalByMonth[month];
       }
+    }
+    if (filters?.exclude_ingredients?.length) {
+      filters.exclude_ingredients = expandExcludeIngredients(filters.exclude_ingredients);
+    } else if (excludeList.length) {
+      filters.exclude_ingredients = expandExcludeIngredients(excludeList);
     }
     filterMs = Date.now() - tFiltersStart;
 

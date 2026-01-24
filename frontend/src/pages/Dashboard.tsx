@@ -262,21 +262,56 @@ export default function Dashboard() {
 
   const buildMealDetails = (meal: any) => {
     const recipe = meal?.recipes?.[0] || {};
-    const ingredientsList = Array.isArray(recipe.ingredients)
-      ? recipe.ingredients
+    const parseIngredientsRaw = (raw: string) => {
+      if (!raw || typeof raw !== "string") return [];
+      const normalized = raw.replace(/\s+/g, " ").trim();
+      const parts = normalized
+        .split(/,(?![^()]*\))/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return parts.map((part) =>
+        part
+          .replace(/(\d[\d\s\/.]*)\s*c\.?\b/gi, "$1 cup")
+          .replace(/(\d[\d\s\/.]*)\s*tbsp\.?\b/gi, "$1 tbsp")
+          .replace(/(\d[\d\s\/.]*)\s*tsp\.?\b/gi, "$1 tsp")
+          .replace(/(\d[\d\s\/.]*)\s*lb\.?\b/gi, "$1 lb")
+          .replace(/(\d[\d\s\/.]*)\s*oz\.?\b/gi, "$1 oz")
+      );
+    };
+    const ingredientsRaw =
+      recipe.ingredients ||
+      (recipe as any).ingredientLines ||
+      (recipe as any).ingredients_list ||
+      (recipe as any).ingredientsList ||
+      (recipe as any).ingredients_raw ||
+      "";
+    const formatStructuredIngredient = (ing: any) => {
+      const name = ing?.name;
+      const amount = ing?.amount;
+      const unitRaw = ing?.unit;
+      const unit =
+        typeof unitRaw === "string" &&
+        ["unit", "units", "unit.", "units."].includes(unitRaw.toLowerCase().trim())
+          ? ""
+          : unitRaw;
+      const amountStr =
+        unit ? amount : amount && String(amount).trim() !== "1" ? amount : "";
+      const parts = [name, amountStr, unit].filter(Boolean).join(" ");
+      return parts || JSON.stringify(ing);
+    };
+    const ingredientsList = Array.isArray(ingredientsRaw)
+      ? ingredientsRaw
           .map((ing: any) => {
-            if (typeof ing === "string") return { name: ing };
+            if (typeof ing === "string") return ing;
             if (ing && typeof ing === "object") {
-              return {
-                name: ing.name,
-                amount: ing.amount,
-                unit: ing.unit,
-              };
+              return formatStructuredIngredient(ing);
             }
             return null;
           })
           .filter(Boolean)
-      : [];
+      : typeof ingredientsRaw === "string"
+        ? parseIngredientsRaw(ingredientsRaw)
+        : [];
     const instructionsRaw = recipe.instructions;
     let instructionsList: string[] = [];
     const pushSplit = (text: string) => {
@@ -696,6 +731,9 @@ export default function Dashboard() {
                   {expandedMeal.ingredients.length ? (
                     <ul className="list-disc list-inside text-sm text-foreground space-y-1">
                       {expandedMeal.ingredients.map((ing: any, i) => {
+                        if (typeof ing === "string") {
+                          return <li key={i}>{ing}</li>;
+                        }
                         const parts = [ing.amount, ing.unit, ing.name].filter(Boolean).join(" ");
                         return <li key={i}>{parts || ing.name || "Ingredient"}</li>;
                       })}

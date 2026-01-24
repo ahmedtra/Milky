@@ -792,6 +792,7 @@ class GeminiService {
       - Keep descriptors that change the actual item (e.g., "olive oil" vs "vegetable oil"; "red wine vinegar" vs "apple cider vinegar").
       - Remove prep adjectives like "chopped", "diced", "sliced", "fresh", "large/small".
       - Preserve amount/unit as provided; if missing, set amount "1" and unit "unit".
+      - Treat unit "c" as "cup" (never output "c" as a unit; use full unit names like cup, tbsp, tsp, g, ml, lb, oz).
       - Category must be one of the allowed values above.
       Examples:
       - "ground beef 80/20" -> name "ground beef"

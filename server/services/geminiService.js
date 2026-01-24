@@ -791,7 +791,8 @@ class GeminiService {
       - Canonicalize names to the base grocery item (e.g., "orange" and "oranges" -> "oranges"; "green apple" and "apple" -> "apples").
       - Normalize close synonyms to one canonical name (e.g., "ground beef", "minced beef", "hamburger" -> "ground beef"; "chinese tofu" -> "tofu").
       - Keep descriptors that change the actual item (e.g., "olive oil" vs "vegetable oil"; "red wine vinegar" vs "apple cider vinegar").
-      - Remove prep adjectives like "chopped", "diced", "sliced", "fresh", "large/small".
+      - Remove prep adjectives like "chopped", "diced", "sliced", "fresh", "large/small", "cooked", "raw".
+      - If the input includes prep descriptors (e.g., "cooked", "chopped", "minced"), keep them ONLY in a "notes" field and keep the name as the base ingredient.
       - Preserve amount/unit as provided; if missing, set amount "1" and unit "unit".
       - If unit is "c", infer whether it means "cup" or "unit" from the ingredient context; never output "c" as a unit. Use full unit names like cup, tbsp, tsp, g, ml, lb, oz, unit.
       - Category must be one of the allowed values above.
@@ -817,6 +818,170 @@ class GeminiService {
     } catch (err) {
       console.warn('⚠️ Ingredient normalization failed, using original list:', err.message);
       return rawIngredients;
+    }
+  }
+
+  async classifyIngredientsWithModel(rawIngredients = [], attempt = 0) {
+    try {
+      const prompt = `
+      You are categorizing grocery ingredients. Return ONLY a JSON array of objects:
+      [
+        { "name": "<canonical name>", "amount": "<string>", "unit": "<string>", "category": "protein|vegetable|fruit|grain|dairy|fat|spice|nut|seed|broth|herb|other", "unitType": "weight|volume|count|other" }
+      ]
+      Rules:
+      - Keep the SAME number of items as the input and preserve item order.
+      - Do NOT invent or substitute different ingredients.
+      - If unit is "c", infer whether it means "cup" or "unit" from the ingredient context; never output "c".
+      - If unit is missing, infer a reasonable unit and unitType based on the ingredient (e.g., eggs -> unit, flour -> weight or volume).
+      - UnitType should reflect how the ingredient is typically measured: weight (g/kg/lb/oz), volume (ml/l/cup/tbsp/tsp), count (unit/piece/clove/slice/can).
+      Input ingredients:
+      ${JSON.stringify(rawIngredients, null, 2)}
+      `;
+      const text = await this.callTextModel(prompt, 0.2, 'json');
+      const fence = text.match(/```json\s*([\s\S]*?)```/i);
+      const cleaned = fence ? fence[1] : text.replace(/```/g, '');
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed) && parsed.length === rawIngredients.length) {
+        return parsed;
+      }
+      if (attempt < 1) {
+        return this.classifyIngredientsWithModel(rawIngredients, attempt + 1);
+      }
+      return rawIngredients;
+    } catch (err) {
+      console.warn('⚠️ Ingredient categorization failed, using original list:', err.message);
+      return rawIngredients;
+    }
+  }
+
+  async convertToBaseUnitsWithModel(items = []) {
+    if (!items.length) return items;
+    const countUnits = new Set([
+      'unit', 'units', 'piece', 'pieces', 'slice', 'slices', 'clove', 'cloves',
+      'can', 'cans', 'jar', 'jars', 'packet', 'packets', 'pkg', 'package'
+    ]);
+    const extractJsonArray = (text = '') => {
+      const start = text.indexOf('[');
+      if (start === -1) return null;
+      let depth = 0;
+      for (let i = start; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === '[') depth += 1;
+        if (ch === ']') {
+          depth -= 1;
+          if (depth === 0) {
+            return text.slice(start, i + 1);
+          }
+        }
+      }
+      return null;
+    };
+    const parseAmountToNumber = (raw) => {
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+      const str = String(raw).trim();
+      if (!str) return null;
+      const range = str.match(/^(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)$/i);
+      if (range) {
+        const a = Number(range[1]);
+        const b = Number(range[2]);
+        if (Number.isFinite(a) && Number.isFinite(b)) return (a + b) / 2;
+      }
+      const mixed = str.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+      if (mixed) {
+        const whole = Number(mixed[1]);
+        const num = Number(mixed[2]);
+        const den = Number(mixed[3]);
+        if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+          return whole + num / den;
+        }
+      }
+      const frac = str.match(/^(\d+)\s*\/\s*(\d+)$/);
+      if (frac) {
+        const num = Number(frac[1]);
+        const den = Number(frac[2]);
+        if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+          return num / den;
+        }
+      }
+      const numeric = Number(str.replace(/[^\d.]/g, ''));
+      return Number.isFinite(numeric) ? numeric : null;
+    };
+
+    const payload = items.map((item, idx) => {
+      const amountNumber = parseAmountToNumber(item.amount);
+      return {
+        index: idx,
+        name: item.name,
+        amount: item.amount,
+        amountNumber,
+        unit: item.unit,
+        unitType: item.unitType || 'other',
+        category: item.category || 'other'
+      };
+    });
+    const shouldConvert = (item) => {
+      const unit = String(item.unit || '').toLowerCase().trim();
+      if (item.unitType === 'count' || item.unitType === 'other') return false;
+      if (countUnits.has(unit)) return false;
+      if (!unit) return false;
+      return true;
+    };
+    const convertible = items.filter(shouldConvert);
+    if (!convertible.length) return items;
+
+    const prompt = `
+    Convert ingredient quantities into base units.
+    Return ONLY a JSON array of:
+    [{ "index": number, "amount": number, "unit": "${(baseUnits?.baseUnits || ['g', 'ml', 'unit']).join('|')}" }]
+    Base units JSON:
+    ${JSON.stringify(baseUnits, null, 2)}
+    Rules:
+    - Only output units from baseUnits.baseUnits.
+    - For unitType=weight, convert to grams.
+    - For unitType=volume, convert to milliliters unless the ingredient is a solid that should be weight; then convert to grams using reasonable density.
+    - For unitType=count, convert to "unit".
+    - Never treat "unit" as a volume unit. "unit" means count/piece only. "cup" is the volume unit.
+    - Use amountNumber when provided; it is the numeric value parsed from the original amount.
+    - Use standard conversions: 1 cup = 240 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml, 1000 ml = 1 l, 1 lb = 453.592 g, 1 oz = 28.3495 g.
+    - Keep indices aligned with input.
+    Items: ${JSON.stringify(payload, null, 2)}
+    `;
+
+    try {
+      const text = await this.callTextModel(prompt, 0.2, 'json');
+      const arrayText = extractJsonArray(text) || text;
+      const parsed = JSON.parse(arrayText);
+      const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : null;
+      if (!rows) return items;
+      const updates = new Map(rows.map((row) => [row.index, row]));
+      return items.map((item, idx) => {
+        if (!shouldConvert(item)) return item;
+        const update = updates.get(idx);
+        if (!update) return item;
+        const fallbackAmount = payload[idx]?.amountNumber;
+        const amount = Number(update.amount);
+        const nextAmount = Number.isFinite(amount)
+          ? amount
+          : Number.isFinite(fallbackAmount)
+            ? fallbackAmount
+            : item.amount;
+        const nextUnit = update.unit || item.unit;
+        if (String(item.name || '').toLowerCase().includes('pepper')) {
+          if (!Number.isFinite(amount) && !Number.isFinite(fallbackAmount)) {
+            console.log('🧪 Pepper [convertToBaseUnits] invalid amount', {
+              name: item.name,
+              original: { amount: item.amount, unit: item.unit, unitType: item.unitType },
+              update,
+              fallbackAmount
+            });
+          }
+        }
+        return { ...item, amount: String(nextAmount), unit: nextUnit };
+      });
+    } catch (err) {
+      console.warn('⚠️ Base-unit conversion failed, keeping original units:', err.message);
+      return items;
     }
   }
 
@@ -1738,7 +1903,7 @@ ${mealSchemas}
     if (tokens[idx]) {
       const u = tokens[idx].replace(/\.$/, '').toLowerCase();
       if (knownUnits.has(u)) {
-        unit = tokens[idx];
+        unit = (u === 'c' ? 'cup' : tokens[idx]);
         idx += 1;
       }
     }
@@ -2682,266 +2847,45 @@ ${mealSchemas}
   async generateShoppingList(mealPlan) {
     try {
       const extractedIngredients = await this.extractIngredientsFromMealPlan(mealPlan);
+      const logPepper = (label, list) => {
+        const entries = Array.isArray(list)
+          ? list.filter((item) => String(item?.name || '').toLowerCase().includes('pepper'))
+          : [];
+        if (entries.length) {
+          console.log(`🧪 Pepper [${label}]`, entries);
+        }
+      };
+      logPepper('extracted', extractedIngredients);
 
       if (extractedIngredients.length === 0) {
         throw new Error('Meal plan does not contain any ingredients to convert into a shopping list');
       }
+      const categorized = await this.classifyIngredientsWithModel(extractedIngredients);
+      const withUnitType = Array.isArray(categorized) && categorized.length === extractedIngredients.length
+        ? categorized
+        : extractedIngredients;
+      logPepper('categorized', withUnitType);
 
-      // Normalize with LLM to reduce duplicates (e.g., onion vs Onion vs red onion)
-      let normalizedForList = await this.normalizeIngredientsWithModel(extractedIngredients);
-      if (!Array.isArray(normalizedForList) || normalizedForList.length !== extractedIngredients.length) {
-        normalizedForList = extractedIngredients;
-      }
-      const isGroundBeef = (name = '') => /ground\s+beef/i.test(String(name || ''));
-      const logGroundBeefItems = (stage, items) => {
-        const matches = (items || []).filter((item) => isGroundBeef(item?.name));
-        if (!matches.length) return;
-        console.log(`🧪 Ground beef [${stage}]:`, matches);
-      };
-      logGroundBeefItems('extracted', extractedIngredients);
-      logGroundBeefItems('normalized', normalizedForList);
-      const namesOverlap = (a = '', b = '') => {
-        const tokens = (value) =>
-          String(value || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, ' ')
-            .split(/\s+/)
-            .filter((t) => t.length > 2);
-        const aTokens = new Set(tokens(a));
-        const bTokens = tokens(b);
-        return bTokens.some((t) => aTokens.has(t));
-      };
-      const normalizedSafe = normalizedForList.map((item, idx) => {
-        const orig = extractedIngredients[idx];
-        if (!orig) return item;
-        const safeName = item?.name && namesOverlap(item.name, orig.name) ? item.name : orig.name;
-        return {
-          ...item,
-          name: safeName,
-          amount: orig.amount,
-          unit: orig.unit,
-          category: item?.category || orig.category
-        };
+      const sanitized = withUnitType
+        .map((item) => this.sanitizeIngredientRecord(item))
+        .filter(Boolean);
+      logPepper('sanitized', sanitized);
+
+      const displayUnitVariantsByName = this.collectUnitVariantsByName(sanitized);
+      const normalizedUnits = await this.convertToBaseUnitsWithModel(sanitized);
+      logPepper('baseUnits', normalizedUnits);
+
+      const consolidatedIngredients = this.consolidateIngredientsWithUnitVariants(normalizedUnits);
+      const summarized = await this.summarizeUnitVariantsWithModel(consolidatedIngredients);
+      const withDisplayVariants = summarized.map((item) => {
+        const key = this.normalizeIngredientKey(item?.name || '');
+        const displayVariants = displayUnitVariantsByName.get(key);
+        if (Array.isArray(displayVariants) && displayVariants.length > 1) {
+          return { ...item, displayUnitVariants: displayVariants };
+        }
+        return item;
       });
-      logGroundBeefItems('normalizedSafe', normalizedSafe);
-      // File logging disabled to avoid nodemon restarts on log file changes.
-
-      const isPlaceholderName = (name = '') => {
-        const n = String(name || '').trim();
-        const lower = n.toLowerCase();
-        return (
-          !n ||
-          /^ingredient\s*\d+/i.test(n) ||
-          /^item\s*\d+/i.test(n) ||
-          /^recipe\s*\d+/i.test(n) ||
-          lower === 'ingredient' ||
-          lower === 'item'
-        );
-      };
-
-      const filterGeneric = (list) => {
-        const badName = (name = '') => {
-          const n = String(name).toLowerCase().trim();
-          return (
-            !n ||
-            /^ingredient\s*\d+/i.test(name) ||
-            /^item\s*\d+/i.test(name) ||
-            n === 'ingredient' ||
-            n === 'item'
-          );
-        };
-        return (list || []).filter((ing) => ing && !badName(ing.name));
-      };
-
-      const normalizeName = (name = '') => {
-        const raw = String(name || '').trim();
-        if (!raw) return raw;
-        const parts = raw.split(/\s+or\s+/i).map((p) => p.trim()).filter(Boolean);
-        return parts.length ? parts[0] : raw;
-      };
-
-      const canonicalizeName = (name = '') => {
-        const base = String(name || '')
-          .toLowerCase()
-          .replace(/\([^)]*\)/g, '')
-          .replace(/\b\d+\s*%/g, '')
-          .replace(/\b\d+\s*\/\s*\d+\b/g, '')
-          .replace(/[-,]/g, ' ')
-          .trim();
-        if (!base) return '';
-        const tokens = base.split(/\s+/).filter(Boolean);
-        const drop = new Set([
-          'lean', 'extra', 'fat', 'low', 'reduced', 'organic', 'grass', 'fed',
-          'boneless', 'skinless', 'fresh', 'chopped', 'diced', 'sliced'
-        ]);
-        const cleaned = tokens.filter((t) => !drop.has(t)).join(' ');
-        if (/(seasoning|mix|spice)/.test(cleaned) && /hamburger/.test(cleaned)) return cleaned;
-        if (/(ground|minced)\s+beef|hamburger/.test(cleaned)) return 'ground beef';
-        if (/beef\s+mince|minced\s+beef/.test(cleaned)) return 'ground beef';
-        if (/beef\s+ground/.test(cleaned)) return 'ground beef';
-        if (/^beef\s+ground$/.test(cleaned)) return 'ground beef';
-        if (/chinese\s+tofu/.test(cleaned)) return 'tofu';
-        if (/^tofu$/.test(cleaned)) return 'tofu';
-        return cleaned.replace(/\s+/g, ' ').trim();
-      };
-
-      const isWater = (name = '') => {
-        const n = String(name || '').toLowerCase();
-        return n === 'water' || n.endsWith(' water') || n.startsWith('water ');
-      };
-
-      const normalizeUnitAmount = (ing) => {
-        let unitRaw = String(ing.unit || '').toLowerCase().trim();
-        let amountRaw = String(ing.amount || '').trim();
-        const extractUnitFromAmount = (amountText, unitText) => {
-          if (!amountText) return { amountText, unitText };
-          if (unitText && unitText !== 'unit') return { amountText, unitText };
-          const lower = amountText.toLowerCase();
-          const unitMatch = lower.match(/\b(kg|kilogram|kilograms|g|gram|grams|lb|lbs|pound|pounds|oz|ounce|ounces|ml|milliliter|milliliters|millilitre|millilitres|l|liter|liters|litre|litres|cup|cups|c|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons)\b/);
-          if (!unitMatch) return { amountText, unitText };
-          const nextUnit = unitMatch[1];
-          const nextAmount = lower.replace(unitMatch[0], '').trim();
-          return { amountText: nextAmount, unitText: nextUnit };
-        };
-        const extracted = extractUnitFromAmount(amountRaw, unitRaw);
-        amountRaw = extracted.amountText;
-        unitRaw = extracted.unitText;
-        const parseSingle = (val) => {
-          const raw = String(val || '').trim();
-          if (!raw) return null;
-          const wordMap = {
-            half: 0.5,
-            halves: 0.5,
-            quarter: 0.25,
-            quarters: 0.25,
-            whole: 1
-          };
-          const lowered = raw.toLowerCase();
-          if (Object.prototype.hasOwnProperty.call(wordMap, lowered)) {
-            return wordMap[lowered];
-          }
-          const unicodeFractions = {
-            '¼': '1/4',
-            '½': '1/2',
-            '¾': '3/4',
-            '⅓': '1/3',
-            '⅔': '2/3'
-          };
-          const normalized = raw.replace(/[¼½¾⅓⅔]/g, (m) => unicodeFractions[m] || m);
-          const mixedMatch = normalized.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-          if (mixedMatch) {
-            const whole = Number(mixedMatch[1]);
-            const num = Number(mixedMatch[2]);
-            const den = Number(mixedMatch[3]);
-            if (den) return whole + num / den;
-          }
-          const fracMatch = normalized.match(/^(\d+)\/(\d+)$/);
-          if (fracMatch) {
-            const num = Number(fracMatch[1]);
-            const den = Number(fracMatch[2]);
-            if (den) return num / den;
-          }
-          const num = Number(normalized.replace(/[^0-9.]/g, ''));
-          return Number.isFinite(num) ? num : null;
-        };
-        const parseNum = (val) => {
-          const raw = String(val || '').trim();
-          if (!raw) return null;
-          const rangeParts = raw.split(/\s*(?:-|to)\s*/i);
-          if (rangeParts.length > 1) {
-            return parseSingle(rangeParts[0]);
-          }
-          return parseSingle(raw);
-        };
-        const amountNum = parseNum(amountRaw);
-        if (amountNum === null) return ing;
-        const cat = String(ing.category || '').toLowerCase();
-        const logTransform = (next) => {
-          if (!isGroundBeef(ing.name)) return next;
-          console.log('🧪 Ground beef [normalizeUnitAmount]', {
-            from: { name: ing.name, amount: ing.amount, unit: ing.unit, category: ing.category },
-            to: { name: next.name, amount: next.amount, unit: next.unit, category: next.category }
-          });
-          return next;
-        };
-        if (['half', 'halves', 'quarter', 'quarters'].includes(unitRaw)) {
-          const unitFactor = unitRaw.startsWith('half') ? 0.5 : 0.25;
-          return logTransform({
-            ...ing,
-            amount: String(amountNum * unitFactor),
-            unit: 'unit'
-          });
-        }
-        if (unitRaw === 'whole') {
-          return logTransform({
-            ...ing,
-            amount: String(amountNum),
-            unit: 'unit'
-          });
-        }
-        if ((unitRaw === 'unit' || unitRaw === '') && amountNum >= 50 && ['protein', 'meat', 'produce', 'vegetable', 'fruit', 'dairy'].includes(cat)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum)), unit: 'g' });
-        }
-        if (['cup', 'cups', 'c'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 240)), unit: 'ml' });
-        }
-        if (['tbsp', 'tablespoon', 'tablespoons'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 15)), unit: 'ml' });
-        }
-        if (['tsp', 'teaspoon', 'teaspoons'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 5)), unit: 'ml' });
-        }
-        if (['kg', 'kilogram', 'kilograms'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 1000)), unit: 'g' });
-        }
-        if (['g', 'gram', 'grams'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum)), unit: 'g' });
-        }
-        if (['lb', 'lbs', 'pound', 'pounds'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 453.592)), unit: 'g' });
-        }
-        if (['oz', 'ounce', 'ounces'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 28.3495)), unit: 'g' });
-        }
-        if (['l', 'liter', 'liters', 'litre', 'litres'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum * 1000)), unit: 'ml' });
-        }
-        if (['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'].includes(unitRaw)) {
-          return logTransform({ ...ing, amount: String(Math.round(amountNum)), unit: 'ml' });
-        }
-        return { ...ing, unit: unitRaw };
-      };
-
-      let cleaned = filterGeneric(normalizedSafe)
-        .map((ing) => ({
-          ...ing,
-          name: normalizeName(ing.name)
-        }))
-        .filter((ing) => !isWater(ing.name));
-      if (!cleaned.length) {
-        cleaned = filterGeneric(extractedIngredients)
-          .map((ing) => ({
-            ...ing,
-            name: normalizeName(ing.name)
-          }))
-          .filter((ing) => !isWater(ing.name));
-      }
-
-      cleaned = cleaned
-        .map((ing) => ({
-          ...ing,
-          name: (canonicalizeName(ing.name) || ing.name || '').trim(),
-          unit: String(ing.unit || '').trim()
-        }))
-        .map(normalizeUnitAmount);
-      logGroundBeefItems('cleaned', cleaned);
-
-      cleaned = await this.convertVolumeToWeightWithModel(cleaned);
-      logGroundBeefItems('volumeConverted', cleaned);
-
-      const consolidatedIngredients = this.consolidateIngredients(cleaned);
-      logGroundBeefItems('consolidated', consolidatedIngredients);
-      return this.buildFallbackShoppingList(consolidatedIngredients, mealPlan);
+      return this.buildFallbackShoppingList(withDisplayVariants, mealPlan);
     } catch (error) {
       console.error('Error generating shopping list:', error);
       throw new Error('Failed to generate shopping list: ' + error.message);
@@ -2965,6 +2909,7 @@ ${mealSchemas}
         if (recipes.length > 0) {
           for (const recipe of recipes) {
             let rawText = typeof recipe?.ingredients_raw === 'string' ? recipe.ingredients_raw.trim() : '';
+            let hydratedFromSearch = null;
             if (!rawText) {
               const recipeId = recipe?.id || recipe?._id || recipe?.recipe_id;
               if (recipeId) {
@@ -2977,6 +2922,43 @@ ${mealSchemas}
                 } catch (err) {
                   console.warn('⚠️ Failed to hydrate ingredients_raw for recipe', recipeId, err.message);
                 }
+              }
+              if (!rawText) {
+                const recipeTitle = recipe?.name || recipe?.title;
+                if (recipeTitle) {
+                  try {
+                    const exact = await searchRecipes(
+                      { text: recipeTitle, __textFallback: recipeTitle },
+                      { size: 1, randomize: false }
+                    );
+                    const hit = exact?.results?.[0];
+                    if (hit?.ingredients_raw && typeof hit.ingredients_raw === 'string') {
+                      rawText = hit.ingredients_raw.trim();
+                      console.log(`🧺 Hydrated ingredients_raw by title for ${recipeTitle} (${rawText.length} chars)`);
+                    } else if (hit) {
+                      hydratedFromSearch = hit;
+                    }
+                  } catch (err) {
+                    console.warn('⚠️ Failed to hydrate ingredients_raw by title for recipe', recipeTitle, err.message);
+                  }
+                }
+              }
+            }
+            if (!rawText && hydratedFromSearch) {
+              const parsed = this.parseIngredientsFromSource(hydratedFromSearch);
+              if (parsed.length) {
+                console.log(`🧺 Using ingredients from title search for ${recipe?.name || 'recipe'} (${parsed.length} items)`);
+                parsed
+                  .map((ingredient) => this.normalizeIngredient(ingredient))
+                  .filter(Boolean)
+                  .forEach((ingredient) => {
+                    ingredients.push(ingredient);
+                    const lower = ingredient.name.toLowerCase();
+                    if (lower.includes('onion')) {
+                      onionLog.push({ source: 'title_search', recipe: recipe.name, ingredient });
+                    }
+                  });
+                continue;
               }
             }
             if (rawText) {
@@ -3039,6 +3021,154 @@ ${mealSchemas}
     return ingredients;
   }
 
+  sanitizeIngredientRecord(raw = {}) {
+    if (!raw || !raw.name) return raw;
+    const record = { ...raw };
+    const notes = [];
+    let name = String(record.name || '').trim();
+
+    if (!name) return record;
+
+    const dashSplit = name.split(/\s+-\s+/);
+    if (dashSplit.length > 1) {
+      name = dashSplit[0].trim();
+      notes.push(dashSplit.slice(1).join(' - ').trim());
+    }
+
+    const paren = name.match(/\(([^)]+)\)/);
+    if (paren) {
+      notes.push(paren[1].trim());
+      name = name.replace(/\([^)]+\)/g, '').trim();
+    }
+
+    const prepWords = [
+      'cooked', 'beaten', 'chopped', 'diced', 'sliced', 'grated',
+      'shredded', 'minced', 'peeled', 'crushed', 'drained', 'thawed'
+    ];
+    const prepRegex = new RegExp(`\\b(${prepWords.join('|')})\\b`, 'gi');
+    if (prepRegex.test(name)) {
+      const matches = name.match(prepRegex) || [];
+      matches.forEach((m) => notes.push(m.toLowerCase()));
+      name = name.replace(prepRegex, '').replace(/\s{2,}/g, ' ').trim();
+    }
+
+    const sizeUnits = new Set(['small', 'medium', 'large', 'x-large', 'xl']);
+    const unitRaw = String(record.unit || '').trim().toLowerCase();
+    if (sizeUnits.has(unitRaw)) {
+      notes.push(`size ${unitRaw}`);
+      record.unit = 'unit';
+    }
+
+    const amountRaw = String(record.amount || '').trim();
+    const amountSizeMatch = amountRaw.match(/^(\d+(?:\.\d+)?)\s+(small|medium|large|x-large|xl)$/i);
+    if (amountSizeMatch) {
+      record.amount = amountSizeMatch[1];
+      record.unit = 'unit';
+      notes.push(`size ${amountSizeMatch[2].toLowerCase()}`);
+    }
+
+    record.name = name || record.name;
+    if (notes.length) {
+      const existing = record.notes ? [String(record.notes).trim()] : [];
+      record.notes = [...existing, ...notes].filter(Boolean).join(', ');
+    }
+
+    return record;
+  }
+
+  normalizeIngredientKey(name = '') {
+    return String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  collectUnitVariantsByName(items = []) {
+    const parseAmountNumber = (value, unit, name) => {
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+
+      const unicodeFractions = {
+        '¼': '1/4',
+        '½': '1/2',
+        '¾': '3/4',
+        '⅓': '1/3',
+        '⅔': '2/3'
+      };
+      const replaced = raw.replace(/[¼½¾⅓⅔]/g, (m) => unicodeFractions[m] || m);
+
+      const mixedMatch = replaced.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      if (mixedMatch) {
+        const whole = Number(mixedMatch[1]);
+        const num = Number(mixedMatch[2]);
+        const den = Number(mixedMatch[3]);
+        if (den) return whole + num / den;
+      }
+
+      const fracMatch = replaced.match(/^(\d+)\/(\d+)$/);
+      if (fracMatch) {
+        const num = Number(fracMatch[1]);
+        const den = Number(fracMatch[2]);
+        if (den) return num / den;
+      }
+
+      if (/^\d{2}$/.test(replaced) && unit && /cup/i.test(unit) && name && /onion/i.test(name)) {
+        const first = replaced[0];
+        const second = replaced[1];
+        if (['2', '4', '8'].includes(second)) {
+          const mapped = `${first}/${second}`;
+          const f = mapped.split('/');
+          const num = Number(f[0]);
+          const den = Number(f[1]);
+          if (den) return num / den;
+        }
+      }
+
+      const num = Number(replaced.replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(num) && num > 0) return num;
+      return null;
+    };
+
+    const grouped = new Map();
+    items.forEach((item) => {
+      if (!item?.name) return;
+      const key = this.normalizeIngredientKey(item.name);
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push({
+        amount: String(item.amount ?? '1'),
+        unit: String(item.unit || 'unit').toLowerCase().trim()
+      });
+    });
+
+    const result = new Map();
+    grouped.forEach((variants, key) => {
+      const byUnit = new Map();
+      variants.forEach((v) => {
+        const unitKey = v.unit || 'unit';
+        const prev = byUnit.get(unitKey);
+        if (prev) {
+          const prevAmount = parseAmountNumber(prev.amount, unitKey, key);
+          const newAmount = parseAmountNumber(v.amount, unitKey, key);
+          if (prevAmount !== null && newAmount !== null) {
+            prev.amount = String(prevAmount + newAmount);
+          } else if (!prev.amount || String(prev.amount).toLowerCase() === 'nan') {
+            prev.amount = v.amount;
+          } else if (prev.amount !== v.amount) {
+            prev.amount = `${prev.amount} + ${v.amount}`;
+          }
+        } else {
+          byUnit.set(unitKey, { amount: v.amount, unit: unitKey });
+        }
+      });
+      result.set(key, Array.from(byUnit.values()));
+    });
+
+    return result;
+  }
+
   normalizeIngredient(rawIngredient = {}) {
     const nameCandidate = rawIngredient.name || rawIngredient.item || rawIngredient.ingredient;
     if (!nameCandidate) {
@@ -3080,7 +3210,180 @@ ${mealSchemas}
       }
     }
 
-    return normalised;
+    return this.sanitizeIngredientRecord(normalised);
+  }
+
+  consolidateIngredientsWithUnitVariants(ingredients = []) {
+    const parseAmountNumber = (value, unit, name) => {
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+
+      const unicodeFractions = {
+        '¼': '1/4',
+        '½': '1/2',
+        '¾': '3/4',
+        '⅓': '1/3',
+        '⅔': '2/3'
+      };
+      const replaced = raw.replace(/[¼½¾⅓⅔]/g, (m) => unicodeFractions[m] || m);
+
+      const mixedMatch = replaced.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+      if (mixedMatch) {
+        const whole = Number(mixedMatch[1]);
+        const num = Number(mixedMatch[2]);
+        const den = Number(mixedMatch[3]);
+        if (den) return whole + num / den;
+      }
+
+      const fracMatch = replaced.match(/^(\d+)\/(\d+)$/);
+      if (fracMatch) {
+        const num = Number(fracMatch[1]);
+        const den = Number(fracMatch[2]);
+        if (den) return num / den;
+      }
+
+      if (/^\d{2}$/.test(replaced) && unit && /cup/i.test(unit) && name && /onion/i.test(name)) {
+        const first = replaced[0];
+        const second = replaced[1];
+        if (['2', '4', '8'].includes(second)) {
+          const mapped = `${first}/${second}`;
+          const f = mapped.split('/');
+          const num = Number(f[0]);
+          const den = Number(f[1]);
+          if (den) return num / den;
+        }
+      }
+
+      const num = Number(replaced.replace(/[^0-9.]/g, ''));
+      if (Number.isFinite(num) && num > 0) return num;
+      return null;
+    };
+
+    const grouped = new Map();
+    ingredients.forEach((item) => {
+      if (!item?.name) return;
+      const key = this.normalizeIngredientKey(item.name);
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          name: item.name,
+          category: item.category || 'other',
+          unitType: item.unitType || 'other',
+          variants: []
+        });
+      }
+      const entry = grouped.get(key);
+      entry.variants.push({
+        amount: String(item.amount ?? '1'),
+        unit: String(item.unit || 'unit').toLowerCase().trim()
+      });
+    });
+
+    const consolidated = [];
+    grouped.forEach((entry) => {
+      const byUnit = new Map();
+      entry.variants.forEach((v) => {
+        const key = v.unit || 'unit';
+        const prev = byUnit.get(key);
+        if (prev) {
+          const prevAmount = parseAmountNumber(prev.amount, key, entry.name);
+          const newAmount = parseAmountNumber(v.amount, key, entry.name);
+          if (prevAmount !== null && newAmount !== null) {
+            prev.amount = String(prevAmount + newAmount);
+          } else if (!prev.amount || String(prev.amount).toLowerCase() === 'nan') {
+            prev.amount = v.amount;
+          } else if (prev.amount !== v.amount) {
+            prev.amount = `${prev.amount} + ${v.amount}`;
+          }
+        } else {
+          byUnit.set(key, { amount: v.amount, unit: key });
+        }
+      });
+      const variants = Array.from(byUnit.values());
+      if (variants.length === 1) {
+        consolidated.push({
+          name: entry.name,
+          amount: variants[0].amount,
+          unit: variants[0].unit,
+          unitType: entry.unitType,
+          category: entry.category
+        });
+      } else {
+        consolidated.push({
+          name: entry.name,
+          amount: variants[0].amount,
+          unit: variants[0].unit,
+          unitType: entry.unitType,
+          category: entry.category,
+          unitVariants: variants
+        });
+      }
+    });
+    return consolidated;
+  }
+
+  async summarizeUnitVariantsWithModel(items = []) {
+    const withVariants = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => Array.isArray(item.unitVariants) && item.unitVariants.length > 1);
+
+    if (!withVariants.length) return items;
+
+    const prompt = `
+    You are consolidating ingredient quantities across multiple unit variants.
+    For EACH item, choose a single total amount and unit that best summarizes the variants.
+    Return ONLY a JSON array with the same order as input:
+    [
+      { "index": 0, "totalAmount": "<number or fraction>", "totalUnit": "<unit>" }
+    ]
+    Rules:
+    - Use the most standard unit for the ingredient. Prefer weight units (g/kg) for solids, volume units (ml/l/cup) for liquids, and count (unit) only when weight/volume is not sensible.
+    - If variants mix count with weight/volume, convert counts into the chosen standard unit and still report ONLY one total unit.
+    - "unit" is count/piece. Do NOT treat "unit" as a volume unit. "cup" is the volume unit.
+    - If you choose a volume unit, convert cups/tbsp/tsp to ml using: 1 cup = 240 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml.
+    - If you choose a weight unit, convert volume to weight using ingredient-specific density.
+    - If variants are not compatible or unclear, choose the unit that best reflects the dominant measurement.
+    - Keep totals realistic; do not invent extra quantities.
+    Input items:
+    ${JSON.stringify(withVariants.map(({ item, index }) => ({
+      index,
+      name: item.name,
+      variants: item.unitVariants
+    })), null, 2)}
+    `;
+
+    try {
+      const text = await this.callTextModel(prompt, 0.2, 'json');
+      const fence = text.match(/```json\s*([\s\S]*?)```/i);
+      const cleaned = fence ? fence[1] : text.replace(/```/g, '');
+      const parsed = JSON.parse(cleaned);
+      if (!Array.isArray(parsed)) {
+        return items;
+      }
+      const byIndex = new Map();
+      parsed.forEach((entry) => {
+        if (!entry || typeof entry.index !== 'number') return;
+        if (!entry.totalAmount || !entry.totalUnit) return;
+        byIndex.set(entry.index, {
+          amount: String(entry.totalAmount).trim(),
+          unit: String(entry.totalUnit).trim()
+        });
+      });
+
+      return items.map((item, index) => {
+        const summary = byIndex.get(index);
+        if (!summary) return item;
+        return {
+          ...item,
+          amount: summary.amount || item.amount,
+          unit: summary.unit || item.unit,
+          totalAmount: summary.amount,
+          totalUnit: summary.unit
+        };
+      });
+    } catch (err) {
+      console.warn('⚠️ Unit variant summary failed, keeping original variants:', err.message);
+      return items;
+    }
   }
 
   buildFallbackShoppingList(consolidatedIngredients, mealPlan = {}) {
@@ -3100,176 +3403,35 @@ ${mealSchemas}
         name: item.name,
         amount: item.amount || '1',
         unit: item.unit || 'unit',
+        unitType: item.unitType || 'other',
         category,
         priority: 'medium',
         purchased: false
       };
 
-      if (item.notes) {
-        fallbackItem.notes = item.notes;
+      const displayVariants = Array.isArray(item.displayUnitVariants) && item.displayUnitVariants.length > 1
+        ? item.displayUnitVariants
+        : Array.isArray(item.unitVariants) && item.unitVariants.length > 1
+          ? item.unitVariants
+          : null;
+      if (displayVariants) {
+        fallbackItem.unitVariants = displayVariants.map((variant) => ({
+          amount: String(variant.amount ?? '1'),
+          unit: String(variant.unit || 'unit').toLowerCase().trim()
+        }));
       }
 
-      if (item.estimatedPrice !== undefined) {
-        fallbackItem.estimatedPrice = item.estimatedPrice;
+      if (item.notes) {
+        fallbackItem.notes = item.notes;
       }
 
       return fallbackItem;
     });
 
-    // Add estimated prices if missing based on intelligent analysis
-    const estimatedItems = items.map(item => {
-      if (!item.estimatedPrice || item.estimatedPrice === 0) {
-        const name = (item.name || '').toLowerCase();
-        const amount = parseFloat(item.amount) || 1;
-        const unit = (item.unit || '').toLowerCase();
-        
-        // Specific ingredient pricing (more accurate)
-        let basePrice = 3.0;
-        
-        // Proteins
-        if (name.includes('chicken') || name.includes('turkey')) {
-          basePrice = amount >= 2 ? 8.0 : 5.5;
-        } else if (name.includes('beef') || name.includes('steak') || name.includes('lamb')) {
-          basePrice = amount >= 2 ? 12.0 : 7.0;
-        } else if (name.includes('fish') || name.includes('salmon') || name.includes('tuna') || name.includes('shrimp')) {
-          basePrice = amount >= 2 ? 14.0 : 8.0;
-        } else if (name.includes('pork') || name.includes('bacon') || name.includes('sausage')) {
-          basePrice = amount >= 2 ? 9.0 : 5.5;
-        } else if (name.includes('egg')) {
-          basePrice = amount >= 12 ? 4.5 : 3.0;
-        
-        // Dairy
-        } else if (name.includes('milk') || name.includes('cream')) {
-          basePrice = amount >= 2 ? 5.5 : 3.5;
-        } else if (name.includes('cheese')) {
-          basePrice = amount >= 1 ? 6.0 : 4.0;
-        } else if (name.includes('yogurt')) {
-          basePrice = amount >= 4 ? 5.0 : 3.5;
-        } else if (name.includes('butter')) {
-          basePrice = 4.5;
-        
-        // Produce
-        } else if (name.includes('lettuce') || name.includes('spinach') || name.includes('kale')) {
-          basePrice = 2.5;
-        } else if (name.includes('tomato') || name.includes('pepper') || name.includes('onion')) {
-          basePrice = amount >= 5 ? 4.0 : 2.5;
-        } else if (name.includes('avocado')) {
-          basePrice = amount >= 3 ? 5.0 : 2.0;
-        } else if (name.includes('broccoli') || name.includes('cauliflower') || name.includes('carrot')) {
-          basePrice = amount >= 3 ? 4.5 : 3.0;
-        } else if (name.includes('potato')) {
-          basePrice = amount >= 5 ? 5.0 : 3.0;
-        } else if (name.includes('apple') || name.includes('banana') || name.includes('orange')) {
-          basePrice = amount >= 5 ? 4.0 : 2.5;
-        } else if (name.includes('berry') || name.includes('strawberry') || name.includes('blueberry')) {
-          basePrice = amount >= 2 ? 6.0 : 4.0;
-        
-        // Grains & Pantry
-        } else if (name.includes('rice') || name.includes('pasta') || name.includes('noodle')) {
-          basePrice = amount >= 3 ? 5.0 : 3.0;
-        } else if (name.includes('bread') || name.includes('baguette') || name.includes('roll')) {
-          basePrice = 3.5;
-        } else if (name.includes('flour') || name.includes('sugar')) {
-          basePrice = amount >= 5 ? 6.0 : 3.5;
-        } else if (name.includes('oat') || name.includes('cereal')) {
-          basePrice = 4.0;
-        
-        // Oils & Condiments (usually small amounts)
-        } else if (name.includes('oil') || name.includes('vinegar')) {
-          basePrice = unit.includes('tsp') || unit.includes('tbsp') || unit.includes('tablespoon') || unit.includes('teaspoon') ? 0.5 : 6.0;
-        } else if (name.includes('sauce') || name.includes('paste') || name.includes('stock') || name.includes('broth')) {
-          basePrice = 3.0;
-        
-        // Spices & Herbs (usually very small amounts)
-        } else if (name.includes('salt') || name.includes('pepper') || name.includes('spice') || name.includes('herb') || 
-                   name.includes('cumin') || name.includes('paprika') || name.includes('oregano') || name.includes('thyme') ||
-                   name.includes('basil') || name.includes('parsley') || name.includes('cilantro')) {
-          basePrice = unit.includes('tsp') || unit.includes('tbsp') || unit.includes('tablespoon') || unit.includes('teaspoon') ? 0.3 : 2.5;
-        
-        // Nuts & Seeds
-        } else if (name.includes('almond') || name.includes('walnut') || name.includes('cashew') || name.includes('pecan')) {
-          basePrice = amount >= 2 ? 9.0 : 5.5;
-        } else if (name.includes('seed') || name.includes('chia') || name.includes('flax')) {
-          basePrice = 4.0;
-        
-        // Canned/Packaged
-        } else if (name.includes('can') || name.includes('canned')) {
-          basePrice = 2.0;
-        
-        // Category-based fallback
-        } else {
-          const categoryPrices = {
-            'produce': 3.5,
-            'meat': 8.0,
-            'dairy': 4.5,
-            'pantry': 4.0,
-            'frozen': 5.0,
-            'bakery': 3.0,
-            'beverages': 3.5,
-            'other': 3.0
-          };
-          basePrice = categoryPrices[item.category] || 3.0;
-        }
-        
-        // Adjust for very small units (tsp, tbsp)
-        if (unit.includes('tsp') || unit.includes('teaspoon')) {
-          basePrice = Math.min(basePrice, 0.5);
-        } else if (unit.includes('tbsp') || unit.includes('tablespoon')) {
-          basePrice = Math.min(basePrice, 1.0);
-        }
-        
-        item.estimatedPrice = parseFloat(basePrice.toFixed(2));
-      }
-      return item;
-    });
-
-    const totalEstimatedCost = estimatedItems.reduce((sum, item) => {
-      return sum + (item.estimatedPrice || 0);
-    }, 0);
-
-    const mergeKey = (item) =>
-      `${String(item.name || '').toLowerCase().trim()}__${String(item.unit || 'unit').toLowerCase().trim()}`;
-    const merged = {};
-    const toNum = (val) => {
-      const num = Number(String(val || '').replace(/[^0-9.]/g, ''));
-      return Number.isFinite(num) ? num : null;
-    };
-    estimatedItems.forEach((item) => {
-      const key = mergeKey(item);
-      if (!merged[key]) {
-        merged[key] = { ...item };
-        return;
-      }
-      const a = toNum(merged[key].amount);
-      const b = toNum(item.amount);
-      if (a !== null && b !== null) {
-        merged[key].amount = (a + b).toString();
-      }
-      if (item.estimatedPrice !== undefined) {
-        const prev = Number(merged[key].estimatedPrice) || 0;
-        const add = Number(item.estimatedPrice) || 0;
-        merged[key].estimatedPrice = prev + add;
-      }
-    });
-    const mergedItems = Object.values(merged).map((item) => {
-      const unit = String(item.unit || '').toLowerCase().trim();
-      const amountNum = Number(String(item.amount || '').replace(/[^0-9.]/g, ''));
-      if (!Number.isFinite(amountNum)) return item;
-      if (unit === 'g' && amountNum >= 1000) {
-        return { ...item, amount: Number((amountNum / 1000).toFixed(3)).toString(), unit: 'kg' };
-      }
-      if (unit === 'ml' && amountNum >= 1000) {
-        return { ...item, amount: Number((amountNum / 1000).toFixed(3)).toString(), unit: 'l' };
-      }
-      return item;
-    });
-    const mergedTotal = mergedItems.reduce((sum, item) => sum + (Number(item.estimatedPrice) || 0), 0);
-
     return {
       title: mealPlan?.title ? `${mealPlan.title} Shopping List` : 'Shopping List',
       description: 'Generated from meal plan ingredients',
-      items: mergedItems,
-      totalEstimatedCost: parseFloat(mergedTotal.toFixed(2)),
+      items,
       store: 'Grocery store'
     };
   }

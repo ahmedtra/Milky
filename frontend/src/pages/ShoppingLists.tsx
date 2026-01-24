@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Plus, Check, ShoppingCart, Loader2, 
-  Package, DollarSign, CheckCircle, ChefHat, Trash2 
+  Package, CheckCircle, ChefHat, Trash2 
 } from "lucide-react";
 import { Navigation } from "@/components/layout/Navigation";
 import { Input } from "@/components/ui/input";
@@ -37,10 +37,8 @@ export default function ShoppingLists() {
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, { amount: number; unit: string }>>({});
+  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, { amount: string | number; unit: string }>>({});
   const [shoppingModeListId, setShoppingModeListId] = useState<string | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const swipeDetected = useRef(false);
   const sectionLabels: Record<string, string> = {
     produce: "Produce",
     meat: "Meat & Seafood",
@@ -60,139 +58,6 @@ export default function ShoppingLists() {
     bakery: "bg-orange-100 text-orange-800",
     beverages: "bg-indigo-100 text-indigo-800",
     other: "bg-slate-100 text-slate-700",
-  };
-
-  const computeItemPrice = (item: any) =>
-    typeof item?.estimatedPrice === 'number'
-      ? item.estimatedPrice
-      : typeof item?.price === 'number'
-        ? item.price
-        : 0;
-
-  const computeListTotal = (list: any) => {
-    if (typeof list?.totalEstimatedCost === 'number') return list.totalEstimatedCost;
-    const items = Array.isArray(list?.items) ? list.items : [];
-    return items.reduce((sum, item) => sum + computeItemPrice(item), 0);
-  };
-
-  const perPieceKgEstimate = (name: string, category: string) => {
-    const lower = (name || "").toLowerCase();
-    const table: Array<{ test: RegExp; kg: number }> = [
-      { test: /(banana)/, kg: 0.12 },
-      { test: /(apple)/, kg: 0.18 },
-      { test: /(orange|clementine|tangerine)/, kg: 0.15 },
-      { test: /(lemon|lime)/, kg: 0.07 },
-      { test: /(tomato)/, kg: 0.1 },
-      { test: /(cherry tomato|grape tomato)/, kg: 0.02 },
-      { test: /(cucumber)/, kg: 0.3 },
-      { test: /(bell pepper|pepper)/, kg: 0.16 },
-      { test: /(onion|shallot)/, kg: 0.15 },
-      { test: /(potato)/, kg: 0.21 },
-      { test: /(carrot)/, kg: 0.1 },
-      { test: /(broccoli)/, kg: 0.5 },
-      { test: /(cauliflower)/, kg: 0.8 },
-      { test: /(lettuce|greens|spinach|kale|arugula|spring mix|mixed greens)/, kg: 0.25 },
-      { test: /(avocado)/, kg: 0.2 },
-      { test: /(garlic)/, kg: 0.05 },
-      { test: /(herb|parsley|cilantro|basil|mint|dill)/, kg: 0.05 },
-    ];
-    for (const entry of table) {
-      if (entry.test.test(lower)) return entry.kg;
-    }
-    if (category === "dairy") return 0.25;
-    if (category === "meat") return 0.3;
-    return 0.2;
-  };
-
-  const isLiquid = (name: string, category: string) => {
-    const lower = (name || "").toLowerCase();
-    if (/(egg)/.test(lower)) return false;
-    if (category === "beverages") return true;
-    // Only treat dairy as liquid if it is a pourable dairy (milk/cream/yogurt), not eggs/cheese
-    if (category === "dairy") {
-      return /(milk|cream|yogurt)/.test(lower);
-    }
-    return /(milk|juice|water|oil|broth|stock|sauce|vinegar)/.test(lower);
-  };
-
-  const convertQuantity = (item: any, target: "pieces" | "weight" | "cups" | "liters") => {
-    const id = getItemId(item);
-    const override = quantityOverrides[id];
-    const baseAmount = Number((override?.amount ?? item.amount ?? item.quantity ?? 0)) || 0;
-    const baseUnit = String((override?.unit ?? item.unit) || "").toLowerCase();
-    const cat = item.category || "other";
-    const name = item.name || "";
-
-    // Normalize starting values
-    let kgVal: number | null = null;
-    if (["kg", "kilogram", "kilograms"].includes(baseUnit)) kgVal = baseAmount;
-    if (["g", "gram", "grams"].includes(baseUnit)) kgVal = baseAmount / 1000;
-    if (["lb", "lbs", "pound", "pounds"].includes(baseUnit)) kgVal = baseAmount * 0.4536;
-    if (["oz", "ounce", "ounces"].includes(baseUnit)) kgVal = baseAmount * 0.02835;
-    if (baseUnit === "unit") {
-      const perPiece = perPieceKgEstimate(name, cat);
-      kgVal = perPiece * baseAmount;
-    }
-
-    const liters =
-      ["l", "liter", "liters", "litre", "litres"].includes(baseUnit)
-        ? baseAmount
-        : ["ml", "milliliter", "millilitre", "milliliters", "millilitres"].includes(baseUnit)
-          ? baseAmount / 1000
-          : ["cup", "cups"].includes(baseUnit)
-            ? baseAmount * 0.24
-            : null;
-
-    if (target === "pieces") {
-      const perPiece = perPieceKgEstimate(name, cat);
-      const pieces = kgVal !== null ? kgVal / perPiece : baseAmount || 1;
-      return { amount: Math.max(1, Number(pieces.toFixed(2))), unit: "unit" };
-    }
-    if (target === "weight") {
-      const weightKg = kgVal !== null ? kgVal : baseAmount;
-      if (weightKg < 1) return { amount: Math.round(weightKg * 1000), unit: "g" };
-      return { amount: Number(weightKg.toFixed(3)), unit: "kg" };
-    }
-    if (target === "cups") {
-      const cups = liters !== null ? liters / 0.24 : baseAmount / 0.24;
-      return { amount: Number(cups.toFixed(2)), unit: "cup" };
-    }
-    if (target === "liters") {
-      const l = liters !== null ? liters : baseAmount * 0.24;
-      return { amount: Number(l.toFixed(3)), unit: "l" };
-    }
-    return { amount: baseAmount, unit: item.unit || "" };
-  };
-
-  const handleSwipeConvert = (item: any, direction: "left" | "right") => {
-    const id = getItemId(item);
-    const cat = item.category || "other";
-    const name = item.name || "";
-    const unit = String((quantityOverrides[id]?.unit ?? item.unit) || "").toLowerCase();
-    const liquid = isLiquid(name, cat);
-
-    let next: { amount: number; unit: string };
-    if (liquid) {
-      next = unit === "cup" ? convertQuantity(item, "liters") : convertQuantity(item, "cups");
-    } else {
-      const target = unit === "unit" ? "weight" : "pieces";
-      next = convertQuantity(item, target);
-    }
-    setQuantityOverrides((prev) => ({ ...prev, [id]: next }));
-    // Allow subsequent gestures shortly after converting
-    setTimeout(() => {
-      swipeDetected.current = false;
-    }, 150);
-  };
-
-  const handleWheelConvert = (e: React.WheelEvent, item: any) => {
-    // Prevent browser horizontal navigation; only trigger on meaningful horizontal scroll
-    if (Math.abs(e.deltaX) > 10 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-      e.preventDefault();
-      e.stopPropagation();
-      swipeDetected.current = true;
-      handleSwipeConvert(item, e.deltaX > 0 ? "left" : "right");
-    }
   };
 
   const handleGenerateFromPlan = async () => {
@@ -241,38 +106,17 @@ export default function ShoppingLists() {
 
   const activeCount = lists?.filter(l => l.status === 'active').length || 0;
   const completedCount = lists?.filter(l => l.status === 'completed').length || 0;
-    const totalEstimate = lists?.reduce((sum, list) => sum + computeListTotal(list), 0) || 0;
-
   const normalizeDisplayQuantity = (item: any) => {
     const id = getItemId(item);
     const override = quantityOverrides[id];
-    let amount = Number((override?.amount ?? item.amount ?? item.quantity ?? 0)) || 0;
-    let unit = String((override?.unit ?? item.unit) || "").toLowerCase();
-    const cat = (item.category || "").toLowerCase();
-    const name = (item.name || "").toLowerCase();
-
-    const looksLikeCheese =
-      cat === "dairy" &&
-      /(cheese|feta|cheddar|mozzarella|parmesan|gouda|ricotta|queso|brie|emmental|swiss)/.test(name);
-    if (looksLikeCheese) {
-      const weight = convertQuantity(item, "weight");
-      amount = weight.amount;
-      unit = weight.unit;
+    let amount: string | number = override?.amount ?? item.amount ?? item.quantity ?? '1';
+    const unit = override?.unit ?? item.unit ?? 'unit';
+    if (typeof amount === 'number' && !Number.isFinite(amount)) {
+      amount = item.amount ?? item.quantity ?? '1';
     }
-
-    const literUnits = ["l", "liter", "liters", "litre", "litres"];
-    if (literUnits.includes(unit) && amount > 0 && amount < 1) {
-      amount = Math.round(amount * 1000);
-      unit = "ml";
+    if (typeof amount === 'string' && amount.trim().toLowerCase() === 'nan') {
+      amount = item.amount ?? item.quantity ?? '1';
     }
-
-    // Final guardrails to avoid zero/NaN display
-    if (!Number.isFinite(amount) || amount <= 0) {
-      const fallback = Number(item.amount ?? item.quantity ?? 1) || 1;
-      amount = fallback;
-    }
-    if (!unit) unit = "unit";
-
     return { amount, unit };
   };
 
@@ -310,10 +154,6 @@ export default function ShoppingLists() {
             <div className="px-4 py-2 rounded-full bg-secondary text-muted-foreground text-sm font-medium flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
               {completedCount} Completed
-            </div>
-            <div className="px-4 py-2 rounded-full bg-secondary text-muted-foreground text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              ${totalEstimate.toFixed(2)} Est. Total
             </div>
           </motion.div>
 
@@ -458,7 +298,6 @@ export default function ShoppingLists() {
             >
               {filteredLists.map((list, index) => {
                 const items = Array.isArray(list.items) ? list.items : [];
-                const listTotal = computeListTotal(list);
                 const purchasedCount = items.filter((i) => i.purchased).length;
                 const totalCount = items.length;
                 const isExpanded = expandedId === getListId(list);
@@ -540,9 +379,6 @@ export default function ShoppingLists() {
                             <div className="px-3 py-2 rounded-xl bg-primary/10 text-primary font-medium">
                               {purchasedCount} / {totalCount || 0} items bought
                             </div>
-                            <div className="px-3 py-2 rounded-xl bg-secondary text-muted-foreground font-medium">
-                              Total: ${listTotal.toFixed(2)}
-                            </div>
                             <div className={cn(
                               "px-3 py-2 rounded-xl font-medium capitalize",
                               list.status === 'completed'
@@ -586,8 +422,20 @@ export default function ShoppingLists() {
                                         const id = getItemId(item);
                                         const { amount: displayAmount, unit: displayUnit } = normalizeDisplayQuantity(item);
                                         const quantity = [displayAmount, displayUnit].filter(Boolean).join(" ");
-                                        const price = computeItemPrice(item);
-                                        const hasPrice = price !== null && price !== undefined && !Number.isNaN(price);
+                                        const unitVariants = Array.isArray(item.unitVariants) ? item.unitVariants : [];
+                                        const showVariants = unitVariants.length > 1;
+                                        const selectedVariantIndex = showVariants
+                                          ? (() => {
+                                              const override = quantityOverrides[id];
+                                              if (!override) return "0";
+                                              const idx = unitVariants.findIndex(
+                                                (variant) =>
+                                                  String(variant.amount) === String(override.amount) &&
+                                                  String(variant.unit).toLowerCase() === String(override.unit).toLowerCase()
+                                              );
+                                              return idx >= 0 ? String(idx) : "0";
+                                            })()
+                                          : undefined;
                                         const purchased = !!item.purchased;
 
                                         return (
@@ -596,10 +444,6 @@ export default function ShoppingLists() {
                                             role="button"
                                             aria-pressed={purchased}
                                             onClick={(e) => {
-                                              if (swipeDetected.current) {
-                                                swipeDetected.current = false;
-                                                return;
-                                              }
                                               e.stopPropagation();
                                               updateItemMutation.mutate({
                                                 listId: getListId(list),
@@ -607,54 +451,46 @@ export default function ShoppingLists() {
                                                 purchased: !purchased,
                                               });
                                             }}
-                                            onTouchStart={(e) => {
-                                              touchStartX.current = e.touches[0].clientX;
-                                            }}
-                                            onTouchEnd={(e) => {
-                                              if (touchStartX.current === null) return;
-                                              const delta = e.changedTouches[0].clientX - touchStartX.current;
-                                              touchStartX.current = null;
-                                              if (Math.abs(delta) > 30) {
-                                                e.stopPropagation();
-                                                swipeDetected.current = true;
-                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
-                                              }
-                                            }}
-                                            onPointerDown={(e) => {
-                                              touchStartX.current = e.clientX || null;
-                                            }}
-                                            onPointerMove={(e) => {
-                                              if (touchStartX.current === null) return;
-                                              const delta = (e.clientX || 0) - touchStartX.current;
-                                              if (Math.abs(delta) > 30 && !swipeDetected.current) {
-                                                swipeDetected.current = true;
-                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
-                                              }
-                                            }}
-                                            onPointerUp={(e) => {
-                                              if (touchStartX.current === null) return;
-                                              if (swipeDetected.current) {
-                                                touchStartX.current = null;
-                                                return;
-                                              }
-                                              const delta = (e.clientX || 0) - touchStartX.current;
-                                              touchStartX.current = null;
-                                              if (Math.abs(delta) > 30) {
-                                                e.stopPropagation();
-                                                swipeDetected.current = true;
-                                                handleSwipeConvert(item, delta < 0 ? "left" : "right");
-                                              } else {
-                                                swipeDetected.current = false;
-                                              }
-                                            }}
-                                            onWheel={(e) => handleWheelConvert(e, item)}
                                             className={cn(
-                                              "flex items-center gap-2 text-sm rounded-lg border px-3 py-2 min-w-[220px] max-w-[280px] flex-1 cursor-pointer transition",
+                                              "flex items-center gap-2 text-center text-sm rounded-lg border px-3 py-2 min-w-[220px] max-w-[280px] flex-1 cursor-pointer transition",
                                               purchased
                                                 ? "bg-primary/10 border-primary text-primary"
                                                 : "bg-card/80 border-border hover:border-primary/50"
                                             )}
                                           >
+                                            {showVariants && (
+                                              <div className="shrink-0">
+                                                <Select
+                                                  value={selectedVariantIndex}
+                                                  onValueChange={(value) => {
+                                                    const chosen = unitVariants[Number(value)];
+                                                    if (!chosen) return;
+                                                    setQuantityOverrides((prev) => ({
+                                                      ...prev,
+                                                      [id]: { amount: chosen.amount, unit: chosen.unit }
+                                                    }));
+                                                  }}
+                                                >
+                                                  <SelectTrigger
+                                                    className="h-7 w-20 text-xs px-2"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {unitVariants.map((variant, idx) => (
+                                                      <SelectItem
+                                                        key={`${variant.amount}-${variant.unit}-${idx}`}
+                                                        value={String(idx)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      >
+                                                        {`${variant.amount} ${variant.unit}`}
+                                                      </SelectItem>
+                                                    ))}
+                                                  </SelectContent>
+                                                </Select>
+                                              </div>
+                                            )}
                                             <div className="flex-1 min-w-0 space-y-1 text-center">
                                               <p className={cn(
                                                 "font-semibold leading-tight break-words",
@@ -662,12 +498,8 @@ export default function ShoppingLists() {
                                               )}>
                                                 {item.name}
                                               </p>
-                                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground justify-center">
+                                              <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
                                                 {quantity && <span>{quantity}</span>}
-                                                {hasPrice ? <span className={cn(
-                                                  "font-medium",
-                                                  purchased ? "text-primary" : "text-foreground"
-                                                )}>${price.toFixed(2)}</span> : null}
                                               </div>
                                             </div>
                                             {purchased && (
@@ -707,7 +539,6 @@ export default function ShoppingLists() {
           }}
           getItemKey={getItemId}
           normalizeDisplayQuantity={normalizeDisplayQuantity}
-          computeItemPrice={computeItemPrice}
           onExit={() => setShoppingModeListId(null)}
         />
       )}

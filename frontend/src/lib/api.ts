@@ -276,7 +276,6 @@ export async function generateShoppingListFromPlan(plan: any): Promise<ShoppingL
       description: shoppingList.description || '',
       items: shoppingList.items || [],
       store: shoppingList.store,
-      totalEstimatedCost: shoppingList.totalEstimatedCost,
       status: 'active',
     }),
   });

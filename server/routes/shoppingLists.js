@@ -79,7 +79,7 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
   let val = toNumber(amount, 1);
   let rawUnit = String(unit || 'unit').toLowerCase().trim();
   const cat = (category || '').toLowerCase();
-  const isGroundBeef = /ground\s+beef/i.test(String(name || ''));
+  const isPepper = /pepper/i.test(String(name || ''));
 
   const toKgOrG = (kgVal) => {
     if (kgVal < 1) return { amount: Math.round(kgVal * 1000), unit: 'g' };
@@ -131,8 +131,8 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
 
   if (unitMap[rawUnit]) {
     const converted = unitMap[rawUnit]();
-    if (isGroundBeef) {
-      console.log('🧪 Ground beef [convertToStandardUnit]', {
+    if (isPepper) {
+      console.log('🧪 Pepper [convertToStandardUnit]', {
         from: { name, amount: val, unit: rawUnit, category },
         to: { ...converted }
       });
@@ -144,8 +144,8 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
   if (rawUnit === 'unit' && (cat === 'produce' || cat === 'meat' || cat === 'dairy' || cat === 'bakery')) {
     const perPieceKg = estimatePieceKg(name, cat);
     const converted = toKgOrG(perPieceKg * val);
-    if (isGroundBeef) {
-      console.log('🧪 Ground beef [convertToStandardUnit-piece]', {
+    if (isPepper) {
+      console.log('🧪 Pepper [convertToStandardUnit-piece]', {
         from: { name, amount: val, unit: rawUnit, category },
         to: { ...converted }
       });
@@ -155,8 +155,8 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
 
   // Fallback: keep amount and default unit
   const fallback = { amount: val, unit: rawUnit || 'unit' };
-  if (isGroundBeef) {
-    console.log('🧪 Ground beef [convertToStandardUnit-fallback]', {
+  if (isPepper) {
+    console.log('🧪 Pepper [convertToStandardUnit-fallback]', {
       from: { name, amount: val, unit: rawUnit, category },
       to: { ...fallback }
     });
@@ -429,7 +429,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new shopping list
 router.post('/', auth, async (req, res) => {
   try {
-    const { mealPlanId, title, description, items, store, totalEstimatedCost } = req.body;
+    const { mealPlanId, title, description, items, store } = req.body;
 
     if (!title || !items || !Array.isArray(items)) {
       return res.status(400).json({ 
@@ -462,52 +462,19 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-    let sanitizedItems = await enrichWithLLM(items.map(item => {
+    const sanitizedItems = items.map(item => {
       const mappedCategory = categoryMap[item.category?.toLowerCase()] || item.category || categorizeName(item.name);
-      const priceVal = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
       return {
         ...item,
-        price: toNumber(priceVal, 0),
-        estimatedPrice: toNumber(priceVal, 0),
+        amount: item.amount ?? item.quantity ?? '1',
+        unit: (item.unit || 'unit').toString().toLowerCase().trim(),
+        unitType: item.unitType,
+        unitVariants: item.unitVariants,
         purchased: Boolean(item.purchased),
         category: mappedCategory
       };
-    }));
-    sanitizedItems = sanitizedItems.map((item) => {
-      const amount = item.amount ?? item.quantity ?? '1';
-      const unit = (item.unit || 'unit').toString().toLowerCase().trim();
-      const std = convertToStandardUnit({ amount, unit, name: item.name, category: item.category });
-      return { ...item, amount: std.amount, unit: std.unit };
     });
-    // LLM fallback for anything still unstandardized or missing data
-    const needsLLM = (itm) => {
-      const unitOk = ['kg', 'g', 'l', 'unit'].includes((itm.unit || '').toLowerCase());
-      const hasCategory = itm.category && itm.category !== 'other';
-      const hasPrice = itm.price !== undefined && itm.price !== null && itm.price !== 0;
-      return !unitOk || !hasCategory || !hasPrice;
-    };
-    const indicesNeeding = sanitizedItems
-      .map((itm, idx) => ({ itm, idx }))
-      .filter(({ itm }) => needsLLM(itm));
-    if (indicesNeeding.length) {
-      const enriched = await enrichWithLLM(indicesNeeding.map(({ itm }) => itm));
-      enriched.forEach((enrichedItem, i) => {
-        const targetIdx = indicesNeeding[i].idx;
-        const amount = enrichedItem.amount ?? enrichedItem.quantity ?? '1';
-        const unit = (enrichedItem.unit || 'unit').toString().toLowerCase().trim();
-        const std = convertToStandardUnit({ amount, unit, name: enrichedItem.name, category: enrichedItem.category });
-        sanitizedItems[targetIdx] = {
-          ...sanitizedItems[targetIdx],
-          ...enrichedItem,
-          amount: std.amount,
-          unit: std.unit
-        };
-      });
-    }
-    sanitizedItems = mergeShoppingItems(sanitizedItems);
-    sanitizedItems = await applyUnitPricingWithLLM(sanitizedItems);
     const allPurchased = sanitizedItems.length > 0 && sanitizedItems.every((i) => i.purchased);
-    const estimatedTotal = computeTotal(sanitizedItems);
 
     const shoppingList = new ShoppingList({
       userId: req.user._id,
@@ -516,7 +483,7 @@ router.post('/', auth, async (req, res) => {
       description,
       items: sanitizedItems,
       store,
-      totalEstimatedCost: estimatedTotal,
+      totalEstimatedCost: undefined,
       status: allPurchased ? 'completed' : 'active'
     });
 
@@ -538,7 +505,7 @@ router.post('/', auth, async (req, res) => {
 // Update shopping list
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { title, description, items, status, store, notes, totalEstimatedCost } = req.body;
+    const { title, description, items, status, store, notes } = req.body;
 
     const shoppingList = await ShoppingList.findOne({
       _id: req.params.id,
@@ -552,51 +519,19 @@ router.put('/:id', auth, async (req, res) => {
     if (title) shoppingList.title = title;
     if (description) shoppingList.description = description;
     if (items) {
-      let mappedItems = items.map(item => {
+      const mappedItems = items.map(item => {
         const mappedCategory = categoryMap[item.category?.toLowerCase()] || item.category || categorizeName(item.name);
-        const priceVal = item.estimatedPrice !== undefined ? item.estimatedPrice : item.price;
         return {
           ...item,
           amount: item.amount ?? item.quantity ?? '1',
           unit: (item.unit || 'unit').toString().toLowerCase().trim(),
-          price: toNumber(priceVal, 0),
-          estimatedPrice: toNumber(priceVal, 0),
+          unitType: item.unitType,
+          unitVariants: item.unitVariants,
           purchased: Boolean(item.purchased),
           category: mappedCategory
         };
       });
-      mappedItems = await enrichWithLLM(mappedItems);
-      mappedItems = mappedItems.map((item) => {
-        const std = convertToStandardUnit({ amount: item.amount, unit: item.unit, name: item.name, category: item.category });
-        return { ...item, amount: std.amount, unit: std.unit };
-      });
-      // LLM fallback for anything still unstandardized or missing data
-      const needsLLM = (itm) => {
-        const unitOk = ['kg', 'g', 'l', 'unit'].includes((itm.unit || '').toLowerCase());
-        const hasCategory = itm.category && itm.category !== 'other';
-        const hasPrice = itm.price !== undefined && itm.price !== null && itm.price !== 0;
-        return !unitOk || !hasCategory || !hasPrice;
-      };
-      const indicesNeeding = mappedItems
-        .map((itm, idx) => ({ itm, idx }))
-        .filter(({ itm }) => needsLLM(itm));
-      if (indicesNeeding.length) {
-        const enriched = await enrichWithLLM(indicesNeeding.map(({ itm }) => itm));
-        enriched.forEach((enrichedItem, i) => {
-          const targetIdx = indicesNeeding[i].idx;
-          const amount = enrichedItem.amount ?? enrichedItem.quantity ?? '1';
-          const unit = (enrichedItem.unit || 'unit').toString().toLowerCase().trim();
-          const std = convertToStandardUnit({ amount, unit, name: enrichedItem.name, category: enrichedItem.category });
-          mappedItems[targetIdx] = {
-            ...mappedItems[targetIdx],
-            ...enrichedItem,
-            amount: std.amount,
-            unit: std.unit
-          };
-        });
-      }
-      shoppingList.items = mergeShoppingItems(mappedItems);
-      shoppingList.items = await applyUnitPricingWithLLM(shoppingList.items);
+      shoppingList.items = mappedItems;
     }
 
     // intentionally no verbose logging
@@ -604,7 +539,7 @@ router.put('/:id', auth, async (req, res) => {
     if (store) shoppingList.store = store;
     if (notes) shoppingList.notes = notes;
       if (shoppingList.items) {
-        shoppingList.totalEstimatedCost = computeTotal(shoppingList.items);
+        shoppingList.totalEstimatedCost = undefined;
       }
 
     await shoppingList.save();

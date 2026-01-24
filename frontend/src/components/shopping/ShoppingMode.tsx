@@ -15,8 +15,7 @@ interface ShoppingModeProps {
   sectionStyles: Record<string, string>;
   onToggleItem: (item: any) => void;
   getItemKey: (item: any) => string;
-  normalizeDisplayQuantity: (item: any) => { amount: number; unit: string };
-  computeItemPrice: (item: any) => number;
+  normalizeDisplayQuantity: (item: any) => { amount: string | number; unit: string };
   onExit: () => void;
 }
 
@@ -27,7 +26,6 @@ export function ShoppingMode({
   onToggleItem,
   getItemKey,
   normalizeDisplayQuantity,
-  computeItemPrice,
   onExit,
 }: ShoppingModeProps) {
   const noSleepRef = useRef<NoSleep | null>(null);
@@ -92,8 +90,6 @@ export function ShoppingMode({
                   const purchased = !!item.purchased;
                   const { amount, unit } = normalizeDisplayQuantity(item);
                   const quantity = [amount, unit].filter(Boolean).join(" ");
-                  const price = computeItemPrice(item);
-                  const hasPrice = price !== null && price !== undefined && !Number.isNaN(price);
                   return (
                     <button
                       key={key}
@@ -112,7 +108,6 @@ export function ShoppingMode({
                         </p>
                         <div className="text-xs text-white/70 flex flex-wrap gap-2">
                           {quantity && <span>{quantity}</span>}
-                          {hasPrice ? <span>${price.toFixed(2)}</span> : null}
                         </div>
                       </div>
                       {purchased && <Check className="h-4 w-4 shrink-0 text-emerald-200" />}

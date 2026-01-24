@@ -49,6 +49,8 @@ export interface ShoppingItem {
   estimatedPrice?: number;
   amount?: string | number;
   unit?: string;
+  unitType?: 'weight' | 'volume' | 'count' | 'other';
+  unitVariants?: { amount: string | number; unit: string }[];
 }
 
 export interface ShoppingList {

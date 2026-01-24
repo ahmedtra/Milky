@@ -13,6 +13,17 @@ const shoppingItemSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  unitType: {
+    type: String,
+    enum: ['weight', 'volume', 'count', 'other'],
+    default: 'other'
+  },
+  unitVariants: [
+    {
+      amount: String,
+      unit: String
+    }
+  ],
   category: {
     type: String,
     enum: ['produce', 'meat', 'dairy', 'pantry', 'frozen', 'bakery', 'beverages', 'other'],
@@ -69,4 +80,3 @@ shoppingListSchema.index({ userId: 1, status: 1 });
 shoppingListSchema.index({ mealPlanId: 1 });
 
 module.exports = mongoose.model('ShoppingList', shoppingListSchema);
-

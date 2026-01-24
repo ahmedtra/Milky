@@ -323,6 +323,59 @@ export default function Dashboard() {
         instructionsList.push(...(bySentence.length ? bySentence : byLine));
       }
     };
+    const chunkByWords = (text: string, limit = 180) => {
+      const words = text.split(/\s+/).filter(Boolean);
+      const chunks: string[] = [];
+      let current = "";
+      words.forEach((word) => {
+        const next = current ? `${current} ${word}` : word;
+        if (next.length > limit && current) {
+          chunks.push(current);
+          current = word;
+        } else {
+          current = next;
+        }
+      });
+      if (current) chunks.push(current);
+      return chunks;
+    };
+    const splitLongSteps = (steps: string[]) => {
+    const splitBySentence = (text: string) =>
+      text
+        .replace(/,\s*\./g, ".")
+        .replace(/,\s*(?=[A-Z])/g, ". ")
+        .replace(/\s*,\s*/g, ", ")
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const splitByComma = (text: string) =>
+      text
+        .split(/,\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const result: string[] = [];
+      steps.forEach((step) => {
+        const cleaned = step.trim();
+        if (!cleaned) return;
+        if (cleaned.length <= 240) {
+          result.push(cleaned);
+          return;
+        }
+        const sentenceSplit = splitBySentence(cleaned);
+        if (sentenceSplit.length > 1) {
+          result.push(...sentenceSplit);
+          return;
+        }
+        const commaSplit = splitByComma(cleaned);
+        if (commaSplit.length > 1 && (cleaned.length > 160 || commaSplit.length >= 3)) {
+          result.push(...commaSplit);
+          return;
+        }
+        const chunks = chunkByWords(cleaned, 180);
+        chunks.map((s) => s.trim()).filter(Boolean).forEach((s) => result.push(s));
+      });
+      return result.filter(Boolean);
+    };
     if (Array.isArray(instructionsRaw)) {
       instructionsRaw.forEach((step: any) => {
         if (typeof step === "string") pushSplit(step);
@@ -331,6 +384,7 @@ export default function Dashboard() {
     } else if (typeof instructionsRaw === "string") {
       pushSplit(instructionsRaw);
     }
+    instructionsList = splitLongSteps(instructionsList);
     return { recipe, ingredientsList, instructionsList };
   };
 

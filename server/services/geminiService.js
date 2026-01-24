@@ -1751,6 +1751,54 @@ ${mealSchemas}
     };
   }
 
+  async splitLongInstructions(rawInstructions, title = '') {
+    const baseList = Array.isArray(rawInstructions)
+      ? rawInstructions
+      : (typeof rawInstructions === 'string' ? rawInstructions.split(/\r?\n/).filter(Boolean) : []);
+
+    const normalizeStep = (step) => String(step || '').trim();
+    const splitBySentence = (text) =>
+      text
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    const result = [];
+    for (const step of baseList) {
+      const cleaned = normalizeStep(step);
+      if (!cleaned) continue;
+      if (cleaned.length <= 240) {
+        result.push(cleaned);
+        continue;
+      }
+      const sentenceSplit = splitBySentence(cleaned);
+      if (sentenceSplit.length > 1) {
+        result.push(...sentenceSplit);
+        continue;
+      }
+      try {
+        const prompt = `
+        Split the following recipe instruction into 3-8 short, clear steps.
+        Return ONLY a JSON array of strings.
+        Title: ${title || 'Recipe'}
+        Instruction: ${cleaned}
+        `;
+        const text = await this.callTextModel(prompt, 0.2, 'json');
+        const match = text.match(/\[[\s\S]*\]/);
+        const parsed = match ? JSON.parse(match[0]) : JSON.parse(text);
+        if (Array.isArray(parsed) && parsed.length) {
+          parsed.map(normalizeStep).filter(Boolean).forEach((s) => result.push(s));
+          continue;
+        }
+      } catch (err) {
+        // Fall back to chunking if LLM fails
+      }
+      const chunks = cleaned.match(/.{1,180}(?:\s|$)/g) || [cleaned];
+      chunks.map((s) => s.trim()).filter(Boolean).forEach((s) => result.push(s));
+    }
+    return result.filter(Boolean);
+  }
+
   hasNutritionData(n) {
     if (!n || typeof n !== 'object') return false;
     const keys = ['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'];
@@ -2401,9 +2449,10 @@ ${mealSchemas}
           : Array.isArray(recipe.ingredients)
             ? recipe.ingredients.map((i) => (typeof i === 'string' ? i : `${i.amount || ''} ${i.unit || ''} ${i.name || ''}`.trim())).filter(Boolean)
             : (typeof recipe.ingredients_raw === 'string' ? recipe.ingredients_raw.split('\n').filter(Boolean) : []);
-        const instructionsList = Array.isArray(recipe.instructions)
-          ? recipe.instructions
-          : (typeof recipe.instructions === 'string' ? recipe.instructions.split('\n').filter(Boolean) : []);
+        const instructionsList = await this.splitLongInstructions(
+          recipe.instructions,
+          recipe.title || recipe.name || intent.recipeTitle || ''
+        );
 
         const detail = {
           type: 'recipe_detail',

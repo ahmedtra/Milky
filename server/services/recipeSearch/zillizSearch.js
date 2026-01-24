@@ -298,7 +298,7 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
   });
 
   const hits = res?.results || [];
-  console.log("hits id", hits[0].title);
+
   const docs = hits.map((h) => rehydrateDoc(h));
   const filtered = applyPostExcludes(docs);
   return excludeList.length ? filtered.slice(0, limit) : filtered;

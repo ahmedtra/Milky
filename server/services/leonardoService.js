@@ -272,9 +272,8 @@ async function upsertImageToZilliz(recipeId, driveUrl, generatorUrl) {
       data: [{ id: String(recipeId), image: driveUrl, imageUrl: driveUrl }],
       partial_update: true,
     });
-    console.log("✅ Persisted image to Zilliz", { id: recipeId, url: driveUrl });
   } catch (err) {
-    console.warn("⚠️ Failed to persist image to Zilliz", err.message);
+    /* ignore */
   }
 }
 
@@ -290,7 +289,6 @@ async function generateMealImage(recipe) {
       // Prefer SiliconFlow if configured
       if (hasSiliconKey()) {
         try {
-          console.log("🖼️ Generating meal image via SiliconFlow...");
           const res = await fetch("https://api.siliconflow.com/v1/images/generations", {
             method: "POST",
         headers: {
@@ -311,16 +309,14 @@ async function generateMealImage(recipe) {
       const data = await res.json();
       const url = data?.data?.[0]?.url || data?.data?.[0]?.b64_json;
       if (url) {
-        console.log("✅ SiliconFlow image generated");
         return url;
       }
     } catch (err) {
-      console.warn("⚠️ SiliconFlow image generation failed, falling back to Leonardo:", err.message);
+      /* ignore */
     }
   }
 
   if (!hasKey()) throw new Error("Leonardo API key not configured");
-  console.log("🖼️ Generating meal image via Leonardo...");
   const body = {
     prompt,
     modelId: LEONARDO_MODEL_ID,
@@ -342,7 +338,6 @@ async function generateIngredientImage(name) {
   if (!hasSiliconKey()) {
     throw new Error("SiliconFlow API key not configured");
   }
-  console.log("🖼️ Generating ingredient image via SiliconFlow...", { name });
   const prompt = buildIngredientPrompt(name);
   const res = await fetch("https://api.siliconflow.com/v1/images/generations", {
     method: "POST",
@@ -364,7 +359,6 @@ async function generateIngredientImage(name) {
   const data = await res.json();
   const url = data?.data?.[0]?.url || data?.data?.[0]?.b64_json;
   if (!url) throw new Error("No ingredient image URL returned");
-  console.log("✅ Ingredient image generated", { name });
   return url;
 }
 
@@ -377,7 +371,6 @@ async function ensureIngredientImage(name) {
     try {
       const head = await fetch(publicUrl, { method: "HEAD" });
       if (head.ok) {
-        console.log("🖼️ Ingredient image cache hit", { name, url: publicUrl });
         return publicUrl;
       }
     } catch (_err) {
@@ -391,10 +384,8 @@ async function ensureIngredientImage(name) {
     if (!resp.ok) throw new Error(`Download failed ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
     const r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, key));
-    console.log("✅ Ingredient image uploaded to R2", { name, url: r2Url });
     return r2Url;
   } catch (err) {
-    console.warn("⚠️ Failed to upload ingredient image to R2, using generator URL:", err.message);
     return remoteUrl;
   }
 }
@@ -422,10 +413,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
     const title = recipe.title || recipe.name;
 
     const safeNameBase = (recipe.title || recipe.name || "meal").replace(/[^a-z0-9_-]+/gi, "_").slice(0, 60);
-    console.log("🖼️ Generating image for recipe:", {
-      id: recipe.recipeId || recipe._id || recipe.id,
-      title: recipe.title || recipe.name,
-    });
     const url = await generateMealImage(recipe);
     if (url) {
       const remoteUrl = url; // generator URL
@@ -439,7 +426,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
           const key = `${(recipe.recipeId || recipe._id || recipe.id || safeNameBase || "meal").toString().replace(/[^a-z0-9_-]+/gi, "_") || "meal"}.png`;
           r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, key));
         } catch (err) {
-          console.warn("⚠️ Failed to upload to R2, falling back to generator URL:", err.message);
           r2Url = normalizeToPublicR2(remoteUrl);
         }
       }
@@ -447,13 +433,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
       // Serve from R2
       recipe.image = r2Url;
       recipe.imageUrl = r2Url;
-      console.log("🖼️ Image set on recipe", {
-        id: recipe.recipeId || recipe._id || recipe.id,
-        title,
-        url: r2Url,
-        remote: remoteUrl,
-        r2: r2Url
-      });
       const primaryIdRaw = recipe.recipeId || recipe._id || recipe.id;
       const zillizId = primaryIdRaw ? String(primaryIdRaw) : null;
       // Persist image to Zilliz as partial update
@@ -461,10 +440,6 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
     }
     return meal;
   } catch (err) {
-    console.warn("⚠️ Leonardo image generation skipped:", err.message);
-    if (process.env.NODE_ENV !== "production") {
-      console.error(err);
-    }
     if (throwOnFail) throw err;
     return meal;
   }

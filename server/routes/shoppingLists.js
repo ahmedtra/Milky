@@ -96,7 +96,6 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
   let val = toNumber(amount, 1);
   let rawUnit = String(unit || 'unit').toLowerCase().trim();
   const cat = (category || '').toLowerCase();
-  const isPepper = /pepper/i.test(String(name || ''));
 
   const toKgOrG = (kgVal) => {
     if (kgVal < 1) return { amount: Math.round(kgVal * 1000), unit: 'g' };
@@ -148,12 +147,6 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
 
   if (unitMap[rawUnit]) {
     const converted = unitMap[rawUnit]();
-    if (isPepper) {
-      console.log('🧪 Pepper [convertToStandardUnit]', {
-        from: { name, amount: val, unit: rawUnit, category },
-        to: { ...converted }
-      });
-    }
     return converted;
   }
 
@@ -161,23 +154,11 @@ const convertToStandardUnit = ({ amount, unit, name, category }) => {
   if (rawUnit === 'unit' && (cat === 'produce' || cat === 'meat' || cat === 'dairy' || cat === 'bakery')) {
     const perPieceKg = estimatePieceKg(name, cat);
     const converted = toKgOrG(perPieceKg * val);
-    if (isPepper) {
-      console.log('🧪 Pepper [convertToStandardUnit-piece]', {
-        from: { name, amount: val, unit: rawUnit, category },
-        to: { ...converted }
-      });
-    }
     return converted;
   }
 
   // Fallback: keep amount and default unit
   const fallback = { amount: val, unit: rawUnit || 'unit' };
-  if (isPepper) {
-    console.log('🧪 Pepper [convertToStandardUnit-fallback]', {
-      from: { name, amount: val, unit: rawUnit, category },
-      to: { ...fallback }
-    });
-  }
   return fallback;
 };
 

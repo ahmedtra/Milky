@@ -719,7 +719,7 @@ class GeminiService {
 
   /**
    * Call either Gemini or local Ollama (if USE_OLLAMA_FOR_MEALPLAN=true) with configurable temperature.
-   * responseFormat: 'text' | 'json'
+   * responseFormat: 'text' | 'json' | 'json_array'
    */
   async callTextModel(prompt, temperature = 0.6, responseFormat = 'text') {
     if (this.provider === 'gemini') {
@@ -732,11 +732,12 @@ class GeminiService {
     }
 
     if (this.provider === 'groq') {
+      const wantsJsonArray = responseFormat === 'json_array';
       const { content } = await groqChat({
         model: this.groqModel,
         temperature,
         maxTokens: 4096,
-        responseFormat: responseFormat === 'json' ? { type: 'json_object' } : undefined,
+        responseFormat: responseFormat === 'json' && !wantsJsonArray ? { type: 'json_object' } : undefined,
         messages: [
           responseFormat === 'json'
             ? {
@@ -744,6 +745,12 @@ class GeminiService {
                 content:
                   'You are a helpful assistant. Return only valid JSON with no markdown fences, no extra text.'
               }
+            : wantsJsonArray
+              ? {
+                  role: 'system',
+                  content:
+                    'You are a helpful assistant. Return only a valid JSON array with no markdown fences, no extra text.'
+                }
             : {
                 role: 'system',
                 content:
@@ -788,7 +795,7 @@ class GeminiService {
       Rules:
       - Do NOT combine or add quantities; return one object per input item and keep the SAME number of items as the input.
       - Do NOT invent or substitute different ingredients. The output name must describe the SAME ingredient as the input.
-      - Canonicalize names to the base grocery item (e.g., "orange" and "oranges" -> "oranges"; "green apple" and "apple" -> "apples").
+      - Canonicalize names to the base grocery item in singular, lowercase form (e.g., "Orange" and "oranges" -> "orange"; "green apple" and "apple" -> "apple"; "Eggs" -> "egg").
       - Normalize close synonyms to one canonical name (e.g., "ground beef", "minced beef", "hamburger" -> "ground beef"; "chinese tofu" -> "tofu").
       - Keep descriptors that change the actual item (e.g., "olive oil" vs "vegetable oil"; "red wine vinegar" vs "apple cider vinegar").
       - Remove prep adjectives like "chopped", "diced", "sliced", "fresh", "large/small", "cooked", "raw".
@@ -799,12 +806,12 @@ class GeminiService {
       Examples:
       - "ground beef 80/20" -> name "ground beef"
       - "hamburger meat" -> name "ground beef"
-      - "green apple" -> name "apples"
-      - "oranges" -> name "oranges"
+      - "green apple" -> name "apple"
+      - "oranges" -> name "orange"
       Input ingredients:
       ${JSON.stringify(rawIngredients, null, 2)}
       `;
-      const text = await this.callTextModel(prompt, 0.2, 'json');
+      const text = await this.callTextModel(prompt, 0.2, 'json_array');
       const fence = text.match(/```json\s*([\s\S]*?)```/i);
       const cleaned = fence ? fence[1] : text.replace(/```/g, '');
       const parsed = JSON.parse(cleaned);
@@ -821,8 +828,164 @@ class GeminiService {
     }
   }
 
+  /**
+   * Unify ingredient names only. Keep amount/unit/category/notes as provided.
+   * Uses batching with a growing canonical list to keep naming consistent.
+   */
+  async normalizeIngredientNamesWithModel(rawIngredients = []) {
+    if (!Array.isArray(rawIngredients) || rawIngredients.length === 0) return rawIngredients;
+
+    const extractJsonArray = (text = '') => {
+      const start = text.indexOf('[');
+      if (start === -1) return null;
+      let depth = 0;
+      for (let i = start; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === '[') depth += 1;
+        if (ch === ']') {
+          depth -= 1;
+          if (depth === 0) return text.slice(start, i + 1);
+        }
+      }
+      return null;
+    };
+    const repairJsonLike = (input = '') => {
+      let text = String(input || '').trim();
+      if (!text) return text;
+      text = text.replace(/'/g, '"');
+      text = text.replace(/(^|[{,\s])([A-Za-z_][A-Za-z0-9_]*?)\s*=\s*/g, '$1"$2": ');
+      text = text.replace(/(^|[{,\s])([A-Za-z_][A-Za-z0-9_]*?)\s*:/g, '$1"$2":');
+      return text;
+    };
+    const parseJsonArray = (text = '') => {
+      const trimmed = String(text || '').trim();
+      const fence = trimmed.match(/```json\s*([\s\S]*?)```/i);
+      const cleaned = fence ? fence[1] : trimmed.replace(/```/g, '');
+      const arrayText = extractJsonArray(cleaned);
+      const candidate = arrayText || cleaned;
+      try {
+        return JSON.parse(candidate);
+      } catch (_err) {
+        const repaired = repairJsonLike(candidate);
+        if (repaired && repaired !== candidate) {
+          return JSON.parse(repaired);
+        }
+      }
+      if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+        const wrapped = `[${cleaned}]`;
+        try {
+          return JSON.parse(wrapped);
+        } catch (_err) {
+          const repairedWrapped = repairJsonLike(wrapped);
+          return JSON.parse(repairedWrapped);
+        }
+      }
+      return JSON.parse(cleaned);
+    };
+
+    const batchSize = 40;
+    const canonicalNames = [];
+    const output = [];
+
+    for (let i = 0; i < rawIngredients.length; i += batchSize) {
+      const chunk = rawIngredients.slice(i, i + batchSize);
+      const payload = chunk.map((item) => ({
+        name: item?.name || '',
+        notes: item?.notes || '',
+        category: item?.category || 'other'
+      }));
+
+      const prompt = `
+      You are unifying ingredient names ONLY.
+      Return ONLY a JSON array of objects:
+      [{ "index": number, "name": "<canonical name>" }]
+      Rules:
+      - Keep the SAME number of items as the input.
+      - Only change the "name" field; do NOT modify amounts, units, categories, or notes.
+      - Use singular, lowercase names (e.g., "Eggs" -> "egg").
+      - Remove prep adjectives (chopped, diced, cooked, etc.).
+      - If an item matches an existing canonical name, reuse it EXACTLY.
+      Existing canonical names (reuse when possible):
+      ${JSON.stringify(canonicalNames, null, 2)}
+      Input items:
+      ${JSON.stringify(payload, null, 2)}
+      `;
+
+      try {
+        const text = await this.callTextModel(prompt, 0.2, 'json_array');
+        const parsed = parseJsonArray(text);
+        const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : null;
+        if (!rows || rows.length !== chunk.length) {
+          chunk.forEach((item) => output.push(item));
+          continue;
+        }
+        rows.forEach((row, idx) => {
+          const next = { ...chunk[idx], name: row?.name || chunk[idx]?.name };
+          output.push(next);
+          const canonical = String(next.name || '').trim().toLowerCase();
+          if (canonical && !canonicalNames.includes(canonical)) {
+            canonicalNames.push(canonical);
+          }
+        });
+      } catch (_err) {
+        chunk.forEach((item) => output.push(item));
+      }
+    }
+
+    return output;
+  }
+
   async classifyIngredientsWithModel(rawIngredients = [], attempt = 0) {
     try {
+      const extractJsonArray = (text = '') => {
+        const start = text.indexOf('[');
+        if (start === -1) return null;
+        let depth = 0;
+        for (let i = start; i < text.length; i += 1) {
+          const ch = text[i];
+          if (ch === '[') depth += 1;
+          if (ch === ']') {
+            depth -= 1;
+            if (depth === 0) {
+              return text.slice(start, i + 1);
+            }
+          }
+        }
+        return null;
+      };
+      const repairJsonLike = (input = '') => {
+        let text = String(input || '').trim();
+        if (!text) return text;
+        text = text.replace(/'/g, '"');
+        text = text.replace(/(^|[{,\s])([A-Za-z_][A-Za-z0-9_]*?)\s*=\s*/g, '$1"$2": ');
+        text = text.replace(/(^|[{,\s])([A-Za-z_][A-Za-z0-9_]*?)\s*:/g, '$1"$2":');
+        return text;
+      };
+      const parseJsonArray = (text = '') => {
+        const trimmed = String(text || '').trim();
+        const fence = trimmed.match(/```json\s*([\s\S]*?)```/i);
+        const cleaned = fence ? fence[1] : trimmed.replace(/```/g, '');
+        const arrayText = extractJsonArray(cleaned);
+        const candidate = arrayText || cleaned;
+        try {
+          return JSON.parse(candidate);
+        } catch (_err) {
+          const repaired = repairJsonLike(candidate);
+          if (repaired && repaired !== candidate) {
+            return JSON.parse(repaired);
+          }
+        }
+        if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+          const wrapped = `[${cleaned}]`;
+          try {
+            return JSON.parse(wrapped);
+          } catch (_err) {
+            const repairedWrapped = repairJsonLike(wrapped);
+            return JSON.parse(repairedWrapped);
+          }
+        }
+        return JSON.parse(cleaned);
+      };
       const prompt = `
       You are categorizing grocery ingredients. Return ONLY a JSON array of objects:
       [
@@ -834,13 +997,12 @@ class GeminiService {
       - If unit is "c", infer whether it means "cup" or "unit" from the ingredient context; never output "c".
       - If unit is missing, infer a reasonable unit and unitType based on the ingredient (e.g., eggs -> unit, flour -> weight or volume).
       - UnitType should reflect how the ingredient is typically measured: weight (g/kg/lb/oz), volume (ml/l/cup/tbsp/tsp), count (unit/piece/clove/slice/can).
+      - Respond with a JSON ARRAY only, no extra keys, no comments, no trailing commas.
       Input ingredients:
       ${JSON.stringify(rawIngredients, null, 2)}
       `;
-      const text = await this.callTextModel(prompt, 0.2, 'json');
-      const fence = text.match(/```json\s*([\s\S]*?)```/i);
-      const cleaned = fence ? fence[1] : text.replace(/```/g, '');
-      const parsed = JSON.parse(cleaned);
+      const text = await this.callTextModel(prompt, 0.2, 'json_array');
+      const parsed = parseJsonArray(text);
       if (Array.isArray(parsed) && parsed.length === rawIngredients.length) {
         return parsed;
       }
@@ -967,16 +1129,6 @@ class GeminiService {
             ? fallbackAmount
             : item.amount;
         const nextUnit = update.unit || item.unit;
-        if (String(item.name || '').toLowerCase().includes('pepper')) {
-          if (!Number.isFinite(amount) && !Number.isFinite(fallbackAmount)) {
-            console.log('🧪 Pepper [convertToBaseUnits] invalid amount', {
-              name: item.name,
-              original: { amount: item.amount, unit: item.unit, unitType: item.unitType },
-              update,
-              fallbackAmount
-            });
-          }
-        }
         return { ...item, amount: String(nextAmount), unit: nextUnit };
       });
     } catch (err) {
@@ -2847,33 +2999,20 @@ ${mealSchemas}
   async generateShoppingList(mealPlan) {
     try {
       const extractedIngredients = await this.extractIngredientsFromMealPlan(mealPlan);
-      const logPepper = (label, list) => {
-        const entries = Array.isArray(list)
-          ? list.filter((item) => String(item?.name || '').toLowerCase().includes('pepper'))
-          : [];
-        if (entries.length) {
-          console.log(`🧪 Pepper [${label}]`, entries);
-        }
-      };
-      logPepper('extracted', extractedIngredients);
-
       if (extractedIngredients.length === 0) {
         throw new Error('Meal plan does not contain any ingredients to convert into a shopping list');
       }
-      const categorized = await this.classifyIngredientsWithModel(extractedIngredients);
-      const withUnitType = Array.isArray(categorized) && categorized.length === extractedIngredients.length
-        ? categorized
+      const unifiedNames = await this.normalizeIngredientNamesWithModel(extractedIngredients);
+      const baseList = Array.isArray(unifiedNames) && unifiedNames.length === extractedIngredients.length
+        ? unifiedNames
         : extractedIngredients;
-      logPepper('categorized', withUnitType);
 
-      const sanitized = withUnitType
+      const sanitized = baseList
         .map((item) => this.sanitizeIngredientRecord(item))
         .filter(Boolean);
-      logPepper('sanitized', sanitized);
 
       const displayUnitVariantsByName = this.collectUnitVariantsByName(sanitized);
       const normalizedUnits = await this.convertToBaseUnitsWithModel(sanitized);
-      logPepper('baseUnits', normalizedUnits);
 
       const consolidatedIngredients = this.consolidateIngredientsWithUnitVariants(normalizedUnits);
       const summarized = await this.summarizeUnitVariantsWithModel(consolidatedIngredients);
@@ -2895,7 +3034,13 @@ ${mealSchemas}
 
   async extractIngredientsFromMealPlan(mealPlan = {}) {
     const ingredients = [];
-    const onionLog = [];
+    const sourceCounts = {
+      recipe_parsed: 0,
+      recipe_norm: 0,
+      recipe_search: 0,
+      recipe_raw: 0,
+      meal_level: 0
+    };
 
     if (!mealPlan || !Array.isArray(mealPlan.days)) {
       return ingredients;
@@ -2940,13 +3085,20 @@ ${mealSchemas}
             const recipeIngredientsParsed = Array.isArray(recipe?.ingredients_parsed) ? recipe.ingredients_parsed : [];
             const recipeIngredientsNorm = Array.isArray(recipe?.ingredients_norm) ? recipe.ingredients_norm : [];
             const recipeIngredientsRawArray = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
-            const recipeIngredients = recipeIngredientsParsed.length
-              ? recipeIngredientsParsed
-              : recipeIngredientsNorm.length
-                ? recipeIngredientsNorm
-                : parsedFromSearch.length
-                  ? parsedFromSearch
-                  : recipeIngredientsRawArray;
+            let recipeIngredients = [];
+            let sourceLabel = 'recipe_raw';
+            if (recipeIngredientsParsed.length) {
+              recipeIngredients = recipeIngredientsParsed;
+              sourceLabel = 'recipe_parsed';
+            } else if (recipeIngredientsNorm.length) {
+              recipeIngredients = recipeIngredientsNorm;
+              sourceLabel = 'recipe_norm';
+            } else if (parsedFromSearch.length) {
+              recipeIngredients = parsedFromSearch;
+              sourceLabel = 'recipe_search';
+            } else {
+              recipeIngredients = recipeIngredientsRawArray;
+            }
 
             if (!recipeIngredients.length) {
               console.log(`🧺 Missing parsed ingredients for ${recipe?.name || 'recipe'}; no fallback available`, {
@@ -2960,10 +3112,7 @@ ${mealSchemas}
               const normalised = this.normalizeIngredient(ingredient);
               if (normalised) {
                 ingredients.push(normalised);
-                const lower = normalised.name.toLowerCase();
-                if (lower.includes('onion')) {
-                  onionLog.push({ source: 'recipe', recipe: recipe.name, ingredient: normalised });
-                }
+                sourceCounts[sourceLabel] = (sourceCounts[sourceLabel] || 0) + 1;
               }
             });
           }
@@ -2975,18 +3124,17 @@ ${mealSchemas}
           const normalised = this.normalizeIngredient(ingredient);
           if (normalised) {
             ingredients.push(normalised);
-            const lower = normalised.name.toLowerCase();
-            if (lower.includes('onion')) {
-              onionLog.push({ source: 'meal', meal: meal.type, ingredient: normalised });
-            }
+            sourceCounts.meal_level += 1;
           }
         });
       }
     }
 
-    if (onionLog.length && process.env.LOG_MEALPLAN === 'true') {
-      logMealplan('🧅 Onion entries collected for shopping list:', onionLog);
-    }
+    console.log('🧺 Shopping list ingredient sources:', {
+      mealPlanId: mealPlan?._id || mealPlan?.id || null,
+      title: mealPlan?.title || null,
+      counts: sourceCounts
+    });
 
     return ingredients;
   }

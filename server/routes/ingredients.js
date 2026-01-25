@@ -166,11 +166,6 @@ router.post('/resolve-images', auth, async (req, res) => {
 
     const images = await Promise.all(ingredients.map(async (raw) => {
       const normalized = buildNormalizedName(raw);
-      if (normalized) {
-        console.log('🧩 Ingredient normalized name', { raw, normalized });
-      } else {
-        console.log('🧩 Ingredient normalized name empty', { raw });
-      }
       const candidates = buildCandidates(raw);
       for (const candidate of candidates) {
         const imageUrl = await getIngredientImageIfExists(candidate);
@@ -186,7 +181,7 @@ router.post('/resolve-images', auth, async (req, res) => {
             return { imageUrl: generatedUrl, matchedName: fallbackName };
           }
         } catch (err) {
-          console.warn('⚠️ Ingredient image generation failed:', err.message);
+          /* ignore */
         }
       }
       return { imageUrl: null, matchedName: fallbackName || null };

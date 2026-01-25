@@ -42,6 +42,7 @@ export function MealDetailDialog({
   const { instructions, ingredients, time, macros, servings } = normalized;
   const [cookMode, setCookMode] = React.useState(false);
   const [ingredientImages, setIngredientImages] = React.useState<string[]>([]);
+  const ingredientsKey = React.useMemo(() => ingredients.join("||"), [ingredients]);
   const instructionsArray = React.useMemo(() => {
     if (Array.isArray(instructions)) {
       // If the array contains a single blob, split that blob by newlines
@@ -85,7 +86,7 @@ export function MealDetailDialog({
     return () => {
       active = false;
     };
-  }, [open, ingredients]);
+  }, [open, ingredientsKey]);
 
   const recipe = meal?.recipes?.[0] || {};
   const servingsLabel =

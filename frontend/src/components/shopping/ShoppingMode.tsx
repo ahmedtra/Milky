@@ -117,7 +117,7 @@ export function ShoppingMode({
                           <img
                             src={item.imageUrl}
                             alt={item.name}
-                            className="h-10 w-10 rounded-full object-cover border border-white/20"
+                            className="h-12 w-12 rounded-full object-cover border border-white/20"
                             loading="lazy"
                           />
                         )}

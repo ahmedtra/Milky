@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { getMealAlternatives, applyMealAlternative, ensureMealImage, getFavoriteRecipes, saveFavoriteRecipe, ensureFavoriteImage } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { CookMode } from "@/components/meals/CookMode";
+import { resolveIngredientImages } from "@/lib/api";
 
 const quickLinks = [
   { path: "/meal-plans", label: "Meal Plans", icon: ChefHat, description: "View & generate plans" },
@@ -141,7 +142,8 @@ export default function Dashboard() {
     instructions: string[];
     instructionsArray: string[];
   } | null>(null);
-  const [cookMode, setCookMode] = useState<{ title: string; steps: string[]; ingredients: string[] } | null>(null);
+  const [expandedIngredientImages, setExpandedIngredientImages] = useState<string[]>([]);
+  const [cookMode, setCookMode] = useState<{ title: string; steps: string[]; ingredients: string[]; ingredientImages?: string[] } | null>(null);
 
   const historyData = useMemo(() => {
     const groups: Record<string, { planId: string; dayIndex: number; planTitle: string; dayLabel: string; meals: any[]; createdAt: number; overlap: boolean }> = {};
@@ -259,6 +261,26 @@ export default function Dashboard() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!expandedMeal?.ingredients?.length) {
+      setExpandedIngredientImages([]);
+      return undefined;
+    }
+    resolveIngredientImages(expandedMeal.ingredients)
+      .then((results) => {
+        if (!active) return;
+        setExpandedIngredientImages(results.map((item) => item?.imageUrl || ""));
+      })
+      .catch(() => {
+        if (!active) return;
+        setExpandedIngredientImages([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [expandedMeal]);
 
   const buildMealDetails = (meal: any) => {
     const recipe = meal?.recipes?.[0] || {};
@@ -783,13 +805,26 @@ export default function Dashboard() {
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground mb-1">Ingredients</p>
                   {expandedMeal.ingredients.length ? (
-                    <ul className="list-disc list-inside text-sm text-foreground space-y-1">
+                    <ul className="space-y-2 text-sm text-foreground">
                       {expandedMeal.ingredients.map((ing: any, i) => {
-                        if (typeof ing === "string") {
-                          return <li key={i}>{ing}</li>;
-                        }
-                        const parts = [ing.amount, ing.unit, ing.name].filter(Boolean).join(" ");
-                        return <li key={i}>{parts || ing.name || "Ingredient"}</li>;
+                        const label =
+                          typeof ing === "string"
+                            ? ing
+                            : [ing.amount, ing.unit, ing.name].filter(Boolean).join(" ") || ing.name || "Ingredient";
+                        const imageUrl = expandedIngredientImages[i];
+                        return (
+                          <li key={i} className="flex items-start gap-3">
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt={label}
+                                className="h-8 w-8 rounded-full object-cover border border-border/60"
+                                loading="lazy"
+                              />
+                            ) : null}
+                            <span className="break-words break-all whitespace-pre-wrap">{label}</span>
+                          </li>
+                        );
                       })}
                     </ul>
                   ) : (
@@ -827,6 +862,7 @@ export default function Dashboard() {
                         title: expandedMeal.recipe?.name || expandedMeal.meal?.type || "Recipe",
                         steps: expandedMeal.instructionsArray,
                         ingredients: expandedMeal.ingredients,
+                        ingredientImages: expandedIngredientImages,
                       })
                     }
                   >
@@ -843,6 +879,7 @@ export default function Dashboard() {
           title={cookMode.title}
           steps={cookMode.steps}
           ingredients={cookMode.ingredients}
+          ingredientImages={cookMode.ingredientImages}
           onExit={() => setCookMode(null)}
         />
       )}

@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import React from "react";
 import { Check } from "lucide-react";
 import { CookMode } from "./CookMode";
+import { resolveIngredientImages } from "@/lib/api";
 
 interface MealDetailDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function MealDetailDialog({
 
   const { instructions, ingredients, time, macros } = normalizeMealDetails(meal);
   const [cookMode, setCookMode] = React.useState(false);
+  const [ingredientImages, setIngredientImages] = React.useState<string[]>([]);
   const instructionsArray = React.useMemo(() => {
     if (Array.isArray(instructions)) {
       // If the array contains a single blob, split that blob by newlines
@@ -62,6 +64,26 @@ export function MealDetailDialog({
     if (cookMode) return;
     onOpenChange(val);
   };
+
+  React.useEffect(() => {
+    let active = true;
+    if (!open || !ingredients.length) {
+      setIngredientImages([]);
+      return undefined;
+    }
+    resolveIngredientImages(ingredients)
+      .then((results) => {
+        if (!active) return;
+        setIngredientImages(results.map((item) => item?.imageUrl || ""));
+      })
+      .catch(() => {
+        if (!active) return;
+        setIngredientImages([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, ingredients]);
 
   const recipe = meal?.recipes?.[0] || {};
   const img = recipe?.image || recipe?.imageUrl || meal?.image || meal?.imageUrl;
@@ -122,9 +144,19 @@ export function MealDetailDialog({
             <div className="space-y-2">
               <p className="text-sm font-semibold">Ingredients</p>
               {ingredients.length ? (
-                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 break-words">
+                <ul className="space-y-2 text-sm text-muted-foreground">
                   {ingredients.map((ing, ingIdx) => (
-                    <li key={ingIdx} className="break-words break-all whitespace-pre-wrap">{ing}</li>
+                    <li key={ingIdx} className="flex items-start gap-3">
+                      {ingredientImages[ingIdx] ? (
+                        <img
+                          src={ingredientImages[ingIdx]}
+                          alt={ing}
+                          className="h-8 w-8 rounded-full object-cover border border-border/60"
+                          loading="lazy"
+                        />
+                      ) : null}
+                      <span className="break-words break-all whitespace-pre-wrap">{ing}</span>
+                    </li>
                   ))}
                 </ul>
               ) : (
@@ -166,6 +198,7 @@ export function MealDetailDialog({
           title={meal.recipes?.[0]?.name || meal.type || "Recipe"}
           steps={instructionsArray}
           ingredients={ingredients}
+          ingredientImages={ingredientImages}
           onExit={() => setCookMode(false)}
         />
       )}

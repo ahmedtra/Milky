@@ -2,17 +2,27 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import NoSleep from "nosleep.js";
 import { Button } from "@/components/ui/button";
+import { resolveIngredientImages } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface CookModeProps {
   title?: string;
   steps: string[];
   ingredients?: string[];
+  ingredientImages?: string[];
   onExit: () => void;
 }
 
-export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit }: CookModeProps) {
+export function CookMode({
+  title = "Cook Mode",
+  steps,
+  ingredients = [],
+  ingredientImages = [],
+  onExit,
+}: CookModeProps) {
   const [index, setIndex] = useState(0);
   const [voiceOn, setVoiceOn] = useState(false);
+  const [resolvedImages, setResolvedImages] = useState<string[]>([]);
   const touchStartX = useRef<number | null>(null);
   const tapTimeoutRef = useRef<number | null>(null);
   const noSleepRef = useRef<NoSleep | null>(null);
@@ -32,6 +42,12 @@ export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit 
   const safeIngredients = Array.isArray(ingredients)
     ? ingredients.map((ing) => (typeof ing === "string" ? ing.trim() : "")).filter(Boolean)
     : [];
+  const safeIngredientImages = Array.isArray(ingredientImages) ? ingredientImages : [];
+  const effectiveImages = safeIngredientImages.length ? safeIngredientImages : resolvedImages;
+  const ingredientEntries = safeIngredients.map((text, idx) => ({
+    text,
+    imageUrl: effectiveImages[idx] || "",
+  }));
 
   const escapeRegExp = (value: string) =>
     value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -50,10 +66,10 @@ export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit 
   };
 
   const stepIngredients = (() => {
-    if (!safeIngredients.length) return [];
+    if (!ingredientEntries.length) return [];
     const step = String(safeSteps[index] || "").toLowerCase();
-    return safeIngredients.filter((ingredient) => {
-      const key = ingredientKey(ingredient);
+    return ingredientEntries.filter((ingredient) => {
+      const key = ingredientKey(ingredient.text);
       if (!key) return false;
       if (step.includes(key)) return true;
       const words = key.split(" ").filter((w) => w.length > 3);
@@ -82,6 +98,26 @@ export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit 
       }
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (safeIngredientImages.length || !safeIngredients.length) {
+      setResolvedImages([]);
+      return undefined;
+    }
+    resolveIngredientImages(safeIngredients)
+      .then((results) => {
+        if (!active) return;
+        setResolvedImages(results.map((item) => item?.imageUrl || ""));
+      })
+      .catch(() => {
+        if (!active) return;
+        setResolvedImages([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [safeIngredients, safeIngredientImages.length]);
 
   useEffect(() => {
     if (voiceOn) speak(index);
@@ -154,7 +190,10 @@ export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit 
         </Button>
       </div>
       <div
-        className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-6"
+        className={cn(
+          "flex-1 flex flex-col items-center px-6 text-center",
+          stepIngredients.length > 0 ? "pt-8" : "pt-10"
+        )}
         onClick={(e) => {
           stopAll(e);
           handleTap();
@@ -169,62 +208,72 @@ export function CookMode({ title = "Cook Mode", steps, ingredients = [], onExit 
         }}
       >
         {stepIngredients.length > 0 && (
-          <div className="w-full max-w-5xl bg-white/10 rounded-lg px-4 py-3 text-left">
-            <p className="text-xs uppercase tracking-wide text-white/70 mb-2">Ingredients for this step</p>
-            <ul className="text-base text-white/90 space-y-1">
-              {stepIngredients.map((ingredient, idx) => (
-                <li key={`${ingredient}-${idx}`} className="break-words">
-                  {ingredient}
-                </li>
-              ))}
-            </ul>
+          <div className="w-full max-w-5xl flex flex-wrap justify-center gap-3">
+            {stepIngredients.map((ingredient, idx) => (
+              <div
+                key={`${ingredient.text}-${idx}`}
+                className="flex flex-col items-center justify-center gap-2 w-36 h-36 rounded-full bg-white/15 border border-white/30 text-sm sm:text-base text-white/95"
+              >
+                {ingredient.imageUrl ? (
+                  <img
+                    src={ingredient.imageUrl}
+                    alt={ingredient.text}
+                    className="h-16 w-16 rounded-full object-cover border border-white/20 flex-shrink-0"
+                    loading="eager"
+                  />
+                ) : null}
+                <span className="px-2 text-center line-clamp-3">{ingredient.text}</span>
+              </div>
+            ))}
           </div>
         )}
-        <div className="text-sm uppercase tracking-wide text-white/70">{title}</div>
-        <div className="text-3xl sm:text-4xl md:text-5xl font-semibold leading-snug whitespace-pre-wrap max-w-5xl">
-          {safeSteps[index]}
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 w-full">
+          <div className="text-sm uppercase tracking-wide text-white/70 text-center">{title}</div>
+          <div className="text-3xl sm:text-4xl md:text-5xl font-semibold leading-snug whitespace-pre-wrap max-w-5xl text-center">
+            {safeSteps[index]}
+          </div>
+          <div className="flex items-center gap-3 text-white/80 text-sm">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 border-white/30 text-white"
+              onClick={(e) => {
+                stopAll(e);
+                goPrev();
+              }}
+            >
+              Prev
+            </Button>
+            <span className="text-white/80">
+              {index + 1} / {safeSteps.length}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className={`border-white/30 text-white ${voiceOn ? "bg-green-600/70 hover:bg-green-600" : "bg-white/15 hover:bg-white/20"}`}
+              onClick={(e) => {
+                stopAll(e);
+                setVoiceOn((v) => !v);
+              }}
+            >
+              {voiceOn ? "Voice On" : "Voice Off"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-white/15 border-white/30 text-white"
+              onClick={(e) => {
+                stopAll(e);
+                goNext();
+              }}
+            >
+              Next
+            </Button>
+          </div>
+          <p className="text-xs text-white/60">
+            Tap anywhere to advance, double-tap to go back. Swipe left/right also works.
+          </p>
         </div>
-        <div className="flex items-center gap-3 text-white/80 text-sm">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="bg-white/15 border-white/30 text-white"
-            onClick={(e) => {
-              stopAll(e);
-              goPrev();
-            }}
-          >
-            Prev
-          </Button>
-          <span className="text-white/80">
-            {index + 1} / {safeSteps.length}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            className={`border-white/30 text-white ${voiceOn ? "bg-green-600/70 hover:bg-green-600" : "bg-white/15 hover:bg-white/20"}`}
-            onClick={(e) => {
-              stopAll(e);
-              setVoiceOn((v) => !v);
-            }}
-          >
-            {voiceOn ? "Voice On" : "Voice Off"}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="bg-white/15 border-white/30 text-white"
-            onClick={(e) => {
-              stopAll(e);
-              goNext();
-            }}
-          >
-            Next
-          </Button>
-        </div>
-        <p className="text-xs text-white/60">
-          Tap anywhere to advance, double-tap to go back. Swipe left/right also works.
-        </p>
       </div>
     </div>
   );

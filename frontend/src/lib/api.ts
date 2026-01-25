@@ -301,6 +301,18 @@ export async function deleteShoppingList(listId: string): Promise<void> {
   });
 }
 
+export async function resolveIngredientImages(ingredients: string[]): Promise<{ imageUrl: string | null; matchedName: string | null }[]> {
+  if (!Array.isArray(ingredients) || ingredients.length === 0) return [];
+  const data = await fetchJson<{ images: { imageUrl: string | null; matchedName: string | null }[] }>(
+    '/api/ingredients/resolve-images',
+    {
+      method: 'POST',
+      body: JSON.stringify({ ingredients }),
+    }
+  );
+  return Array.isArray(data?.images) ? data.images : [];
+}
+
 // Chat API
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
   return fetchJson<ChatResponse>('/api/gemini/chat', {

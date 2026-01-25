@@ -146,9 +146,9 @@ const buildCandidates = (raw) => {
     sorted,
     ...heads,
     ...aliases,
-    ...wordVariants,
     base,
-    original
+    original,
+    ...wordVariants
   ]
     .map((val) => normalizeWhitespace(val))
     .filter(Boolean);

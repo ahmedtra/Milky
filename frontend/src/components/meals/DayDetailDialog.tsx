@@ -153,7 +153,7 @@ export function DayDetailDialog({
             <Button
               variant="ghost"
               size="icon"
-              className="pointer-events-auto rounded-full bg-white/95 border shadow-lg hover:bg-accent -translate-x-5"
+              className="pointer-events-auto rounded-full bg-white/95 border shadow-lg hover:bg-accent -translate-x-7"
               onClick={() => onChangeDay(-1)}
               disabled={safeIndex === 0}
               aria-label="Previous day"
@@ -163,7 +163,7 @@ export function DayDetailDialog({
             <Button
               variant="ghost"
               size="icon"
-              className="pointer-events-auto rounded-full bg-white/95 border shadow-lg hover:bg-accent translate-x-5"
+              className="pointer-events-auto rounded-full bg-white/95 border shadow-lg hover:bg-accent translate-x-7"
               onClick={() => onChangeDay(1)}
               disabled={safeIndex === days.length - 1}
               aria-label="Next day"

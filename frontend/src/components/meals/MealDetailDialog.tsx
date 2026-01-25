@@ -75,7 +75,7 @@ export function MealDetailDialog({
             <Button
               variant="ghost"
               size="icon"
-              className="absolute -left-3 rounded-full bg-background shadow-md"
+              className="absolute -left-12 rounded-full bg-background shadow-md"
               onClick={onPrev}
               aria-label="Previous meal"
             >
@@ -84,7 +84,7 @@ export function MealDetailDialog({
             <Button
               variant="ghost"
               size="icon"
-              className="absolute -right-3 rounded-full bg-background shadow-md"
+              className="absolute -right-12 rounded-full bg-background shadow-md"
               onClick={onNext}
               aria-label="Next meal"
             >

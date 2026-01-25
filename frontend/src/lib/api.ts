@@ -47,9 +47,32 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 // Meal Plans API
 export async function getMealPlans(): Promise<MealPlan[]> {
   const data = await fetchJson<any>('/api/meal-plans');
-  if (Array.isArray(data)) return data as MealPlan[];
-  if (Array.isArray(data?.mealPlans)) return data.mealPlans as MealPlan[];
-  return [];
+  const plans = Array.isArray(data)
+    ? (data as MealPlan[])
+    : Array.isArray(data?.mealPlans)
+      ? (data.mealPlans as MealPlan[])
+      : [];
+  if (plans.length) {
+    const servingsLog: Array<{ title: string; servings: any }> = [];
+    plans.forEach((plan) => {
+      (plan as any)?.days?.forEach((day: any) => {
+        day?.meals?.forEach((meal: any) => {
+          const recipe = meal?.recipes?.[0];
+          if (!recipe) return;
+          servingsLog.push({
+            title: recipe?.name || recipe?.title || meal?.type || 'Meal',
+            servings: recipe?.servings ?? meal?.servings ?? null,
+          });
+        });
+      });
+    });
+    if (servingsLog.length) {
+      console.log('🍽️ Servings loaded (sample):', servingsLog.slice(0, 20));
+      const missing = servingsLog.filter((entry) => !entry.servings).length;
+      console.log(`🍽️ Servings summary: ${servingsLog.length} recipes, ${missing} missing`);
+    }
+  }
+  return plans;
 }
 
 export async function generateMealPlan(request: GenerateMealPlanRequest): Promise<MealPlan> {

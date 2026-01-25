@@ -141,9 +141,16 @@ export default function Dashboard() {
     ingredients: string[];
     instructions: string[];
     instructionsArray: string[];
+    servings?: number | string;
   } | null>(null);
   const [expandedIngredientImages, setExpandedIngredientImages] = useState<string[]>([]);
-  const [cookMode, setCookMode] = useState<{ title: string; steps: string[]; ingredients: string[]; ingredientImages?: string[] } | null>(null);
+  const [cookMode, setCookMode] = useState<{
+    title: string;
+    steps: string[];
+    ingredients: string[];
+    ingredientImages?: string[];
+    servings?: number | string;
+  } | null>(null);
 
   const historyData = useMemo(() => {
     const groups: Record<string, { planId: string; dayIndex: number; planTitle: string; dayLabel: string; meals: any[]; createdAt: number; overlap: boolean }> = {};
@@ -719,6 +726,7 @@ export default function Dashboard() {
                               ingredients: ingredientsList,
                               instructions: instructionsList,
                               instructionsArray,
+                              servings: recipe?.servings || meal?.servings,
                             })
                           }
                         >
@@ -738,7 +746,9 @@ export default function Dashboard() {
                       )}
                       <div className="mt-3 flex justify-between items-center">
                         <div className="text-xs text-muted-foreground">
-                          {recipe.servings ? `${recipe.servings} serving${recipe.servings > 1 ? "s" : ""}` : "Serves 1"}
+                          {recipe.servings
+                            ? `${recipe.servings} serving${recipe.servings > 1 ? "s" : ""}`
+                            : "Serves —"}
                         </div>
                         <button
                           className="text-sm text-primary font-semibold"
@@ -749,6 +759,7 @@ export default function Dashboard() {
                               ingredients: ingredientsList,
                               instructions: instructionsList,
                               instructionsArray,
+                              servings: recipe?.servings || meal?.servings,
                             })
                           }
                         >
@@ -799,6 +810,11 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground">
                     {expandedMeal.meal?.type ? expandedMeal.meal.type : ""}
                   </p>
+                  {expandedMeal.servings ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Serves {expandedMeal.servings}
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="grid gap-4">
@@ -863,6 +879,7 @@ export default function Dashboard() {
                         steps: expandedMeal.instructionsArray,
                         ingredients: expandedMeal.ingredients,
                         ingredientImages: expandedIngredientImages,
+                        servings: expandedMeal.servings,
                       })
                     }
                   >
@@ -880,6 +897,7 @@ export default function Dashboard() {
           steps={cookMode.steps}
           ingredients={cookMode.ingredients}
           ingredientImages={cookMode.ingredientImages}
+          servings={cookMode.servings}
           onExit={() => setCookMode(null)}
         />
       )}

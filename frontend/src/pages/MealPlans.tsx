@@ -405,7 +405,13 @@ export default function MealPlans() {
         macrosSrc.calories
       ),
     };
-    return { recipe, instructions, ingredients, time, macros };
+    const servings = firstNumber(
+      recipe?.servings,
+      meal?.servings,
+      recipe?.yield,
+      recipe?.servings_count
+    );
+    return { recipe, instructions, ingredients, time, macros, servings };
   };
 
   const swapKeyFor = (planId: string, dayIndex: number, mealIndex: number) => `${planId}-${dayIndex}-${mealIndex}`;

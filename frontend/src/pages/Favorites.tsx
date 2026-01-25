@@ -191,6 +191,14 @@ export default function Favorites() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {selected.calories ? `${selected.calories} cal` : "— cal"}{" "}
                 {selected.protein ? `• ${selected.protein}g protein` : ""}
+                {selected?.planRecipe?.servings || selected?.servings || selected?.recipe?.servings ? (
+                  <span>
+                    • Serves{" "}
+                    {selected?.planRecipe?.servings || selected?.servings || selected?.recipe?.servings}
+                  </span>
+                ) : (
+                  <span>• Serves —</span>
+                )}
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-semibold">Ingredients</p>
@@ -274,6 +282,9 @@ export default function Favorites() {
                     : [ing.amount, ing.unit, ing.name].filter(Boolean).join(" ")
                 );
               })()
+            }
+            servings={
+              selected?.planRecipe?.servings || selected?.servings || selected?.recipe?.servings
             }
             onExit={() => setCookMode(false)}
           />

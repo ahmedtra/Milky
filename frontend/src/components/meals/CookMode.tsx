@@ -10,6 +10,7 @@ interface CookModeProps {
   steps: string[];
   ingredients?: string[];
   ingredientImages?: string[];
+  servings?: number | string;
   onExit: () => void;
 }
 
@@ -18,6 +19,7 @@ export function CookMode({
   steps,
   ingredients = [],
   ingredientImages = [],
+  servings,
   onExit,
 }: CookModeProps) {
   const [index, setIndex] = useState(0);
@@ -171,6 +173,11 @@ export function CookMode({
     e.stopPropagation();
   };
 
+  const servingsLabel =
+    Number.isFinite(Number(servings)) && Number(servings) > 0
+      ? `Serves ${Number(servings)}`
+      : null;
+
   const content = (
     <div
       className="fixed inset-0 z-[300] bg-black/80 text-white flex flex-col pointer-events-auto"
@@ -227,8 +234,13 @@ export function CookMode({
             ))}
           </div>
         )}
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 w-full">
-          <div className="text-sm uppercase tracking-wide text-white/70 text-center">{title}</div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <div className="text-sm uppercase tracking-wide text-white/70">{title}</div>
+            {servingsLabel ? (
+              <div className="text-xs text-white/60">{servingsLabel}</div>
+            ) : null}
+          </div>
           <div className="text-3xl sm:text-4xl md:text-5xl font-semibold leading-snug whitespace-pre-wrap max-w-5xl text-center">
             {safeSteps[index]}
           </div>

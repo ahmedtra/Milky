@@ -43,7 +43,9 @@ const rehydrateDoc = (hit) => {
       const obj = JSON.parse(hit.payload);
       if (obj && typeof obj === "object") {
         const rawId = hitId ?? obj._id ?? obj.id ?? obj.recipe_id ?? obj.recipeId ?? null;
-        return { ...obj, _id: rawId ?? obj._id ?? null, id: obj.id ?? rawId ?? null };
+        const merged = { ...obj, _id: rawId ?? obj._id ?? null, id: obj.id ?? rawId ?? null };
+        if (hit.servings !== undefined && hit.servings !== null) merged.servings = hit.servings;
+        return merged;
       }
     } catch (err) {
       // fallback below
@@ -274,7 +276,7 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
     const res = await milvus.query({
       collection_name: ZILLIZ_COLLECTION,
       expr: filterStr,
-      output_fields: ["payload", "id", "recipe_id", "title"],
+      output_fields: ["payload", "id", "recipe_id", "title", "servings"],
       limit: effectiveLimit,
       offset,
     });
@@ -292,13 +294,13 @@ const searchRecipesZilliz = async (filters = {}, options = {}) => {
     filter: filterStr,
     limit: effectiveLimit,
     offset,
-    output_fields: ["payload", "id", "recipe_id", "title"],
+    output_fields: ["payload", "id", "recipe_id", "title", "servings"],
     metric_type: "COSINE",
     params: { ef: 200, random_seed: seed },
   });
 
   const hits = res?.results || [];
-
+  
   const docs = hits.map((h) => rehydrateDoc(h));
   const filtered = applyPostExcludes(docs);
   return excludeList.length ? filtered.slice(0, limit) : filtered;

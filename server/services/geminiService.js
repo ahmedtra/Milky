@@ -632,6 +632,7 @@ class GeminiService {
         meal_type: r.meal_type,
         diet_tags: r.dietary_tags || r.diet_tags || [],
         total_time_min: r.total_time_min || r.total_time_minutes || null,
+        servings: r.servings ?? r.yield ?? r.serves ?? null,
         calories: nutrition.calories ?? r.calories ?? null,
         protein: nutrition.protein ?? null,
         carbs: nutrition.carbs ?? null,
@@ -1296,7 +1297,8 @@ class GeminiService {
         const searchCandidates = await this.fetchCandidatesForMeal(mealType, userPreferences, sizeByType);
         baseCandidateMap[mealType] = await padWithLLM(mealType, searchCandidates, targetSize);
       }
-
+      
+      
       for (let dayIndex = 0; dayIndex < duration; dayIndex++) {
         logMealplan(`📅 Generating day ${dayIndex + 1}/${duration}`);
         
@@ -1317,6 +1319,8 @@ class GeminiService {
           acc[mealType] = pool.slice(0, 5);
           return acc;
         }, {});
+
+        console.log("searchCandidateMap", searchCandidateMap[0])
         const favoritesCandidateMap = mealTypes.reduce((acc, mealType) => {
           if (!includeFavorites || !favoritePool.length) {
             acc[mealType] = [];
@@ -1587,6 +1591,20 @@ ${mealSchemas}
     if (!dayData?.meals || !candidateMap) return;
 
     const dayUsedIds = new Set();
+    const coerceServings = (...candidates) => {
+      for (const val of candidates) {
+        if (val === undefined || val === null) continue;
+        if (typeof val === 'number' && Number.isFinite(val) && val > 0) return Math.round(val);
+        if (typeof val === 'string' && val.trim()) {
+          const match = val.match(/(\d+(\.\d+)?)/);
+          if (match) {
+            const num = Number(match[1]);
+            if (Number.isFinite(num) && num > 0) return Math.round(num);
+          }
+        }
+      }
+      return null;
+    };
     const hasIngredientsData = (src = {}) => {
       return (
         (Array.isArray(src.ingredients_parsed) && src.ingredients_parsed.length) ||
@@ -1616,6 +1634,7 @@ ${mealSchemas}
           }
         }
         if (c?.id) map.set(String(c.id), c);
+        console.log("c console", c);
         hydrated.push(c);
       }
       candidatesByMeal[mealType] = { list: hydrated, map };
@@ -1660,6 +1679,7 @@ ${mealSchemas}
             if (alt) chosen = alt;
           }
           const src = chosen;
+          console.log("chosen", chosen)
           // Always use parsed ingredients_raw to stay grounded
           let ingredients = this.parseIngredientsFromSource(src);
           if (!ingredients.length && Array.isArray(r.ingredients)) {
@@ -1676,9 +1696,11 @@ ${mealSchemas}
           const prepTime = src.prep_time_minutes ?? src.prepTime ?? r.prepTime ?? 0;
           const cookTime = src.cook_time_minutes ?? src.cookTime ?? r.cookTime ?? 0;
           const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
+          const servings = coerceServings(src?.servings, src?.yield, src?.serves, r?.servings) || 1;
           logMealplan('✅ enforceCandidateRecipes: matched', {
             mealType,
-            title: cleanName || src.title
+            title: cleanName || src.title,
+            servings:servings
           });
           return {
             ...r,
@@ -1688,6 +1710,7 @@ ${mealSchemas}
             prepTime: normalizedPrep,
             cookTime,
             total_time_min: totalTime || (normalizedPrep + cookTime) || null,
+            servings,
             ingredients,
             instructions: src.instructions || r?.instructions || [],
             nutrition,
@@ -1699,7 +1722,10 @@ ${mealSchemas}
           };
         }
         // Always pick a candidate if none/mismatch
+        
         const first = this.shuffle(bucket.list).find((c) => c?.id && !dayUsedIds.has(String(c.id))) || this.shuffle(bucket.list)[0];
+        console.log("first", first)
+        
         let ingredients = this.parseIngredientsFromSource(first);
         if (!ingredients.length && Array.isArray(r?.ingredients)) {
           ingredients = r.ingredients;
@@ -1714,6 +1740,7 @@ ${mealSchemas}
         const prepTime = first?.prep_time_minutes ?? first?.prepTime ?? r?.prepTime ?? 0;
         const cookTime = first?.cook_time_minutes ?? first?.cookTime ?? r?.cookTime ?? 0;
         const normalizedPrep = (prepTime || cookTime) ? prepTime : (totalTime || 0);
+        const servings = coerceServings(first?.servings, first?.yield, first?.serves, r?.servings) || 1;
         logMealplan('🔄 enforceCandidateRecipes: replacing', {
           mealType,
           title: cleanName || first?.title
@@ -1725,6 +1752,7 @@ ${mealSchemas}
           prepTime: normalizedPrep,
           cookTime,
           total_time_min: totalTime || (normalizedPrep + cookTime) || null,
+          servings,
           ai_generated: first?.ai_generated || r?.ai_generated || false,
           image: first?.image || first?.imageUrl || r?.image || r?.imageUrl || null,
           imageUrl: first?.imageUrl || first?.image || r?.imageUrl || r?.image || null,

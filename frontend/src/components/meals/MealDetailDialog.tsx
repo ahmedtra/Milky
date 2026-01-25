@@ -14,6 +14,7 @@ interface MealDetailDialogProps {
     ingredients: string[];
     time: string;
     macros: Record<string, number | string>;
+    servings?: number | string;
   };
   onSwap: () => void;
   onToggleComplete: () => void;
@@ -37,7 +38,7 @@ export function MealDetailDialog({
 }: MealDetailDialogProps) {
   if (!meal) return null;
 
-  const { instructions, ingredients, time, macros } = normalizeMealDetails(meal);
+  const { instructions, ingredients, time, macros, servings } = normalizeMealDetails(meal);
   const [cookMode, setCookMode] = React.useState(false);
   const [ingredientImages, setIngredientImages] = React.useState<string[]>([]);
   const instructionsArray = React.useMemo(() => {
@@ -86,6 +87,10 @@ export function MealDetailDialog({
   }, [open, ingredients]);
 
   const recipe = meal?.recipes?.[0] || {};
+  const servingsLabel =
+    Number.isFinite(Number(servings)) && Number(servings) > 0
+      ? `• Serves ${Number(servings)}`
+      : "• Serves —";
   const img = recipe?.image || recipe?.imageUrl || meal?.image || meal?.imageUrl;
 
   return (
@@ -139,6 +144,7 @@ export function MealDetailDialog({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               {macros.calories ? `${macros.calories} cal` : "— cal"}{" "}
               {macros.protein ? `• ${macros.protein}g protein` : ""}
+              <span>{servingsLabel}</span>
             </div>
 
             <div className="space-y-2">
@@ -199,6 +205,7 @@ export function MealDetailDialog({
           steps={instructionsArray}
           ingredients={ingredients}
           ingredientImages={ingredientImages}
+          servings={servings}
           onExit={() => setCookMode(false)}
         />
       )}

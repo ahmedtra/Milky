@@ -32,6 +32,22 @@ const sanitizeCategory = (cat) => {
   return allowedIngredientCategories.has(lower) ? lower : 'other';
 };
 
+const coerceServings = (...candidates) => {
+  for (const val of candidates) {
+    if (val === undefined || val === null) continue;
+    const raw = typeof val === 'string' ? val.trim() : val;
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.round(raw);
+    if (typeof raw === 'string' && raw) {
+      const match = raw.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const num = Number(match[1]);
+        if (Number.isFinite(num) && num > 0) return Math.round(num);
+      }
+    }
+  }
+  return 1;
+};
+
 const mapSearchHitToPlanRecipe = (hit) => {
   if (!hit) return null;
   const ingredients = Array.isArray(hit.ingredients_parsed) && hit.ingredients_parsed.length
@@ -96,7 +112,7 @@ const mapSearchHitToPlanRecipe = (hit) => {
     description: hit.description || hit.summary || '',
     prepTime: Number(hit.prep_time_minutes) || Number(hit.total_time_minutes) || undefined,
     cookTime: Number(hit.cook_time_minutes) || undefined,
-    servings: 1,
+    servings: coerceServings(hit.servings, hit.yield, hit.serves, hit.recipe?.servings),
     image: hit.image || hit.imageUrl,
     imageUrl: hit.image || hit.imageUrl,
     meal_type: hit.meal_type || hit.mealType || hit.type || [],

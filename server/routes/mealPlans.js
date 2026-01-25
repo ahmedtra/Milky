@@ -40,6 +40,22 @@ const sanitizeCategory = (cat) => {
   return allowedIngredientCategories.has(lower) ? lower : 'other';
 };
 
+const coerceServings = (...candidates) => {
+  for (const val of candidates) {
+    if (val === undefined || val === null) continue;
+    const raw = typeof val === 'string' ? val.trim() : val;
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.round(raw);
+    if (typeof raw === 'string' && raw) {
+      const match = raw.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const num = Number(match[1]);
+        if (Number.isFinite(num) && num > 0) return Math.round(num);
+      }
+    }
+  }
+  return 1;
+};
+
 const mapSearchHitToPlanRecipe = (hit) => {
   if (!hit) return null;
   const ingredients = Array.isArray(hit.ingredients_parsed) && hit.ingredients_parsed.length
@@ -91,7 +107,7 @@ const mapSearchHitToPlanRecipe = (hit) => {
     description: hit.description || '',
     prepTime: Number(hit.prep_time_minutes) || Number(hit.total_time_minutes) || undefined,
     cookTime: Number(hit.cook_time_minutes) || undefined,
-    servings: 1,
+    servings: coerceServings(hit.servings, hit.yield, hit.serves, hit.recipe?.servings),
     ingredients,
     instructions,
     nutrition,
@@ -321,6 +337,23 @@ router.post('/generate', auth, async (req, res) => {
     // Generate meal plan using Gemini AI
     const aiMealPlan = await geminiService.generateMealPlan(preferences, duration);
     console.log(`✅ Meal plan generated in ${Date.now() - tGenStart} ms`);
+
+    const servingsLog = [];
+    (aiMealPlan?.days || []).forEach((day) => {
+      (day?.meals || []).forEach((meal) => {
+        const recipe = meal?.recipes?.[0] || {};
+        const servings = recipe?.servings ?? meal?.servings ?? null;
+        servingsLog.push({
+          title: recipe?.name || recipe?.title || meal?.type || 'Meal',
+          servings,
+        });
+      });
+    });
+    if (servingsLog.length) {
+      const missing = servingsLog.filter((entry) => !entry.servings).length;
+      console.log('🍽️ Generated servings (sample):', servingsLog.slice(0, 20));
+      console.log(`🍽️ Generated servings summary: ${servingsLog.length} recipes, ${missing} missing`);
+    }
     
     // Calculate start and end dates
     const startDate = new Date();

@@ -127,6 +127,16 @@ const buildCandidates = (raw) => {
   const sorted = sortTokens(singular);
   const heads = pickHeadNouns(singular);
   const aliases = expandAliases(singular);
+  const words = normalizeWhitespace(singular)
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean);
+  const wordVariants = words.flatMap((word) => {
+    if (word.endsWith('s') && word.length > 3) {
+      return [word, word.slice(0, -1)];
+    }
+    return [word];
+  });
   const candidates = [
     cleaned,
     noPrep,
@@ -136,6 +146,7 @@ const buildCandidates = (raw) => {
     sorted,
     ...heads,
     ...aliases,
+    ...wordVariants,
     base,
     original
   ]

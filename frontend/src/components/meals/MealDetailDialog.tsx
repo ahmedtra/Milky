@@ -36,9 +36,10 @@ export function MealDetailDialog({
   onPrev,
   isCompleted,
 }: MealDetailDialogProps) {
-  if (!meal) return null;
-
-  const { instructions, ingredients, time, macros, servings } = normalizeMealDetails(meal);
+  const normalized = meal
+    ? normalizeMealDetails(meal)
+    : { instructions: [], ingredients: [], time: "", macros: {}, servings: undefined };
+  const { instructions, ingredients, time, macros, servings } = normalized;
   const [cookMode, setCookMode] = React.useState(false);
   const [ingredientImages, setIngredientImages] = React.useState<string[]>([]);
   const instructionsArray = React.useMemo(() => {
@@ -91,6 +92,8 @@ export function MealDetailDialog({
     Number.isFinite(Number(servings)) && Number(servings) > 0
       ? `• Serves ${Number(servings)}`
       : "• Serves —";
+
+  if (!meal) return null;
   const img = recipe?.image || recipe?.imageUrl || meal?.image || meal?.imageUrl;
 
   return (

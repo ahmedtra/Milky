@@ -45,6 +45,7 @@ export function CookMode({
     ? ingredients.map((ing) => (typeof ing === "string" ? ing.trim() : "")).filter(Boolean)
     : [];
   const safeIngredientImages = Array.isArray(ingredientImages) ? ingredientImages : [];
+  const ingredientsKey = React.useMemo(() => safeIngredients.join("||"), [safeIngredients]);
   const effectiveImages = safeIngredientImages.length ? safeIngredientImages : resolvedImages;
   const ingredientEntries = safeIngredients.map((text, idx) => ({
     text,
@@ -119,7 +120,7 @@ export function CookMode({
     return () => {
       active = false;
     };
-  }, [safeIngredients, safeIngredientImages.length]);
+  }, [ingredientsKey, safeIngredientImages.length]);
 
   useEffect(() => {
     if (voiceOn) speak(index);

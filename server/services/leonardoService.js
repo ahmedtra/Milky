@@ -106,6 +106,20 @@ function buildPrompt(recipe) {
   return truncatePrompt(sanitizePromptText(prompt), 1400);
 }
 
+function buildIngredientPrompt(name) {
+  const subject = name || "ingredient";
+  const prompt = [
+    `Botanical-style ingredient portrait of ${subject}.`,
+    "Clean white background, centered composition, soft natural light, high detail texture.",
+    "Looks like a small botanical specimen photo, minimal shadow, no props, no text.",
+    "Crisp edges, natural color, realistic but stylized, studio lighting.",
+    "Avoid: plates, utensils, packaging, labels, watermarks, text, collage, hands."
+  ]
+    .join(" ")
+    .trim();
+  return truncatePrompt(sanitizePromptText(prompt), 900);
+}
+
 function truncatePrompt(prompt, maxLen = 1400) {
   if (typeof prompt !== "string") return "";
   if (prompt.length <= maxLen) return prompt;
@@ -324,6 +338,67 @@ async function generateMealImage(recipe) {
   return waitForGeneration(genId);
 }
 
+async function generateIngredientImage(name) {
+  if (!hasSiliconKey()) {
+    throw new Error("SiliconFlow API key not configured");
+  }
+  console.log("🖼️ Generating ingredient image via SiliconFlow...", { name });
+  const prompt = buildIngredientPrompt(name);
+  const res = await fetch("https://api.siliconflow.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${SILICONFLOW_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: SILICONFLOW_MODEL,
+      prompt,
+      image_size: "256x256",
+      n: 1,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`SiliconFlow ingredient image gen failed ${res.status}: ${text}`);
+  }
+  const data = await res.json();
+  const url = data?.data?.[0]?.url || data?.data?.[0]?.b64_json;
+  if (!url) throw new Error("No ingredient image URL returned");
+  console.log("✅ Ingredient image generated", { name });
+  return url;
+}
+
+async function ensureIngredientImage(name) {
+  if (!name) return null;
+  const safeName = String(name).toLowerCase().replace(/[^a-z0-9_-]+/gi, "_").slice(0, 80) || "ingredient";
+  const key = `ingredients/${safeName}.png`;
+  if (hasR2() && R2_PUBLIC_BASE) {
+    const publicUrl = `${R2_PUBLIC_BASE}/${key}`;
+    try {
+      const head = await fetch(publicUrl, { method: "HEAD" });
+      if (head.ok) {
+        console.log("🖼️ Ingredient image cache hit", { name, url: publicUrl });
+        return publicUrl;
+      }
+    } catch (_err) {
+      // ignore and regenerate
+    }
+  }
+  const remoteUrl = await generateIngredientImage(name);
+  if (!hasR2()) return remoteUrl;
+  try {
+    const resp = await fetch(remoteUrl);
+    if (!resp.ok) throw new Error(`Download failed ${resp.status}`);
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const r2Url = normalizeToPublicR2(await uploadToR2FromBuffer(buf, key));
+    console.log("✅ Ingredient image uploaded to R2", { name, url: r2Url });
+    return r2Url;
+  } catch (err) {
+    console.warn("⚠️ Failed to upload ingredient image to R2, using generator URL:", err.message);
+    return remoteUrl;
+  }
+}
+
 /**
  * Ensures the first recipe on a meal has an image.
  * Mutates the passed meal object if an image is added.
@@ -398,4 +473,18 @@ async function ensureMealImage(meal, { throwOnFail = false } = {}) {
 module.exports = {
   ensureMealImage,
   generateMealImage,
+  ensureIngredientImage,
+  getIngredientImageIfExists: async (name) => {
+    if (!name || !hasR2() || !R2_PUBLIC_BASE) return null;
+    const safeName = String(name).toLowerCase().replace(/[^a-z0-9_-]+/gi, "_").slice(0, 80) || "ingredient";
+    const key = `ingredients/${safeName}.png`;
+    const publicUrl = `${R2_PUBLIC_BASE}/${key}`;
+    try {
+      const head = await fetch(publicUrl, { method: "HEAD" });
+      if (head.ok) return publicUrl;
+    } catch (_err) {
+      /* ignore */
+    }
+    return null;
+  },
 };

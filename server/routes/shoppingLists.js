@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const ShoppingList = require('../models/ShoppingList');
 const MealPlan = require('../models/MealPlan');
 const geminiService = require('../services/geminiService');
+const { getIngredientImageIfExists } = require('../services/leonardoService');
 const auth = require('../middleware/auth');
 
 const categoryMap = {
@@ -42,6 +43,22 @@ const defaultAmountUnit = (raw) => {
 const toNumber = (val, fallback = 0) => {
   const num = typeof val === 'number' ? val : Number(val);
   return Number.isFinite(num) ? num : fallback;
+};
+
+const attachIngredientImagesIfAvailable = async (items = []) => {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  const cache = new Map();
+  const resolved = await Promise.all(items.map(async (item) => {
+    if (!item || item.imageUrl || !item.name) return item;
+    const key = String(item.name).trim().toLowerCase();
+    if (!key) return item;
+    if (!cache.has(key)) {
+      cache.set(key, await getIngredientImageIfExists(item.name));
+    }
+    const imageUrl = cache.get(key);
+    return imageUrl ? { ...item, imageUrl } : item;
+  }));
+  return resolved;
 };
 
 const produceWeightDb = [
@@ -386,11 +403,12 @@ router.get('/', auth, async (req, res) => {
 
     const total = await ShoppingList.countDocuments(query);
 
-    const withSections = shoppingLists.map((list) => {
+    const withSections = await Promise.all(shoppingLists.map(async (list) => {
       const obj = list.toObject();
+      obj.items = await attachIngredientImagesIfAvailable(obj.items || []);
       obj.sectionTotals = computeSectionTotals(obj.items || []);
       return obj;
-    });
+    }));
 
     res.json({
       shoppingLists: withSections,
@@ -417,6 +435,7 @@ router.get('/:id', auth, async (req, res) => {
     }
 
     const obj = shoppingList.toObject();
+    obj.items = await attachIngredientImagesIfAvailable(obj.items || []);
     obj.sectionTotals = computeSectionTotals(obj.items || []);
 
     res.json({ shoppingList: obj });
@@ -492,6 +511,18 @@ router.post('/', auth, async (req, res) => {
     const obj = shoppingList.toObject();
     obj.sectionTotals = computeSectionTotals(obj.items || []);
 
+    setImmediate(async () => {
+      try {
+        const enrichedItems = await geminiService.attachIngredientImages(obj.items || []);
+        await ShoppingList.updateOne(
+          { _id: shoppingList._id },
+          { $set: { items: enrichedItems } }
+        );
+      } catch (err) {
+        console.warn('⚠️ Ingredient image enrichment failed:', err.message);
+      }
+    });
+
     res.status(201).json({
       message: 'Shopping list created successfully',
       shoppingList: obj
@@ -546,6 +577,20 @@ router.put('/:id', auth, async (req, res) => {
 
     const obj = shoppingList.toObject();
     obj.sectionTotals = computeSectionTotals(obj.items || []);
+
+    if (items) {
+      setImmediate(async () => {
+        try {
+          const enrichedItems = await geminiService.attachIngredientImages(obj.items || []);
+          await ShoppingList.updateOne(
+            { _id: shoppingList._id },
+            { $set: { items: enrichedItems } }
+          );
+        } catch (err) {
+          console.warn('⚠️ Ingredient image enrichment failed:', err.message);
+        }
+      });
+    }
 
     res.json({
       message: 'Shopping list updated successfully',

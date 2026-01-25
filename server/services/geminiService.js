@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { searchRecipes, getRecipeById } = require('./recipeSearch/searchService');
 const { logEvent } = require('../utils/logger');
-const { ensureMealImage } = require('./leonardoService');
+const { ensureMealImage, ensureIngredientImage } = require('./leonardoService');
 const { groqChat } = require('./groqClient');
 const FavoriteRecipe = require('../models/FavoriteRecipe');
 const baseUnits = require('../config/baseUnits.json');
@@ -2885,7 +2885,8 @@ ${mealSchemas}
         }
         return item;
       });
-      return this.buildFallbackShoppingList(withDisplayVariants, mealPlan);
+      const list = this.buildFallbackShoppingList(withDisplayVariants, mealPlan);
+      return list;
     } catch (error) {
       console.error('Error generating shopping list:', error);
       throw new Error('Failed to generate shopping list: ' + error.message);
@@ -2908,84 +2909,53 @@ ${mealSchemas}
 
         if (recipes.length > 0) {
           for (const recipe of recipes) {
-            let rawText = typeof recipe?.ingredients_raw === 'string' ? recipe.ingredients_raw.trim() : '';
             let hydratedFromSearch = null;
-            if (!rawText) {
-              const recipeId = recipe?.id || recipe?._id || recipe?.recipe_id;
-              if (recipeId) {
+            const recipeId = recipe?.id || recipe?._id || recipe?.recipe_id;
+            if (recipeId) {
+              try {
+                const fetched = await getRecipeById(String(recipeId));
+                if (fetched) {
+                  hydratedFromSearch = fetched;
+                }
+              } catch (err) {
+                console.warn('⚠️ Failed to hydrate recipe for parsed ingredients', recipeId, err.message);
+              }
+            }
+            if (!hydratedFromSearch) {
+              const recipeTitle = recipe?.name || recipe?.title;
+              if (recipeTitle) {
                 try {
-                  const fetched = await getRecipeById(String(recipeId));
-                  if (fetched?.ingredients_raw && typeof fetched.ingredients_raw === 'string') {
-                    rawText = fetched.ingredients_raw.trim();
-                    console.log(`🧺 Hydrated ingredients_raw from DB for ${recipe?.name || 'recipe'} (${rawText.length} chars)`);
-                  }
+                  const exact = await searchRecipes(
+                    { text: recipeTitle, __textFallback: recipeTitle },
+                    { size: 1, randomize: false }
+                  );
+                  hydratedFromSearch = exact?.results?.[0] || null;
                 } catch (err) {
-                  console.warn('⚠️ Failed to hydrate ingredients_raw for recipe', recipeId, err.message);
-                }
-              }
-              if (!rawText) {
-                const recipeTitle = recipe?.name || recipe?.title;
-                if (recipeTitle) {
-                  try {
-                    const exact = await searchRecipes(
-                      { text: recipeTitle, __textFallback: recipeTitle },
-                      { size: 1, randomize: false }
-                    );
-                    const hit = exact?.results?.[0];
-                    if (hit?.ingredients_raw && typeof hit.ingredients_raw === 'string') {
-                      rawText = hit.ingredients_raw.trim();
-                      console.log(`🧺 Hydrated ingredients_raw by title for ${recipeTitle} (${rawText.length} chars)`);
-                    } else if (hit) {
-                      hydratedFromSearch = hit;
-                    }
-                  } catch (err) {
-                    console.warn('⚠️ Failed to hydrate ingredients_raw by title for recipe', recipeTitle, err.message);
-                  }
+                  console.warn('⚠️ Failed to hydrate recipe by title for parsed ingredients', recipeTitle, err.message);
                 }
               }
             }
-            if (!rawText && hydratedFromSearch) {
-              const parsed = this.parseIngredientsFromSource(hydratedFromSearch);
-              if (parsed.length) {
-                console.log(`🧺 Using ingredients from title search for ${recipe?.name || 'recipe'} (${parsed.length} items)`);
-                parsed
-                  .map((ingredient) => this.normalizeIngredient(ingredient))
-                  .filter(Boolean)
-                  .forEach((ingredient) => {
-                    ingredients.push(ingredient);
-                    const lower = ingredient.name.toLowerCase();
-                    if (lower.includes('onion')) {
-                      onionLog.push({ source: 'title_search', recipe: recipe.name, ingredient });
-                    }
-                  });
-                continue;
-              }
-            }
-            if (rawText) {
-              console.log(`🧺 Using ingredients_raw for ${recipe?.name || 'recipe'} (${rawText.length} chars)`);
-              rawText
-                .split(',')
-                .map((s) => this.parseRawIngredient(s))
-                .filter(Boolean)
-                .forEach((ingredient) => {
-                  const normalised = this.normalizeIngredient(ingredient);
-                  if (normalised) {
-                    ingredients.push(normalised);
-                    const lower = normalised.name.toLowerCase();
-                    if (lower.includes('onion')) {
-                      onionLog.push({ source: 'recipe_raw', recipe: recipe.name, ingredient: normalised });
-                    }
-                  }
-                });
-              continue;
-            }
-            console.log(`🧺 Missing ingredients_raw for ${recipe?.name || 'recipe'}; falling back to parsed ingredients`, {
-              hasIngredients: Array.isArray(recipe?.ingredients) && recipe.ingredients.length > 0,
-              hasIngredientsParsed: Array.isArray(recipe?.ingredients_parsed) && recipe.ingredients_parsed.length > 0,
-              hasIngredientsNorm: Array.isArray(recipe?.ingredients_norm) && recipe.ingredients_norm.length > 0
-            });
 
-            const recipeIngredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+            const parsedFromSearch = hydratedFromSearch ? this.parseIngredientsFromSource(hydratedFromSearch) : [];
+            const recipeIngredientsParsed = Array.isArray(recipe?.ingredients_parsed) ? recipe.ingredients_parsed : [];
+            const recipeIngredientsNorm = Array.isArray(recipe?.ingredients_norm) ? recipe.ingredients_norm : [];
+            const recipeIngredientsRawArray = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+            const recipeIngredients = recipeIngredientsParsed.length
+              ? recipeIngredientsParsed
+              : recipeIngredientsNorm.length
+                ? recipeIngredientsNorm
+                : parsedFromSearch.length
+                  ? parsedFromSearch
+                  : recipeIngredientsRawArray;
+
+            if (!recipeIngredients.length) {
+              console.log(`🧺 Missing parsed ingredients for ${recipe?.name || 'recipe'}; no fallback available`, {
+                hasIngredients: Array.isArray(recipe?.ingredients) && recipe.ingredients.length > 0,
+                hasIngredientsParsed: recipeIngredientsParsed.length > 0,
+                hasIngredientsNorm: recipeIngredientsNorm.length > 0
+              });
+            }
+
             recipeIngredients.forEach(ingredient => {
               const normalised = this.normalizeIngredient(ingredient);
               if (normalised) {
@@ -3434,6 +3404,24 @@ ${mealSchemas}
       items,
       store: 'Grocery store'
     };
+  }
+
+  async attachIngredientImages(items = []) {
+    if (!Array.isArray(items) || !items.length) return items;
+    const cache = new Map();
+    const tasks = items.map(async (item) => {
+      if (!item?.name) return item;
+      const key = this.normalizeIngredientKey(item.name);
+      if (!cache.has(key)) {
+        cache.set(key, ensureIngredientImage(item.name).catch(() => null));
+      }
+      const imageUrl = await cache.get(key);
+      if (imageUrl) {
+        return { ...item, imageUrl };
+      }
+      return item;
+    });
+    return Promise.all(tasks);
   }
 
   buildIngredientBlueprint({ preferences, duration, randomSeed }) {

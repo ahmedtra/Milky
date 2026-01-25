@@ -503,15 +503,25 @@ export default function ShoppingLists() {
                                                 </Select>
                                               </div>
                                             )}
-                                            <div className={cn("flex-1 min-w-0 space-y-1 text-center", showVariants && "pr-20")}>
-                                              <p className={cn(
-                                                "font-semibold leading-tight break-words",
-                                                purchased ? "line-through" : "text-foreground"
-                                              )}>
-                                                {item.name}
-                                              </p>
-                                              <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
-                                                {quantity && <span>{quantity}</span>}
+                                            <div className={cn("flex-1 min-w-0 flex items-center gap-3", showVariants && "pr-20")}>
+                                              {item.imageUrl && (
+                                                <img
+                                                  src={item.imageUrl}
+                                                  alt={item.name}
+                                                  className="h-8 w-8 rounded-full object-cover border border-border/60"
+                                                  loading="lazy"
+                                                />
+                                              )}
+                                              <div className="flex-1 min-w-0 space-y-1 text-center">
+                                                <p className={cn(
+                                                  "font-semibold leading-tight break-words",
+                                                  purchased ? "line-through" : "text-foreground"
+                                                )}>
+                                                  {item.name}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
+                                                  {quantity && <span>{quantity}</span>}
+                                                </div>
                                               </div>
                                             </div>
                                             {purchased && (

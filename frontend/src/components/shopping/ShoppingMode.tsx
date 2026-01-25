@@ -112,12 +112,22 @@ export function ShoppingMode({
                           : "bg-white/5 border-white/15 hover:border-white/40"
                       )}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("font-semibold break-words", purchased && "line-through")}>
-                          {item.name}
-                        </p>
-                        <div className="text-xs text-white/70 flex flex-wrap gap-2">
-                          {quantity && <span>{quantity}</span>}
+                      <div className="flex-1 min-w-0 flex items-center gap-3">
+                        {item.imageUrl && (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-10 w-10 rounded-full object-cover border border-white/20"
+                            loading="lazy"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("font-semibold break-words", purchased && "line-through")}>
+                            {item.name}
+                          </p>
+                          <div className="text-xs text-white/70 flex flex-wrap gap-2">
+                            {quantity && <span>{quantity}</span>}
+                          </div>
                         </div>
                       </div>
                       {showVariants && (
